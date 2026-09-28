@@ -300,4 +300,4 @@ text = "Required ROMs"
 
 [seed.manifest_link]
 note = "link to the seed's manifest JSON; for the curious and for tools"
-text = "m"
+text = "manifest"
