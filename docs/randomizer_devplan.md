@@ -293,7 +293,8 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    connection in WAL mode, migrated by `PRAGMA user_version` from the ordered scripts in
    `server/migrations.py`; migration 1 is the frozen version 1.0 baseline. The vanilla ROMs
    and their SHA-1s are `golf/randomizer/roms.py`; `server/static/rom.js` hashes a chosen
-   file with SubtleCrypto and stores verified bytes in IndexedDB. `golf-site` launches
+   file with SubtleCrypto, retrying a mismatch with the vanilla iNES header in place or
+   prepended, and stores verified bytes in IndexedDB. `golf-site` launches
    it. `tests/unit/test_server_app.py`, `test_server_db.py` and `test_server_config.py`
    run against an in-memory database. See `server/CLAUDE.md`.
 8. **Generate and seed page.** Done: `/generate`, `/h/<id>` and `/h/<id>.json`.

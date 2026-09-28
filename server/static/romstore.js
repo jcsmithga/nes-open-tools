@@ -2,7 +2,7 @@
 // seed page's download form (download.js). Load this script before either.
 //
 // The store is database "golf-randomizer", object store "roms", one record per ROM keyed
-// by its catalog id: {id, sha1, bytes}. It holds only files whose SHA-1 matched.
+// by its catalog id: {id, sha1, bytes}. It holds only bytes whose SHA-1 matched.
 //
 // Player-visible text comes from server/strings/, which each page embeds as JSON in a
 // <script type="application/json"> element: key to text, or null while unwritten. A page

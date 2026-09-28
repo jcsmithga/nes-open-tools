@@ -13,7 +13,6 @@ Randomizer site:
 * Sentry
 * healthchecks.io integration for litestream
 * Rangefinder: Esc also clears
-* #5 hide scores for unplayed seeds by default!!!!
 
 Randomizer, investigation needed:
 * #6 Mirrored holes?
@@ -90,3 +89,4 @@ Done:
 * CLAUDE.md needs to be revisited
 * Music swap/shuffle
 * Does SuperShot! do anything? -- Yes, it gives essentially a 4 tick bonus to speed
+* #5 hide scores for unplayed seeds by default!!!!

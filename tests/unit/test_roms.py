@@ -34,9 +34,26 @@ def test_lookup_by_id():
         vanilla_rom("nes_open_jp")
 
 
+def test_headers_are_ines_headers_the_size_accounts_for():
+    for rom in VANILLA_ROMS:
+        assert len(rom.header) == 16
+        assert rom.header.startswith(b"NES\x1a")
+        assert rom.size == 16 + rom.header[4] * 16 * 1024
+
+
 @pytest.mark.parametrize("rom", VANILLA_ROMS, ids=lambda rom: rom.id)
 def test_the_hash_matches_a_local_rom(rom):
     path = ROOT / rom.filename
     if not path.exists():
         pytest.skip(f"{path.name} not present")
     assert hashlib.sha1(path.read_bytes()).hexdigest() == rom.sha1
+
+
+@pytest.mark.parametrize("rom", VANILLA_ROMS, ids=lambda rom: rom.id)
+def test_the_header_and_size_match_a_local_rom(rom):
+    path = ROOT / rom.filename
+    if not path.exists():
+        pytest.skip(f"{path.name} not present")
+    data = path.read_bytes()
+    assert len(data) == rom.size
+    assert data[:16] == rom.header
