@@ -495,13 +495,19 @@ def create_app(
             raise not_found()
         seed_builder: SeedBuilder = request.app.state.builder
         view = seed_view(row, seed_builder.catalog, seed_builder.curation)
+        rounds = rounds_for_seed(request.app.state.db, seed_id)
+        user = current_user(request)
         return templates.TemplateResponse(
             request,
             "seed.html",
             {
                 "page": "seed",
                 "seed": view,
-                "rounds": rounds_for_seed(request.app.state.db, seed_id),
+                "rounds": rounds,
+                # scores stay collapsed, so as not to spoil the seed, until the viewer
+                # has recorded a round of their own on it
+                "rounds_open": user is not None
+                and any(r.user_id == user.id for r in rounds),
                 "download_strings": strings.for_script(DOWNLOAD_SCRIPT_STRINGS),
             },
         )

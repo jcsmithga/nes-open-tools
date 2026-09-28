@@ -1482,6 +1482,36 @@ def test_the_seed_page_lists_recorded_rounds(fake_builder):
     assert len(set(re.findall(r'href="(/r/\w{10})"', rounds))) == 3
 
 
+def test_the_seed_page_collapses_rounds_until_the_viewer_has_recorded_one(fake_builder):
+    with dev_client(fake_builder, strings=UNWRITTEN) as test_client:
+        seed_id = entered_seed(test_client, "alice", "bob", "carol")
+        test_client.get(scan_path(test_client, seed_id, "alice", strokes=5))
+        test_client.get(scan_path(test_client, seed_id, "bob", slot=1, strokes=6))
+        entered_only = test_client.get(f"/h/{seed_id}").text
+        test_client.get("/auth/login", params={"as": "bob"})
+        player_two_only = test_client.get(f"/h/{seed_id}").text
+        test_client.post("/auth/logout", data={"next": "/"})
+        guest = test_client.get(f"/h/{seed_id}").text
+
+    def rounds_card(page: str) -> str:
+        return page[: page.index('class="rounds')].rsplit("<details", 1)[1]
+
+    # the summary counts the rounds, whether or not the card is open
+    assert "seed.rounds.heading_count count=2" in rounds_card(guest)
+    assert rounds_card(guest).startswith(">")
+    assert rounds_card(entered_only).startswith(">")
+    assert rounds_card(player_two_only).startswith(" open>")
+
+
+def test_the_seed_page_shows_no_rounds_card_without_rounds(fake_builder):
+    with dev_client(fake_builder, strings=UNWRITTEN) as test_client:
+        seed_id = entered_seed(test_client, "alice")
+        page = test_client.get(f"/h/{seed_id}").text
+    assert "seed.rounds.none" in page
+    # only the hole table and details are cards; the rounds heading stands alone
+    assert page.count('<article class="collapsible">') == 2
+
+
 def test_the_seed_page_marks_each_hole_against_par(fake_builder):
     with dev_client(fake_builder) as test_client:
         seed_id = entered_seed(test_client, "alice")
