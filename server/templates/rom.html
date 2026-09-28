@@ -17,6 +17,8 @@
     <article class="rom"
              data-rom-id="{{ rom.id }}"
              data-sha1="{{ rom.sha1 }}"
+             data-header="{{ rom.header.hex() }}"
+             data-size="{{ rom.size }}"
              data-state="checking">
       <header>
         <strong>{{ rom.title }}</strong>

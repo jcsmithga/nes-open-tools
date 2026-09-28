@@ -192,7 +192,9 @@ in this package.
   UTC text as the title. A timestamp passed into `t()` goes through the filter too; its
   `Markup` passes through unescaped.
 - The ROM store is IndexedDB database `golf-randomizer`, object store `roms`, records
-  `{id, sha1, bytes}` keyed by catalog ROM id. It holds only files whose SHA-1 matched.
+  `{id, sha1, bytes}` keyed by catalog ROM id. It holds only bytes whose SHA-1 matched: `rom.js`
+  retries a mismatched file with the catalog ROM's iNES header (`golf/randomizer/roms.py`)
+  and stores the result when that matches.
 - A downloaded ROM is named `notgr_par<par>_<id>.nes` by `download_stem` in
   `server/views.py`, and reaches the script as a data attribute. A file name is data, never
   a strings entry.
