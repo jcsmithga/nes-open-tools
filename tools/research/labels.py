@@ -12,9 +12,20 @@ Base file + sidecar overlay:
   "<mlb_file stem>.sidecar.mlb" next to it, unless --sidecar names a
   different path - so an agent doing research can freely record labels
   without touching the approved base file. Pass --target base to write
-  straight to the base file once you're happy with an entry; a future
-  merge tool will handle folding sidecar entries into base interactively.
-  `list` shows the merged view, tagging each row's source.
+  straight to the base file once you're happy with an entry. `list` shows
+  the merged view, tagging each row's source.
+
+Merging the sidecar into the base file:
+  `merge` prints what folding the sidecar into the base file would do: the
+  count of new labels, every base label a sidecar entry replaces (name,
+  comment and range changes), and the conflicts - a sidecar label whose range
+  overlaps another label, or a name held at two addresses. Nothing is written
+  without --write, which refuses while conflicts remain (fix them with
+  `edit`/`remove`, or accept them with --allow-conflicts). --write copies both
+  files to "<file>.bak", writes the merged base file and deletes the sidecar.
+
+  The label files describe the vanilla ROM only: remove labels for code or RAM
+  that exists only after a patch before merging.
 
 Label types (see golf.core.mlb_labels for the full address semantics):
   prg  - NesPrgRom:    raw PRG ROM offset (same numbering as golf-rom-peek's
@@ -31,13 +42,19 @@ Examples:
     golf-labels notes.mlb edit prg '$AD5D' --bank 2 --comment "confirmed via trace"
     golf-labels notes.mlb remove ram 001A
     golf-labels notes.mlb add prg '$AD5D' --bank 2 CourseSelectHandler --target base
+    golf-labels notes.mlb merge
+    golf-labels notes.mlb merge --verbose --write
 """
 
 import argparse
+import os
+import shutil
 import sys
 
-from golf.core.mlb_labels import TYPE_ALIASES, Label, LabelStore
-from golf.core.rom_utils import parse_cpu_or_prg_address
+from golf.core.mlb_labels import TYPE_ALIASES, Label, LabelStore, plan_merge
+from golf.core.rom_utils import parse_cpu_or_prg_address, prg_to_bank_and_cpu
+
+_TYPE_SHORT = {v: k for k, v in TYPE_ALIASES.items()}
 
 
 def _parse_prg_address_or_range(
@@ -154,6 +171,92 @@ def cmd_remove(store: LabelStore, args) -> None:
     print(f"Removed from {args.target}: {removed.to_line()}")
 
 
+def _where(label: Label) -> str:
+    text = f"{_TYPE_SHORT.get(label.type, label.type)} {label.address_str}"
+    if label.type == "NesPrgRom":
+        bank, cpu = prg_to_bank_and_cpu(label.start)
+        text += f" (bank {bank} ${cpu:04X})"
+    return text
+
+
+def _print_replacement(base: Label, side: Label) -> None:
+    print(f"  {_where(side)}")
+    if base.name != side.name:
+        print(f"    name:    {base.name or '(empty)'} -> {side.name}")
+    if base.address_str != side.address_str:
+        print(f"    range:   {base.address_str} -> {side.address_str}")
+    if (base.comment or "") != (side.comment or ""):
+        print(f"    comment: {base.comment or '(none)'}")
+        print(f"          -> {side.comment or '(none)'}")
+
+
+def cmd_merge(store: LabelStore, args) -> None:
+    if not store.sidecar.labels:
+        print("The sidecar is empty: nothing to merge.")
+        return
+    plan = plan_merge(store)
+
+    print(f"Merging {store.sidecar_path} into {store.base_path}")
+    print(
+        f"  {len(plan.added)} new, {len(plan.replaced)} replacing a base label, "
+        f"{len(plan.unchanged)} identical to base; "
+        f"{len(store.base.labels)} -> {len(plan.merged)} labels"
+    )
+
+    if args.verbose and plan.added:
+        print(f"\nNew labels ({len(plan.added)}):")
+        for label in plan.added:
+            print(f"  {_where(label)}  {label.name}")
+
+    renames = [(b, s) for b, s in plan.replaced if b.name != s.name]
+    others = [(b, s) for b, s in plan.replaced if b.name == s.name]
+    if renames:
+        print(f"\nRenamed base labels ({len(renames)}):")
+        for base, side in renames:
+            _print_replacement(base, side)
+    if others:
+        print(f"\nComment or range changes to base labels ({len(others)}):")
+        for base, side in others:
+            _print_replacement(base, side)
+
+    if plan.overlaps:
+        print(f"\nConflict - overlapping ranges ({len(plan.overlaps)}):")
+        for side, other in plan.overlaps:
+            print(
+                f"  {_where(side)} {side.name}  overlaps  "
+                f"{other.address_str} {other.name}"
+            )
+    if plan.duplicate_names:
+        print(
+            f"\nConflict - one name at several addresses ({len(plan.duplicate_names)}):"
+        )
+        for name, holders in plan.duplicate_names.items():
+            print(f"  {name}: " + ", ".join(_where(h) for h in holders))
+
+    if not args.write:
+        print("\nDry run: pass --write to apply.")
+        return
+    if plan.has_conflicts and not args.allow_conflicts:
+        print(
+            "\nError: resolve the conflicts above with `edit`/`remove`, "
+            "or pass --allow-conflicts to merge them as they are.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    for path in (store.base_path, store.sidecar_path):
+        assert path is not None
+        shutil.copy2(path, f"{path}.bak")
+    store.base.labels = plan.merged
+    store.save("base")
+    assert store.sidecar_path is not None
+    os.remove(store.sidecar_path)
+    print(
+        f"\nWrote {len(plan.merged)} labels to {store.base_path} and removed the "
+        "sidecar; the previous versions of both are saved as .bak files."
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Add/edit/remove/list labels in a Mesen .mlb label file"
@@ -236,6 +339,23 @@ def main():
         help="Which file to remove from",
     )
 
+    merge_parser = subparsers.add_parser(
+        "merge", help="Fold the sidecar into the base file (dry run unless --write)"
+    )
+    merge_parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Write the merged base file and delete the sidecar",
+    )
+    merge_parser.add_argument(
+        "--allow-conflicts",
+        action="store_true",
+        help="With --write, merge even with overlapping ranges or duplicate names",
+    )
+    merge_parser.add_argument(
+        "--verbose", action="store_true", help="Also list every new label"
+    )
+
     args = parser.parse_args()
     store = LabelStore.load(args.mlb_file, args.sidecar)
 
@@ -244,6 +364,7 @@ def main():
         "add": cmd_add,
         "edit": cmd_edit,
         "remove": cmd_remove,
+        "merge": cmd_merge,
     }
     try:
         commands[args.command](store, args)

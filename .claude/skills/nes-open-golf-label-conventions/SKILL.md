@@ -20,6 +20,15 @@ file. They come from an external disassembly tool the user pairs with this
 file, so a label that "looks wrong" by normal naming standards may in fact be
 correct by this scheme - check here before renaming it.
 
+## Vanilla ROM only
+
+The label files describe the unpatched ROM. Never label code, data or RAM that
+exists only after a patch (routines written into free space or padding, RAM
+bytes only a patch uses): not in the base file and not in the sidecar. If a
+patch is worth labelling, it will get its own patch-specific label file later.
+A vanilla label may *mention* a patch in its comment (e.g. "NOPed by the
+seeded_wind patch").
+
 ## PRG code labels: three tiers
 
 1. **Auto-generated stub** - `L<bank>_<addr>` (bank 0-9 as a digit, 10-15 as
@@ -66,7 +75,9 @@ Examples: `WindSpeedAnchor`, `CompressionLookbackPtr`, `MaybeWindDelayCounter`,
 ## Applying this via golf-labels
 
 `golf-labels add <type> <address> <name>` writes to the sidecar file by
-default (see the tool's own docstring for the base/sidecar model). When
+default (see the tool's own docstring for the base/sidecar model);
+`golf-labels <file> merge` previews folding the sidecar into the base file,
+and only the user runs it with `--write`. When
 proposing a name for that command:
 
 - For `prg` addresses that are jump targets: default to leaving the

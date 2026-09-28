@@ -140,7 +140,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 | Command | Description |
 |---------|-------------|
 | `golf-rom-peek <rom> <subcommand>` | Targeted reads, searches, disassembly and reference finding; see the `nes-open-golf-rom-peek` skill |
-| `golf-labels <file.mlb> list/add/edit/remove` | Edit the Mesen `.mlb` label file; see the `nes-open-golf-label-conventions` skill |
+| `golf-labels <file.mlb> list/add/edit/remove/merge` | Edit the Mesen `.mlb` label file; see the `nes-open-golf-label-conventions` skill |
 
 ### Art
 
