@@ -277,7 +277,7 @@ A memory breakpoint on `$06E7` (write) is the quickest way to find which script 
 game mode runs, since every handler in the `$9275` dispatch writes it.
 
 Every address named in this document now has a label in
-`NES Open Tournament Golf (USA).sidecar.mlb`, so `golf-rom-peek` annotates the scene and
+`NES Open Tournament Golf (USA).mlb`, so `golf-rom-peek` annotates the scene and
 renders its tables as `.db` rather than decoding them as code.
 
 ## Editing notes

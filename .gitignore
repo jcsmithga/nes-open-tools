@@ -16,6 +16,7 @@ wheels/
 # Sensitive files
 *.nes
 *.mlb
+*.mlb.bak
 *.nsf
 .env
 .env.*

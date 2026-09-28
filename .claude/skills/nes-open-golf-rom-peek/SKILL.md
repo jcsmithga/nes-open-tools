@@ -22,9 +22,10 @@ than reimplementing a scan in a scratch script.
 uv run golf-rom-peek <rom.nes> [--labels <file.mlb>] <subcommand> ...
 ```
 
-Always pass `--labels "NES Open Tournament Golf (USA).mlb"`. A sidecar
-(`...sidecar.mlb`) next to it loads automatically and shadows the base file, so
-output is annotated with everything the project has named so far. `--labels`
+Always pass `--labels "NES Open Tournament Golf (USA).mlb"`, so output is
+annotated with everything the project has named so far. A sidecar
+(`...sidecar.mlb`) next to it, if there is one, loads automatically and shadows
+the label file. `--labels`
 and `--sidecar` are top-level options and must come **before** the subcommand.
 
 ## Address grammar
@@ -51,8 +52,7 @@ reading anything.
 | `label <addr> [--type ...] [--bank N]` | Look up the label at an address. |
 | `find-label <substring>` | Search labels by name. |
 
-Use `golf-labels` (separate tool) to *add* labels; it writes to the sidecar by
-default. See the `nes-open-golf-label-conventions` skill for naming.
+Use `golf-labels` (separate tool) to *add* labels; it writes to the label file. See the `nes-open-golf-label-conventions` skill for naming.
 
 ## Four ways this ROM lies to a naive reading
 

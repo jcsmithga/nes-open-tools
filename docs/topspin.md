@@ -146,7 +146,7 @@ mechanic that is really a step function.
 
 ## Labels added
 
-Range labels covering the above are in the sidecar:
+Range labels covering the above are in the label file:
 
 | Address | Label |
 |---------|-------|
