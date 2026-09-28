@@ -6,26 +6,29 @@ Add/edit/remove/list entries in a Mesen ".mlb" label file from the command
 line, so labels discovered during reverse-engineering (with golf-rom-peek,
 disassembly notes, etc.) can be recorded without hand-editing the raw file.
 
-Base file + sidecar overlay:
-  The base .mlb file (positional `mlb_file`) is treated as human-curated.
-  `add`/`edit`/`remove` default to a writable sidecar file instead -
-  "<mlb_file stem>.sidecar.mlb" next to it, unless --sidecar names a
-  different path - so an agent doing research can freely record labels
-  without touching the approved base file. Pass --target base to write
-  straight to the base file once you're happy with an entry. `list` shows
-  the merged view, tagging each row's source.
+Where labels are written:
+  `add`/`edit`/`remove` write to the label file itself (positional
+  `mlb_file`); the file is kept in git, so a change is reviewed with
+  `git diff` there. `add` refuses a name another label already uses, and
+  warns when the new label's range overlaps another label's (nested ranges,
+  such as a string inside a text table, are fine).
 
-Merging the sidecar into the base file:
-  `merge` prints what folding the sidecar into the base file would do: the
-  count of new labels, every base label a sidecar entry replaces (name,
-  comment and range changes), and the conflicts - a sidecar label whose range
-  overlaps another label, or a name held at two addresses. Nothing is written
-  without --write, which refuses while conflicts remain (fix them with
-  `edit`/`remove`, or accept them with --allow-conflicts). --write copies both
-  files to "<file>.bak", writes the merged base file and deletes the sidecar.
+  Pass --target sidecar to write to "<mlb_file stem>.sidecar.mlb" next to it
+  instead (or the path --sidecar names), to keep entries apart until they are
+  merged. Lookups everywhere see the sidecar shadowing the label file, and
+  `list` tags each row's source.
 
-  The label files describe the vanilla ROM only: remove labels for code or RAM
-  that exists only after a patch before merging.
+Merging a sidecar into the label file:
+  `merge` prints what folding the sidecar into the label file would do: the
+  count of new labels, every label a sidecar entry replaces (name, comment and
+  range changes), and the conflicts - a sidecar label whose range overlaps
+  another label, or a name held at two addresses. Nothing is written without
+  --write, which refuses while conflicts remain (fix them with `edit`/`remove`,
+  or accept them with --allow-conflicts). --write copies both files to
+  "<file>.bak", writes the merged label file and deletes the sidecar.
+
+  The label file describes the vanilla ROM only: never label code or RAM that
+  exists only after a patch.
 
 Label types (see golf.core.mlb_labels for the full address semantics):
   prg  - NesPrgRom:    raw PRG ROM offset (same numbering as golf-rom-peek's
@@ -36,12 +39,11 @@ Label types (see golf.core.mlb_labels for the full address semantics):
 
 Examples:
     golf-labels notes.mlb list --filter Scorecard
-    golf-labels notes.mlb list --source sidecar
     golf-labels notes.mlb add prg '$AD5D' --bank 2 CourseSelectHandler
     golf-labels notes.mlb add ram 001A ScrollX --comment "current scroll X"
     golf-labels notes.mlb edit prg '$AD5D' --bank 2 --comment "confirmed via trace"
     golf-labels notes.mlb remove ram 001A
-    golf-labels notes.mlb add prg '$AD5D' --bank 2 CourseSelectHandler --target base
+    golf-labels notes.mlb add prg '$AD5D' --bank 2 CourseSelectHandler --target sidecar
     golf-labels notes.mlb merge
     golf-labels notes.mlb merge --verbose --write
 """
@@ -51,7 +53,13 @@ import os
 import shutil
 import sys
 
-from golf.core.mlb_labels import TYPE_ALIASES, Label, LabelStore, plan_merge
+from golf.core.mlb_labels import (
+    TYPE_ALIASES,
+    Label,
+    LabelStore,
+    find_conflicts,
+    plan_merge,
+)
 from golf.core.rom_utils import parse_cpu_or_prg_address, prg_to_bank_and_cpu
 
 _TYPE_SHORT = {v: k for k, v in TYPE_ALIASES.items()}
@@ -98,6 +106,27 @@ def cmd_list(store: LabelStore, args) -> None:
         print(f"[{source}] {label.to_line()}")
 
 
+def _check_conflicts(store: LabelStore, label: Label) -> None:
+    """Refuse a name already in use; warn about an overlapping range."""
+    merged = [other for other, _ in store.iter_merged()]
+    overlapping, same_name = find_conflicts(merged, label)
+    if same_name:
+        held = ", ".join(f"{o.type}:{o.address_str}" for o in same_name)
+        print(
+            f"Error: the name {label.name} is already used at {held}. "
+            "Choose another name, or rename that label first.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    for other in overlapping:
+        print(
+            f"Warning: {label.type}:{label.address_str} overlaps "
+            f"{other.address_str} ({other.name}). Fine if one is nested inside "
+            "the other on purpose; otherwise fix one of the ranges.",
+            file=sys.stderr,
+        )
+
+
 def cmd_add(store: LabelStore, args) -> None:
     type_, start, end = _address_range(args)
     target = store.index_for(args.target)
@@ -121,6 +150,7 @@ def cmd_add(store: LabelStore, args) -> None:
             )
 
     label = Label(type_, start, end, args.name, args.comment)
+    _check_conflicts(store, label)
     target.add(label)
     store.save(args.target)
     print(f"Added to {args.target} ({store.path_for(args.target)}): {label.to_line()}")
@@ -145,7 +175,10 @@ def cmd_edit(store: LabelStore, args) -> None:
             "Error: nothing to change (pass --name and/or --comment)", file=sys.stderr
         )
         sys.exit(1)
-    if args.name:
+    if args.name and args.name != label.name:
+        _check_conflicts(
+            store, Label(label.type, label.start, label.end, args.name, label.comment)
+        )
         label.name = args.name
     if args.comment is not None:
         label.comment = args.comment or None
@@ -284,9 +317,7 @@ def main():
         help="Restrict to one source",
     )
 
-    add_parser = subparsers.add_parser(
-        "add", help="Add a new label (sidecar by default)"
-    )
+    add_parser = subparsers.add_parser("add", help="Add a new label")
     add_parser.add_argument("type", choices=list(TYPE_ALIASES))
     add_parser.add_argument(
         "address",
@@ -299,8 +330,8 @@ def main():
     )
     add_parser.add_argument(
         "--target",
-        choices=["sidecar", "base"],
-        default="sidecar",
+        choices=["base", "sidecar"],
+        default="base",
         help="Which file to write to",
     )
     add_parser.add_argument(
@@ -321,8 +352,8 @@ def main():
     )
     edit_parser.add_argument(
         "--target",
-        choices=["sidecar", "base"],
-        default="sidecar",
+        choices=["base", "sidecar"],
+        default="base",
         help="Which file to edit",
     )
 
@@ -334,8 +365,8 @@ def main():
     )
     remove_parser.add_argument(
         "--target",
-        choices=["sidecar", "base"],
-        default="sidecar",
+        choices=["base", "sidecar"],
+        default="base",
         help="Which file to remove from",
     )
 

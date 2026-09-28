@@ -1,4 +1,4 @@
-"""Unit tests for folding a .mlb sidecar into its base file."""
+"""Unit tests for .mlb conflict checks, golf-labels, and merging a sidecar."""
 
 import subprocess
 import sys
@@ -8,6 +8,7 @@ from golf.core.mlb_labels import (
     Label,
     LabelIndex,
     LabelStore,
+    find_conflicts,
     load_labels,
     plan_merge,
     save_labels,
@@ -151,3 +152,62 @@ def test_merge_cli_refuses_to_write_conflicts(tmp_path):
     result = run_merge(base_path, "--write", "--allow-conflicts")
     assert result.returncode == 0, result.stderr
     assert len(load_labels(base_path)) == 2
+
+
+def test_find_conflicts_skips_the_label_being_replaced():
+    labels = [ram(0x590, "BallSpeedMagnitude", end=0x592), ram(0x10, "ScrollX")]
+    overlapping, same_name = find_conflicts(labels, ram(0x590, "BallSpeed", end=0x591))
+    assert overlapping == []
+    assert same_name == []
+
+
+def test_find_conflicts_reports_overlaps_and_names():
+    table = ram(0x590, "BallSpeedMagnitude", end=0x592)
+    scroll = ram(0x10, "ScrollX")
+    overlapping, same_name = find_conflicts([table, scroll], ram(0x592, "ScrollX"))
+    assert overlapping == [table]
+    assert same_name == [scroll]
+
+
+def run_labels(base: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, "-m", "tools.research.labels", str(base), *args],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_add_writes_the_label_file_by_default(tmp_path):
+    base_path = tmp_path / "golf.mlb"
+    save_labels(base_path, [ram(0x10, "ScrollX")])
+    result = run_labels(base_path, "add", "ram", "0011", "ScrollY")
+    assert result.returncode == 0, result.stderr
+    assert [label.name for label in load_labels(base_path)] == ["ScrollX", "ScrollY"]
+    assert not (tmp_path / "golf.sidecar.mlb").exists()
+
+
+def test_add_refuses_a_name_already_in_use(tmp_path):
+    base_path = tmp_path / "golf.mlb"
+    save_labels(base_path, [ram(0x10, "ScrollX")])
+    result = run_labels(base_path, "add", "ram", "0011", "ScrollX")
+    assert result.returncode == 1
+    assert "already used at NesInternalRam:0010" in result.stderr
+    assert len(load_labels(base_path)) == 1
+
+
+def test_add_warns_about_an_overlapping_range(tmp_path):
+    base_path = tmp_path / "golf.mlb"
+    save_labels(base_path, [ram(0x590, "BallSpeedMagnitude", end=0x592)])
+    result = run_labels(base_path, "add", "ram", "0592", "PerfectDriveFlag")
+    assert result.returncode == 0, result.stderr
+    assert "overlaps 0590-0592 (BallSpeedMagnitude)" in result.stderr
+    assert len(load_labels(base_path)) == 2
+
+
+def test_edit_refuses_a_rename_to_a_name_in_use(tmp_path):
+    base_path = tmp_path / "golf.mlb"
+    save_labels(base_path, [ram(0x10, "ScrollX"), ram(0x11, "ScrollY")])
+    result = run_labels(base_path, "edit", "ram", "0011", "--name", "ScrollX")
+    assert result.returncode == 1
+    assert [label.name for label in load_labels(base_path)] == ["ScrollX", "ScrollY"]

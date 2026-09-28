@@ -17,6 +17,7 @@ Address meaning is type-dependent:
 """
 
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -154,12 +155,10 @@ def default_sidecar_path(base_path) -> str:
 
 
 class LabelStore:
-    """A curated base label set plus an optional writable sidecar overlay.
+    """A base label set plus an optional sidecar overlay.
 
-    The base file is treated as human-approved and is never written to by
-    normal `add`/`edit`/`remove` operations - agents doing research add
-    labels to the sidecar instead, so a human can review and merge sidecar
-    entries into the base file later without hunting for what changed.
+    Labels are written to the base file by default; the sidecar is an optional
+    holding area for entries to keep apart until they are merged (`plan_merge`).
 
     Lookups (`lookup`, `search_name`) see the merged view, with a sidecar
     entry at a given type+address shadowing a base entry at the same spot.
@@ -232,6 +231,25 @@ def _overlaps(a: Label, b: Label) -> bool:
     a_end = a.end if a.end is not None else a.start
     b_end = b.end if b.end is not None else b.start
     return a.type == b.type and a.start <= b_end and b.start <= a_end
+
+
+def find_conflicts(
+    labels: Iterable[Label], label: Label
+) -> tuple[list[Label], list[Label]]:
+    """Labels whose range overlaps `label`'s, and labels already using its name.
+
+    The label at `label`'s own type and start is skipped, since writing `label`
+    replaces it.
+    """
+    overlapping, same_name = [], []
+    for other in labels:
+        if other.type == label.type and other.start == label.start:
+            continue
+        if _overlaps(label, other):
+            overlapping.append(other)
+        if label.name and other.name == label.name:
+            same_name.append(other)
+    return overlapping, same_name
 
 
 @dataclass

@@ -22,9 +22,9 @@ correct by this scheme - check here before renaming it.
 
 ## Vanilla ROM only
 
-The label files describe the unpatched ROM. Never label code, data or RAM that
+The label file describes the unpatched ROM. Never label code, data or RAM that
 exists only after a patch (routines written into free space or padding, RAM
-bytes only a patch uses): not in the base file and not in the sidecar. If a
+bytes only a patch uses). If a
 patch is worth labelling, it will get its own patch-specific label file later.
 A vanilla label may *mention* a patch in its comment (e.g. "NOPed by the
 seeded_wind patch").
@@ -74,14 +74,16 @@ Examples: `WindSpeedAnchor`, `CompressionLookbackPtr`, `MaybeWindDelayCounter`,
 
 ## Applying this via golf-labels
 
-`golf-labels add <type> <address> <name>` writes to the sidecar file by
-default (see the tool's own docstring for the base/sidecar model);
-`golf-labels <file> merge` previews folding the sidecar into the base file,
-and only the user runs it with `--write`. When
-proposing a name for that command:
+`golf-labels add <type> <address> <name>` writes to the label file, which the
+user keeps in git and reviews with `git diff`. It refuses a name another label
+already uses and warns when a range overlaps another label; don't paper over
+the warning - fix the range unless one label is nested in the other on purpose.
+(`--target sidecar` and `merge` still exist for keeping entries apart; see the
+tool's docstring.) When proposing a name for that command:
 
 - For `prg` addresses that are jump targets: default to leaving the
   auto-generated stub name as-is unless it's clearly tier 2 or 3.
-- Comments are sparse in this file (~5% of entries) and informal - a short
-  uncertain note (e.g. "maybe MusicPosition?") is consistent with existing
-  style; full sentences with terminal punctuation are not the norm.
+- About a fifth of entries have a comment. Comments are informal: lowercase
+  notes joined with semicolons, no terminal punctuation, citing the code
+  addresses that show what the label does. A short uncertain note (e.g.
+  "maybe MusicPosition?") is fine.

@@ -320,7 +320,7 @@ The prototype was not kept, so the assembly and the byte-level splice above are 
 
 ## Gaps to close in a production version
 
-- Each loop iteration draws its own randoms, so `RngState` advances twice per hole init and the per-player wind slots written at `$8185` desync. Wind does not affect putting, so this is cosmetic for this feature, but a production patch that coexists with `seeded_wind` should save and restore `$42`/`$43` around the sampling block. The sidecar notes the invariant: both slots are "set from RngState at bank13 `$8185` after InitHole (so identical)".
+- Each loop iteration draws its own randoms, so `RngState` advances twice per hole init and the per-player wind slots written at `$8185` desync. Wind does not affect putting, so this is cosmetic for this feature, but a production patch that coexists with `seeded_wind` should save and restore `$42`/`$43` around the sampling block. The label file notes the invariant: both slots are "set from RngState at bank13 `$8185` after InitHole (so identical)".
 - The ball can land on the pin's own tile and hole out on contact, roughly 1 in 200.
 - `MaybePlayerHoleStatus` (`$0111,X`) is left at 0 rather than 2. `LD_870C` (`$870C`) uses that to choose between course-space and green-space distance. In practice the putt detail screen does not display distance to the pin at all, so this is inert.
 - There is no way to leave putting practice or return to normal play; it applies to every hole unconditionally.
