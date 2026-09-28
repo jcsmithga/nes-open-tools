@@ -191,8 +191,12 @@ text = "Totals"
 # Recorded rounds: every round scanned from this seed's ROMs, fewest strokes first.
 
 [seed.rounds.heading]
-note = "h2 over the table of rounds players have submitted for this seed by scanning the end-of-round QR code"
+note = "h2 over the rounds section while no round has been submitted for this seed, above seed.rounds.none; seed.rounds.heading_count replaces it once there are rounds"
 text = "Completed Rounds"
+
+[seed.rounds.heading_count]
+note = "h2 summary of the collapsible card holding the rounds table; collapsed until the viewer has submitted a round of their own, so scores aren't spoiled before playing; {count} rounds submitted, at least 1"
+text = "Completed Rounds ({count})"
 
 [seed.rounds.hole]
 note = "rounds scorecard label at the start of the header row of hole numbers, above the par row and the players' names; narrow column"

@@ -1,23 +1,22 @@
+Now:
+
+
 In-game/vanilla rom investigations:
-* Does SuperShot! do anything?
 * Do bunker lips do anything?
 
-V2 todos:
+Randomizer site:
 * I think I want a variant of rom name in randomizer site pages w/o the region parens
 * Configuration backups to pw manager
 * robots.txt
 * Configure rDNS (reverse DNS)?
-* Full horizontal scorecards on Seeds page's "Completed Rounds" table
-* Changelog
-* Expand SRAM defaults on randomizer site (currently missing Enable BGM and more)
+* #4 Expand SRAM defaults on randomizer site (currently missing Enable BGM and more)
 * Sentry
 * healthchecks.io integration for litestream
-
-Eventually:
-* deploy from github actions
+* Rangefinder: Esc also clears
+* #5 hide scores for unplayed seeds by default!!!!
 
 Randomizer, investigation needed:
-* Mirrored holes?
+* #6 Mirrored holes?
 * Randomize bunkers/water?
 * random green topography?
 * palette swaps (sprites, signs)
@@ -26,6 +25,10 @@ Randomizer, investigation needed:
 * Wind "profiles".  It might be neat to have different "flavors" of wind
   on courses.  Beyond the seeding, stuff like "wind is biased in one direction"
   or "an especially windy day".
+* Investigate higher wind values than 9
+
+Eventually:
+* deploy from github actions
 
 Editor Todos:
 * Invalid neighbor indicator should be a single border per pairing
@@ -40,7 +43,6 @@ Editor Todos:
   * Most of the complexity here is with the cycle tool
 
 * Add lie chart to rangefinder
-
 
 
 Bugs:
@@ -82,9 +84,9 @@ Done:
 * G should cycle through grid sizes, alter palette tool?
 * Add greens to rangefinder?
 * Add Mario Open holes to Rangefinder
-
 * Pre-chosen SRAM init edits
   * Club choices
   * Player name(s)
 * CLAUDE.md needs to be revisited
 * Music swap/shuffle
+* Does SuperShot! do anything? -- Yes, it gives essentially a 4 tick bonus to speed

@@ -245,6 +245,8 @@ class SeedRound:
     """A round as the seed page lists it."""
 
     public_id: str
+    #: the `users.id` of the player whose entry recorded the round
+    user_id: int
     player_name: str
     slot: int
     total_strokes: int
@@ -268,7 +270,8 @@ def rounds_for_seed(db: Database, seed_id: str) -> list[SeedRound]:
     with db.transaction() as conn:
         rows = conn.execute(
             """
-            SELECT rounds.id, rounds.public_id, coalesce(users.global_name, users.username) AS player_name,
+            SELECT rounds.id, rounds.public_id, entries.user_id,
+                   coalesce(users.global_name, users.username) AS player_name,
                    rounds.slot, rounds.total_strokes, rounds.total_putts, rounds.received_at, rounds.flagged
             FROM rounds
             JOIN entries ON entries.id = rounds.entry_id
@@ -294,6 +297,7 @@ def rounds_for_seed(db: Database, seed_id: str) -> list[SeedRound]:
     return [
         SeedRound(
             public_id=row["public_id"],
+            user_id=row["user_id"],
             player_name=row["player_name"],
             slot=row["slot"],
             total_strokes=row["total_strokes"],
