@@ -13,9 +13,14 @@ of holes no longer matches the traditional four-par-3, ten-par-4, four-par-5 cou
 is only the first plausible way to expose that issue. Community holes, alternate tees and
 future transformations can expose it too.
 
-Code under discussion: `golf/randomizer/layout.py`, `golf/randomizer/generate.py`,
+Code under discussion: `golf/randomizer/layout.py`, `golf/randomizer/legacy_draw.py`,
 `golf/randomizer/pool.py`. Background: [randomizer.md](randomizer.md),
 [catalog.md](catalog.md), [manifest.md](manifest.md).
+
+The generation this note calls today's is the layout-first draw of generator version 2,
+which `golf/randomizer/legacy_draw.py` holds. [generation_rewrite.md](generation_rewrite.md)
+reports a spike of the constrained selection the last section points toward, and puts
+this note's par 6 scenario through it.
 
 ## Before generation: what would make a hole par 6?
 

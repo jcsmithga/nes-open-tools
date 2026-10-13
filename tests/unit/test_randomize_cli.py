@@ -9,7 +9,12 @@ from golf.core.patches.sram_defaults import Club
 from golf.randomizer.catalog import US_ROM, Catalog
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate
-from golf.randomizer.manifest import ClubRules, DrawRule, Manifest, Settings
+from golf.randomizer.manifest import (
+    ClubRules,
+    Manifest,
+    Settings,
+    standard_rules,
+)
 from golf.randomizer.wind import compass
 from tests.legacy_manifest import as_schema
 
@@ -89,7 +94,7 @@ def test_every_generate_flag_lands_in_the_settings(tmp_path):
         include=frozenset({"derived", "community"}),
         exclude_tags=frozenset({"long", "scenic"}),
         allow_family_repeats=True,
-        draw_rule=DrawRule.expert_cap(2),
+        constraints=standard_rules(70, 2),
         wind_speed_profile="dying_wind",
         wind_direction_profile="prevailing",
         music="nes_uk",
@@ -103,22 +108,26 @@ def test_every_generate_flag_lands_in_the_settings(tmp_path):
     assert load(path).course.par == 70
 
 
-def test_the_draw_rule_flags_choose_the_rule(tmp_path):
+def test_the_expert_cap_flags_choose_the_cap(tmp_path):
     path = tmp_path / "seed.json"
-    for args, rule, shown in [
-        ([], DrawRule.expert_cap(1), "draw rule: at most 1 expert hole on each nine"),
-        (["--draw-rule", "expert_cap"], DrawRule.expert_cap(1), "at most 1"),
-        (
-            ["--experts-per-nine", "0"],
-            DrawRule.expert_cap(0),
-            "draw rule: no expert holes",
-        ),
-        (["--draw-rule", "uniform"], DrawRule(), "draw rule: uniform"),
+    for args, constraints, cap in [
+        ([], None, 1),
+        (["--experts-per-nine", "1"], standard_rules(72, 1), 1),
+        (["--experts-per-nine", "0", "--par", "71"], standard_rules(71, 0), 0),
+        (["--no-expert-cap"], standard_rules(72, None), None),
     ]:
         completed = run("generate", "--seed", "rule", "-o", path, *args)
         assert completed.returncode == 0, completed.stderr
-        assert load(path).settings.draw_rule == rule, args
-        assert shown in completed.stdout
+        settings = load(path).settings
+        assert settings.constraints == constraints, args
+        assert settings.experts_per_nine == cap, args
+        shown = [
+            line.removeprefix("rule: ")
+            for line in completed.stdout.splitlines()
+            if line.startswith("rule: ")
+        ]
+        assert shown == [str(rule) for rule in settings.rules], args
+        assert len(shown) == (1 if cap is None else 2)
 
 
 def test_show_prints_the_course(tmp_path):
@@ -141,7 +150,7 @@ def test_show_reads_schema_one_but_build_refuses_its_historical_buildchain(tmp_p
         generate(
             Catalog.load(),
             CurationSnapshot.load(),
-            Settings(prng_seed="schema-one", draw_rule=DrawRule()),
+            Settings(prng_seed="schema-one", constraints=standard_rules(72, None)),
         ).to_json(),
         1,
     )
@@ -165,8 +174,8 @@ def test_generate_refuses_settings_the_model_refuses(tmp_path):
         (["--banned", "PT"], "putter cannot be banned"),
         (["--clubs-max", "2", "--required-bag", "1W,3W"], "over the max"),
         (["--banned", "5W"], "unknown club"),
-        (["--experts-per-nine", "10"], "per_nine must be 0-9"),
-        (["--draw-rule", "uniform", "--experts-per-nine", "1"], "does not apply"),
+        (["--experts-per-nine", "10"], "per_nine: expected 0-9"),
+        (["--no-expert-cap", "--experts-per-nine", "1"], "does not apply"),
     ]:
         completed = run("generate", "-o", path, *args)
         assert completed.returncode == 1, args
@@ -188,3 +197,85 @@ def test_show_refuses_a_malformed_manifest(tmp_path):
     completed = run("show", path)
     assert completed.returncode == 1
     assert completed.stderr.startswith("error:")
+
+
+# -- Requests, presets and surveys --------------------------------------------------------------
+
+
+def test_generate_takes_every_setting_from_a_preset(tmp_path):
+    path = tmp_path / "seed.json"
+    completed = run(
+        "generate", "--preset", "par_3_course", "--seed", "short", "-o", path
+    )
+    assert completed.returncode == 0, completed.stderr
+    manifest = load(path)
+    assert manifest.course.layout == (3,) * 18
+    assert manifest.course.par == 54
+    assert manifest.settings.prng_seed == "short"
+    assert [rule.name for rule in manifest.settings.constraints or ()] == [
+        "par_counts",
+        "expert_cap",
+    ]
+    assert "total: par 54" in completed.stdout
+    assert 'rule: {"counts":{"3":18},"rule":"par_counts"}' in completed.stdout
+
+
+def test_generate_takes_a_request_file(tmp_path):
+    request = tmp_path / "request.json"
+    request.write_text(
+        json.dumps(
+            {
+                "sources": [US_ROM],
+                "constraints": [{"rule": "vanilla_course", "course": "nes_uk"}],
+            }
+        )
+    )
+    path = tmp_path / "seed.json"
+    completed = run("generate", "--request", request, "-o", path)
+    assert completed.returncode == 0, completed.stderr
+    assert [str(slot.id) for slot in load(path).course.holes] == [
+        f"nes_uk/{hole:02d}" for hole in range(1, 19)
+    ]
+
+
+def test_generate_reports_a_request_the_pool_cannot_meet(tmp_path):
+    request = tmp_path / "request.json"
+    request.write_text(
+        json.dumps(
+            {
+                "sources": [US_ROM],
+                "constraints": [{"rule": "par_counts", "counts": {"3": 18}}],
+            }
+        )
+    )
+    completed = run("generate", "--request", request, "-o", tmp_path / "seed.json")
+    assert completed.returncode == 1
+    assert 'the pool has 12 holes matching {"par": 3}' in completed.stderr
+    unknown = run("generate", "--preset", "nonesuch", "-o", tmp_path / "seed.json")
+    assert unknown.returncode == 1 and "no preset 'nonesuch'" in unknown.stderr
+
+
+def test_survey_reports_what_a_preset_gives():
+    completed = run("survey", "--preset", "executive", "-n", "15")
+    assert completed.returncode == 0, completed.stderr
+    assert "15 courses, 0 failures" in completed.stdout
+    assert "course par: 58 (100%)" in completed.stdout
+    mixed = run("survey", "--preset", "executive", "-n", "15", "--mix", "100")
+    assert mixed.returncode == 0, mixed.stderr
+    assert "course par: 58 (100%)" in mixed.stdout
+    assert mixed.stdout != completed.stdout
+    legacy = run("survey", "--legacy", "-n", "15")
+    assert legacy.returncode == 0, legacy.stderr
+    assert "course par: 72 (100%)" in legacy.stdout
+    uniform = run("survey", "--preset", "natural_par", "--uniform", "-n", "5")
+    assert uniform.returncode == 0, uniform.stderr
+    assert "kept the rules" in uniform.stdout and "5 courses" in uniform.stdout
+    rare = run("survey", "--preset", "par_3_course", "--uniform", "-n", "1")
+    assert rare.returncode == 1 and "too rare" in rare.stderr
+
+
+def test_rules_lists_the_vocabulary():
+    completed = run("rules")
+    assert completed.returncode == 0, completed.stderr
+    for name in ("count", "standard", "vanilla_course", "weight"):
+        assert name in completed.stdout

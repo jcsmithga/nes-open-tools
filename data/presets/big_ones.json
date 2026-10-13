@@ -1,0 +1,25 @@
+{
+  "about": "A standard par 72 with no cap on expert holes and at least six holes that are expert holes or 600 yards or longer.",
+  "constraints": [
+    {
+      "rule": "standard",
+      "par": 72
+    },
+    {
+      "rule": "require",
+      "where": {
+        "any": [
+          {
+            "tag": "expert"
+          },
+          {
+            "distance": {
+              "min": 600
+            }
+          }
+        ]
+      },
+      "min": 6
+    }
+  ]
+}

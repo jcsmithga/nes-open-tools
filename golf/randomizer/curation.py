@@ -22,7 +22,7 @@ from .catalog import LINEAGE_PATTERN, REPO_ROOT, Catalog, CatalogError, HoleId
 DEFAULT_CURATION = REPO_ROOT / "data" / "catalog" / "curation.json"
 
 FAMILY_PATTERN = re.compile(r"[a-z0-9_]+")
-#: the tag on an expert hole, which the expert-cap draw rule counts (docs/catalog.md)
+#: the tag on an expert hole, which the `expert_cap` rule counts (docs/catalog.md)
 EXPERT_TAG = "expert"
 _FIELDS = {"tags", "drawable", "family", "display_name"}
 

@@ -667,10 +667,10 @@ None of this is scheduled (ADR 0012).
   to a boundary the randomizer draws: half a stroke over par, and the expert holes'
   line (**Results**).
 - **Expert holes weighted toward the 9th and 18th** (suggested by one of jdharms's
-  league-mates on seeing the expert holes). The randomizer's `expert_cap` draw rule limits
-  the expert holes on each nine (`docs/manifest.md`, **Draw rules**) and spreads them
+  league-mates on seeing the expert holes). The randomizer's `expert_cap` rule limits
+  the expert holes on each nine (`docs/manifest.md`, **The expert cap**) and spreads them
   evenly over a nine's slots.
-- **A per-nine ceiling on predicted strokes over par**, as a draw rule beside the cap. It
+- **A per-nine ceiling on predicted strokes over par**, as a rule beside the cap. It
   needs each hole's `over_par` in curation, which holds only the `expert` tag.
 - **Emulator spot checks** (jdharms, in Mesen): a perfect medium 1W drive (235 carry, 268
   total), and the `$40` wind distortion (`docs/shot_physics.md`). What they check now is
@@ -955,7 +955,7 @@ The 34 Mario Open holes that are not expert holes and share no family with a NES
   U.K.
 - **21 expert holes**: Mario Open holes that play worse than every NES Open hole.
   Curation tags each one `expert` (`docs/catalog.md`), and that tag, not this table, is
-  what the randomizer's draw rules read.
+  what the randomizer's rules read.
   Fourteen are on the U.K. course, six on Hawaii, one on France, and all seven par 5s
   over 48 rows are among them. The hardest are the U.K. 10th (+3.52), a par 3 from an
   island tee to an island green, where every shot into the water drops back at the tee

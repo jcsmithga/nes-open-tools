@@ -1,0 +1,29 @@
+{
+  "about": "Fourteen par 3s and four par 4s, two of the par 4s on each nine and never back to back. Par 58.",
+  "include": [
+    "derived"
+  ],
+  "constraints": [
+    {
+      "rule": "par_counts",
+      "counts": {
+        "3": 14,
+        "4": 4,
+        "5": 0
+      }
+    },
+    {
+      "rule": "balanced_nines"
+    },
+    {
+      "rule": "no_consecutive",
+      "pars": [
+        4
+      ]
+    },
+    {
+      "rule": "expert_cap",
+      "per_nine": 1
+    }
+  ]
+}

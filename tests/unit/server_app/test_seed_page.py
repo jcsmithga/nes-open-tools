@@ -10,8 +10,8 @@ from golf.randomizer.manifest import (
     LEGACY_BUILD_VERSION,
     LEGACY_FINISH_ABI_VERSION,
     LEGACY_SCHEMA,
-    DrawRule,
     Manifest,
+    standard_rules,
 )
 from golf.randomizer.roms import vanilla_rom
 from server.forms import FormState
@@ -77,7 +77,7 @@ def test_the_seed_page_starts_its_hole_table_and_details_collapsed(unwritten_cli
         ("uniform", "uniform", None, "seed.details.draw_rule_uniform"),
     ],
 )
-def test_the_seed_page_shows_the_draw_rule_it_was_generated_under(
+def test_the_seed_page_shows_the_expert_cap_it_was_generated_under(
     unwritten_client, choice, rule, per_nine, key
 ):
     form = FormState.default()
@@ -92,9 +92,17 @@ def test_the_seed_page_shows_the_draw_rule_it_was_generated_under(
     else:
         assert f'data-experts-per-nine="{per_nine}"' in cell.group(0)
     assert key in cell.group(1)
-    stored = unwritten_client.get(f"/h/{seed_id}.json").json()["settings"]["draw_rule"]
-    assert stored["rule"] == rule
-    assert stored.get("per_nine") == (None if per_nine is None else int(per_nine))
+    stored = unwritten_client.get(f"/h/{seed_id}.json").json()["settings"]
+    assert "draw_rule" not in stored
+    standard = {"rule": "standard", "par": 72}
+    assert (
+        stored["constraints"]
+        == {
+            "experts_1": None,
+            "experts_0": [standard, {"rule": "expert_cap", "per_nine": 0}],
+            "uniform": [standard],
+        }[choice]
+    )
 
 
 def test_the_seed_page_names_the_wind_profiles_it_was_generated_under(
@@ -126,9 +134,7 @@ def test_the_seed_page_names_the_wind_profiles_it_was_generated_under(
     ]
 
 
-def test_a_seed_stored_before_draw_rules_shows_a_uniform_draw(
-    catalog, curation, tmp_path
-):
+def test_a_seed_stored_before_expert_caps_shows_none(catalog, curation, tmp_path):
     builder = LegacyBuilder(catalog, curation, HoleStore(), tmp_path / "unused.nes")
     with app_client(strings=UNWRITTEN, builder=builder) as test_client:
         seed_id = generate_seed(test_client)
@@ -295,7 +301,7 @@ class LegacyBuilder(FakeBuilder):
             schema=LEGACY_SCHEMA,
             build_version=LEGACY_BUILD_VERSION,
             finish_abi_version=LEGACY_FINISH_ABI_VERSION,
-            settings=replace(manifest.settings, draw_rule=DrawRule()),
+            settings=replace(manifest.settings, constraints=standard_rules(72, None)),
         )
 
 

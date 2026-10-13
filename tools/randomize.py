@@ -7,6 +7,8 @@ with the same library the randomizer site uses (golf.randomizer). See docs/manif
 and docs/randomizer_devplan.md.
 
   generate  settings in, manifest out
+  survey    settings in, what many seeds of them give out
+  rules     list the course rules a request's constraints may use
   build     manifest in, ROM or IPS out: a finished guest ROM by default, an unfinished
             one with --unfinished, or a signed-in one with --credentials
   show      print a manifest's course
@@ -33,22 +35,26 @@ from golf.randomizer.catalog import (
     CatalogError,
     HoleStore,
 )
+from golf.randomizer.compose import Problem
 from golf.randomizer.curation import DEFAULT_CURATION, CurationSnapshot
-from golf.randomizer.generate import GenerationError, generate
+from golf.randomizer.generate import GenerationError, course_rules, generate
 from golf.randomizer.layout import COUNTS
 from golf.randomizer.manifest import (
-    DRAW_RULES,
-    EXPERT_CAP,
+    DEFAULT_EXPERTS_PER_NINE,
     INCLUDABLE,
     SOURCES,
     ClubRules,
-    DrawRule,
     Manifest,
     ManifestError,
     Settings,
     required_roms,
+    standard_rules,
 )
 from golf.randomizer.music import RANDOM, TRACKS
+from golf.randomizer.pool import build_pool
+from golf.randomizer.request import load_request, presets
+from golf.randomizer.rules import RULES
+from golf.randomizer.survey import legacy, report, survey, uniform
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES, compass
 
 EXAMPLES = """
@@ -56,8 +62,12 @@ examples:
   golf-randomize generate --seed demo -o demo.json
   golf-randomize generate --par 71 --sources nes_open_us --music nes_uk --mercy-point none
   golf-randomize generate --experts-per-nine 0
-  golf-randomize generate --draw-rule uniform
+  golf-randomize generate --no-expert-cap
   golf-randomize generate --wind-speed storm_rolling_in --wind-direction out_and_back
+  golf-randomize generate --request data/presets/par_3_course.json
+  golf-randomize generate --preset vanilla_jp_uk --seed week-6
+  golf-randomize survey --preset executive -n 1000
+  golf-randomize rules
   golf-randomize build nes_open_us.nes demo.json -o demo.nes
   golf-randomize build nes_open_us.nes demo.json --unfinished --ips demo.unfinished.ips
   golf-qr-credentials -o keys.json
@@ -81,33 +91,28 @@ def mercy_point(text: str) -> int | None:
         ) from None
 
 
-def draw_rule_from_args(args: argparse.Namespace) -> DrawRule:
-    """`--draw-rule` and `--experts-per-nine`; a cap given alone means the expert cap."""
-    default = Settings().draw_rule
-    name = args.draw_rule
-    if name is None:
-        name = EXPERT_CAP if args.experts_per_nine is not None else default.rule
-    if name != EXPERT_CAP:
-        if args.experts_per_nine is not None:
-            raise ManifestError(
-                f"--experts-per-nine does not apply to --draw-rule {name}"
-            )
-        return DrawRule(name)
-    if args.experts_per_nine is not None:
-        return DrawRule.expert_cap(args.experts_per_nine)
-    return default if default.rule == EXPERT_CAP else DrawRule.expert_cap(1)
-
-
-def describe_draw_rule(rule: DrawRule) -> str:
-    if rule.rule != EXPERT_CAP:
-        return rule.rule
-    if rule.per_nine == 0:
-        return "no expert holes"
-    holes = "hole" if rule.per_nine == 1 else "holes"
-    return f"at most {rule.per_nine} expert {holes} on each nine"
+def constraints_from_args(args: argparse.Namespace):
+    """`--experts-per-nine` and `--no-expert-cap`: a standard course of `--par` under
+    that cap, or None, the default course, when neither is given."""
+    if args.experts_per_nine is None:
+        return standard_rules(args.par, None) if args.no_expert_cap else None
+    if args.no_expert_cap:
+        raise ManifestError("--experts-per-nine does not apply with --no-expert-cap")
+    return standard_rules(args.par, args.experts_per_nine)
 
 
 def settings_from_args(args: argparse.Namespace) -> Settings:
+    """The settings the flags ask for, or a request's: a request stands in for every
+    settings flag but `--seed`."""
+    if args.preset is not None:
+        known = presets()
+        if args.preset not in known:
+            raise ManifestError(
+                f"no preset {args.preset!r}; the presets are {', '.join(known)}"
+            )
+        return load_request(known[args.preset], args.seed)
+    if args.request is not None:
+        return load_request(args.request, args.seed)
     defaults = Settings()
     rules = ClubRules(
         max=args.clubs_max if args.clubs_max is not None else defaults.clubs.max,
@@ -129,7 +134,7 @@ def settings_from_args(args: argparse.Namespace) -> Settings:
         if args.exclude_tags
         else frozenset(),
         allow_family_repeats=args.allow_family_repeats,
-        draw_rule=draw_rule_from_args(args),
+        constraints=constraints_from_args(args),
         wind_speed_profile=args.wind_speed,
         wind_direction_profile=args.wind_direction,
         music=args.music,
@@ -154,9 +159,12 @@ def summary(
     manifest: Manifest, catalog: Catalog, curation: CurationSnapshot | None
 ) -> list[str]:
     course = manifest.course
-    lines = [
-        f"seed {manifest.settings.prng_seed}  (par {manifest.settings.par} target)"
-    ]
+    asked = (
+        f"par {manifest.settings.par} target"
+        if manifest.settings.constraints is None
+        else "rules below"
+    )
+    lines = [f"seed {manifest.settings.prng_seed}  ({asked})"]
     total_yards = 0
     for number, slot in enumerate(course.holes, start=1):
         entry = catalog[slot.id]
@@ -171,7 +179,7 @@ def summary(
     mercy = "off" if course.mercy_point is None else f"stroke {course.mercy_point}"
     lines += [
         f"total: par {course.par}, {total_yards:,} yards",
-        f"draw rule: {describe_draw_rule(manifest.settings.draw_rule)}",
+        *(f"rule: {rule}" for rule in manifest.settings.rules),
         f"wind: {manifest.settings.wind_speed_profile} speed, "
         f"{manifest.settings.wind_direction_profile} direction",
         f"music: {course.music}",
@@ -201,6 +209,32 @@ def cmd_generate(args: argparse.Namespace) -> int:
     for line in summary(manifest, catalog, curation):
         print(line)
     print(f"wrote {args.output}")
+    return 0
+
+
+def cmd_survey(args: argparse.Namespace) -> int:
+    settings = settings_from_args(args)
+    catalog = Catalog.load(args.catalog)
+    curation = CurationSnapshot.load(args.curation)
+    pool = build_pool(catalog, curation, settings)
+    if args.legacy:
+        result = legacy(pool, settings, args.draws, args.seed or "survey")
+    elif args.uniform:
+        problem = Problem(pool, course_rules(settings))
+        result, dealt = uniform(problem, args.draws, args.seed or "survey")
+        print(f"one random course in {dealt / args.draws:.0f} kept the rules")
+    else:
+        problem = Problem(pool, course_rules(settings))
+        result = survey(problem, args.draws, args.seed or "survey", args.mix)
+    for line in report(result, pool):
+        print(line)
+    return 0
+
+
+def cmd_rules(args: argparse.Namespace) -> int:
+    for name, kind in sorted(RULES.items()):
+        written = "" if kind.expand is None else "  (written in other rules)"
+        print(f"{name:<18} {kind.summary}{written}")
     return 0
 
 
@@ -274,21 +308,20 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description=(__doc__ or "").strip().splitlines()[2],
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=EXAMPLES,
-    )
-    commands = parser.add_subparsers(dest="command", required=True)
-
-    gen = commands.add_parser("generate", help="settings in, manifest out")
-    gen.add_argument(
-        "-o",
-        "--output",
+def add_settings_arguments(gen: argparse.ArgumentParser) -> None:
+    """The flags `settings_from_args` reads, shared by `generate` and `survey`."""
+    asked = gen.add_mutually_exclusive_group()
+    asked.add_argument(
+        "--request",
         type=Path,
-        default=Path("manifest.json"),
-        help="manifest to write",
+        metavar="FILE",
+        help="a settings file (a partial settings object) to take every setting from; "
+        "the other settings flags are then ignored",
+    )
+    asked.add_argument(
+        "--preset",
+        metavar="NAME",
+        help="a checked-in request from data/presets/, by name",
     )
     gen.add_argument(
         "--seed", help="the PRNG seed every random choice comes from (default: drawn)"
@@ -313,21 +346,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="let two holes of one family share the course",
     )
     gen.add_argument(
-        "--draw-rule",
-        choices=DRAW_RULES,
-        help=(
-            "how the holes are drawn: uniform, or expert_cap to limit the expert holes "
-            "on each nine (default: expert_cap)"
-        ),
-    )
-    gen.add_argument(
         "--experts-per-nine",
         type=int,
         metavar="N",
         help=(
-            "the most expert holes on a nine under expert_cap, 0 to leave them out "
-            "(default: 1)"
+            "the most expert holes on each nine, 0 to leave them out "
+            f"(default: {DEFAULT_EXPERTS_PER_NINE})"
         ),
+    )
+    gen.add_argument(
+        "--no-expert-cap",
+        action="store_true",
+        help="put no cap on the expert holes",
     )
     gen.add_argument(
         "--wind-speed",
@@ -372,7 +402,58 @@ def build_parser() -> argparse.ArgumentParser:
     gen.add_argument(
         "--curation", type=Path, default=DEFAULT_CURATION, help="curation file"
     )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(__doc__ or "").strip().splitlines()[2],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=EXAMPLES,
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    gen = commands.add_parser("generate", help="settings in, manifest out")
+    gen.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("manifest.json"),
+        help="manifest to write",
+    )
+    add_settings_arguments(gen)
     gen.set_defaults(func=cmd_generate)
+
+    measured = commands.add_parser(
+        "survey", help="roll settings many times and report what they give"
+    )
+    add_settings_arguments(measured)
+    measured.add_argument(
+        "-n", "--draws", type=int, default=500, help="courses to roll (default: 500)"
+    )
+    how = measured.add_mutually_exclusive_group()
+    how.add_argument(
+        "--legacy",
+        action="store_true",
+        help="roll the layout-first draw of generator version 2 instead",
+    )
+    how.add_argument(
+        "--uniform",
+        action="store_true",
+        help="deal random courses and keep the ones that pass, so each is equally "
+        "likely: the yardstick for the composed draw, where it is not too rare to finish",
+    )
+    measured.add_argument(
+        "--mix",
+        type=int,
+        default=0,
+        metavar="STEPS",
+        help="put each course through this many random changes that keep the rules, "
+        "which takes out the composed draw's lean toward limits (default: 0)",
+    )
+    measured.set_defaults(func=cmd_survey)
+
+    rules = commands.add_parser("rules", help="list the course rules")
+    rules.set_defaults(func=cmd_rules)
 
     build = commands.add_parser("build", help="manifest in, ROM or IPS out")
     build.add_argument("rom", type=Path, help="vanilla US ROM")

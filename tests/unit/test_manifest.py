@@ -20,7 +20,7 @@ from golf.randomizer.catalog import (
     RomSource,
 )
 from golf.randomizer.manifest import (
-    DEFAULT_DRAW_RULE,
+    DEFAULT_EXPERTS_PER_NINE,
     LEGACY_BUILD_VERSION,
     LEGACY_FINISH_ABI_VERSION,
     LEGACY_SCHEMA,
@@ -28,13 +28,14 @@ from golf.randomizer.manifest import (
     SCHEMA,
     ClubRules,
     Course,
-    DrawRule,
     Manifest,
     ManifestError,
     Settings,
     Slot,
     required_roms,
+    standard_rules,
 )
+from golf.randomizer.rules import Rule, parse_rules
 from tests.legacy_manifest import as_schema
 
 PARS = (4, 5, 4, 3, 4, 3, 4, 5, 4, 4, 4, 3, 5, 4, 5, 3, 4, 4)
@@ -302,7 +303,7 @@ def test_rejects_missing_and_unknown_fields():
         Manifest.from_json(data)
 
 
-UNIFORM_SETTINGS = Settings(prng_seed="abc", draw_rule=DrawRule())
+UNIFORM_SETTINGS = Settings(prng_seed="abc", constraints=standard_rules(72, None))
 
 
 def test_schema_one_loads_with_its_implicit_versions_and_keeps_its_shape():
@@ -310,7 +311,7 @@ def test_schema_one_loads_with_its_implicit_versions_and_keeps_its_shape():
     loaded = Manifest.from_json(data)
     assert loaded.build_version == LEGACY_BUILD_VERSION
     assert loaded.finish_abi_version == LEGACY_FINISH_ABI_VERSION
-    assert loaded.settings.draw_rule == DrawRule()
+    assert loaded.settings == UNIFORM_SETTINGS
     assert loaded.to_json() == data
 
 
@@ -329,10 +330,11 @@ def test_schema_one_cannot_claim_another_finish_abi():
         )
 
 
-def test_schema_two_loads_as_a_uniform_draw_and_keeps_its_shape():
+def test_schema_two_loads_with_no_expert_cap_and_keeps_its_shape():
     data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), 2)
     loaded = Manifest.from_json(data)
-    assert loaded.settings.draw_rule == DrawRule()
+    assert loaded.settings.experts_per_nine is None
+    assert loaded.settings.rules == standard_rules(72, None)
     assert loaded.to_json() == data
 
 
@@ -376,12 +378,12 @@ def test_a_legacy_schema_refuses_wind_profiles_and_anchors(schema):
 
 
 @pytest.mark.parametrize("schema", LEGACY_SCHEMAS)
-def test_a_legacy_schema_refuses_a_draw_rule(schema):
+def test_a_legacy_schema_refuses_an_expert_cap(schema):
     data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), schema)
     data["settings"]["draw_rule"] = {"rule": "uniform"}
     with pytest.raises(ManifestError, match="unknown \\['draw_rule'\\]"):
         Manifest.from_json(data)
-    with pytest.raises(ManifestError, match="drawn uniformly"):
+    with pytest.raises(ManifestError, match="drawn without one"):
         manifest(
             schema=schema,
             build_version=LEGACY_BUILD_VERSION,
@@ -389,24 +391,67 @@ def test_a_legacy_schema_refuses_a_draw_rule(schema):
         )
 
 
-def test_the_current_schema_requires_a_draw_rule():
+def test_the_current_schema_has_no_draw_rule():
     data = manifest().to_json()
-    del data["settings"]["draw_rule"]
-    with pytest.raises(ManifestError, match="missing fields \\['draw_rule'\\]"):
+    assert "draw_rule" not in data["settings"]
+    data["settings"]["draw_rule"] = {"rule": "uniform"}
+    with pytest.raises(ManifestError, match="unknown \\['draw_rule'\\]"):
         Manifest.from_json(data)
 
 
-def test_the_default_draw_rule_caps_expert_holes_at_one_a_nine():
-    assert Settings().draw_rule == DEFAULT_DRAW_RULE == DrawRule.expert_cap(1)
-    assert Settings().to_json()["draw_rule"] == {"rule": "expert_cap", "per_nine": 1}
+def test_the_default_course_caps_expert_holes_at_one_a_nine():
+    assert Settings().constraints is None
+    assert Settings().experts_per_nine == DEFAULT_EXPERTS_PER_NINE == 1
+    assert Settings(par=70).rules == standard_rules(70, 1)
+    assert [rule.to_json() for rule in standard_rules(70, 1)] == [
+        {"rule": "standard", "par": 70},
+        {"rule": "expert_cap", "per_nine": 1},
+    ]
+    assert [rule.name for rule in standard_rules(72, None)] == ["standard"]
 
 
+def test_the_expert_cap_is_read_from_the_rules():
+    def cap(*rules: dict) -> int | None:
+        return Settings(constraints=parse_rules(list(rules))).experts_per_nine
+
+    assert cap({"rule": "total_par", "max": 70}) is None
+    assert cap({"rule": "expert_cap", "per_nine": 3}) == 3
+    assert (
+        cap(
+            {"rule": "expert_cap", "per_nine": 3}, {"rule": "expert_cap", "per_nine": 2}
+        )
+        == 2
+    )
+
+
+@pytest.mark.parametrize("schema", [3, 4])
 @pytest.mark.parametrize(
-    "rule", [DrawRule(), DrawRule.expert_cap(0), DrawRule.expert_cap(9)]
+    "cap, stored",
+    [
+        (None, {"rule": "uniform"}),
+        (0, {"rule": "expert_cap", "per_nine": 0}),
+        (1, {"rule": "expert_cap", "per_nine": 1}),
+        (9, {"rule": "expert_cap", "per_nine": 9}),
+    ],
 )
-def test_a_draw_rule_round_trips(rule):
-    assert DrawRule.from_json(json.loads(json.dumps(rule.to_json()))) == rule
-    assert round_trip(manifest(settings=Settings(prng_seed="abc", draw_rule=rule)))
+def test_a_schema_with_a_draw_rule_loads_it_as_rules_and_keeps_its_shape(
+    schema, cap, stored
+):
+    settings = Settings(prng_seed="abc", par=71, constraints=standard_rules(71, cap))
+    data = as_schema(manifest(settings=settings).to_json(), schema)
+    assert data["settings"]["draw_rule"] == stored
+    assert "constraints" not in data["settings"]
+    loaded = Manifest.from_json(data)
+    assert loaded.settings.experts_per_nine == cap
+    assert loaded.settings.rules == standard_rules(71, cap)
+    assert loaded.to_json() == data
+    assert list(loaded.to_json()["settings"]) == list(data["settings"])
+
+
+def test_a_stored_cap_of_one_loads_as_the_default_course():
+    data = as_schema(manifest().to_json(), 4)
+    assert data["settings"]["draw_rule"] == {"rule": "expert_cap", "per_nine": 1}
+    assert Manifest.from_json(data).settings == manifest().settings
 
 
 @pytest.mark.parametrize(
@@ -426,13 +471,17 @@ def test_a_draw_rule_round_trips(rule):
     ],
 )
 def test_a_malformed_draw_rule_is_refused(data):
+    stored = as_schema(manifest().to_json(), 4)
+    stored["settings"]["draw_rule"] = data
     with pytest.raises(ManifestError):
-        DrawRule.from_json(data)
+        Manifest.from_json(stored)
 
 
-def test_settings_refuse_a_draw_rule_that_is_not_one():
-    with pytest.raises(ManifestError, match="draw_rule"):
-        Settings(draw_rule="uniform")  # type: ignore[arg-type]
+def test_standard_rules_refuse_a_par_or_a_cap_no_course_has():
+    with pytest.raises(ManifestError, match="par must be one of"):
+        standard_rules(73)
+    with pytest.raises(ManifestError, match="per_nine"):
+        standard_rules(72, 10)
 
 
 @pytest.mark.parametrize("value", [None, 0, -1, True, "2"])
@@ -504,14 +553,16 @@ def test_schema_three_loads_with_a_vanilla_pool_and_keeps_its_shape():
     loaded = Manifest.from_json(data)
     assert loaded.schema == 3
     assert loaded.settings.include == frozenset()
-    assert loaded.settings.draw_rule == manifest().settings.draw_rule
+    assert loaded.settings == manifest().settings
     assert loaded.to_json() == data
 
 
 @pytest.mark.parametrize("schema", [1, 2, 3])
 def test_a_schema_before_include_refuses_one(schema):
     settings = Settings(
-        prng_seed="abc", draw_rule=DrawRule(), include=frozenset({"derived"})
+        prng_seed="abc",
+        constraints=standard_rules(72, None),
+        include=frozenset({"derived"}),
     )
     with pytest.raises(ManifestError, match="has no include"):
         manifest(schema=schema, build_version=1, settings=settings)
@@ -571,3 +622,50 @@ def test_required_roms_count_holes_and_music():
         US_ROM,
         JP_ROM,
     )
+
+
+# -- Constraints ------------------------------------------------------------------------------
+
+
+def test_constraints_are_checked_rules_and_round_trip():
+    rules = [
+        {"rule": "par_counts", "counts": {"3": 18}},
+        {"rule": "expert_cap", "per_nine": 0},
+    ]
+    value = manifest(settings=Settings(prng_seed="abc", constraints=parse_rules(rules)))
+    assert value.settings.constraints == tuple(Rule.parse(rule) for rule in rules)
+    data = json.loads(json.dumps(value.to_json()))
+    assert data["settings"]["constraints"] == rules
+    assert Manifest.from_json(data) == value
+    assert hash(value.settings) == hash(Manifest.from_json(data).settings)
+    assert manifest().to_json()["settings"]["constraints"] is None
+
+
+@pytest.mark.parametrize(
+    "constraints", [[{"rule": "shuffle"}], [{"par": 3}], ["standard"], "standard"]
+)
+def test_a_rule_the_vocabulary_does_not_have_is_refused(constraints):
+    with pytest.raises(ManifestError, match="constraints"):
+        Settings(prng_seed="abc", constraints=constraints)
+
+
+def test_schema_four_loads_as_a_standard_course_and_keeps_its_shape():
+    data = as_schema(manifest().to_json(), 4)
+    assert "constraints" not in data["settings"]
+    loaded = Manifest.from_json(data)
+    assert loaded.schema == 4 and loaded.settings.constraints is None
+    assert loaded.to_json() == data
+
+
+def test_a_schema_before_constraints_refuses_them():
+    data = as_schema(manifest().to_json(), 4)
+    data["settings"]["constraints"] = None
+    with pytest.raises(ManifestError, match="unknown"):
+        Manifest.from_json(data)
+    with pytest.raises(ManifestError, match="has no constraints"):
+        manifest(
+            schema=4,
+            settings=Settings(
+                prng_seed="abc", constraints=parse_rules([{"rule": "standard"}])
+            ),
+        )

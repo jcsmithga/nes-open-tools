@@ -276,18 +276,22 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    `randomizer.md`. Par 72 is four par 3s, ten par 4s and four par 5s; par 71 and 70 drop
    par 5s. Each par value splits evenly across the nines, an odd count putting its extra
    hole in either nine, and no par 3s or par 5s are consecutive, including holes 9 and 10.
-   That leaves 188,802 layouts at par 72, 165,564 at 71 and 35,574 at 70.
+   That leaves 188,802 layouts at par 72, 165,564 at 71 and 35,574 at 70. Generation
+   draws from them through generator version 2 (`golf/randomizer/legacy_draw.py`); from
+   version 3 the module supplies the standard course's counts.
 3. **Manifest and generation.** Done: `golf/randomizer/manifest.py`, `pool.py`,
    `generate.py`, `music.py` and `words.py`. The manifest's version fields, settings and
    concrete course with club rules and magic words, and its strict JSON; the pool from
    sources, curation tags, the newest drawable version of each lineage and families;
-   `generate(catalog, curation, settings) -> Manifest`, which draws a family per slot into
-   a layout, chooses the music, derives the wind seeds and draws the magic words, each from
-   its own stream of the PRNG seed. Schema 2 adds `build_version` and
+   `generate(catalog, curation, settings) -> Manifest`, which composes eighteen holes
+   that keep the settings' rules (`rules.py`, `compose.py` and `solver.py`;
+   `docs/generation_rewrite.md`), chooses the music, derives the wind seeds and draws the
+   magic words, each from its own stream of the PRNG seed. Schema 2 adds `build_version` and
    `finish_abi_version`; schema 1 is read as historical build version 1 and finish ABI 1
    without being rewritten. Schema 3 adds the `draw_rule` setting, which picks the hole
    draw, and the two wind profile settings with each hole's wind anchors; schemas 1 and
-   2 are read as uniform draws with the wind their seeds deal. See `docs/manifest.md`.
+   2 are read as uniform draws with the wind their seeds deal. Schema 5 adds the
+   `constraints` setting, the course's rules, which take the place of `draw_rule`. See `docs/manifest.md`.
 4. **QR patch split.** Done: `scorecard_qr` (`golf/core/patches/scorecard_qr.py`) writes
    the image with its placeholders at the fill; `qr_credentials`
    (`golf/core/patches/qr_credentials.py`) is three byte patches that fill them, expecting

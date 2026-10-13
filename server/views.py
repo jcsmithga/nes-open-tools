@@ -14,7 +14,7 @@ from golf.core.patches.sram_defaults import BAG_SIZE, NAME_LENGTH
 from golf.randomizer.build import FINISH_ABI_VERSION
 from golf.randomizer.catalog import JP_ROM, US_ROM, Catalog, RomSource
 from golf.randomizer.curation import CurationSnapshot
-from golf.randomizer.manifest import SOURCES, ClubRules, required_roms
+from golf.randomizer.manifest import EXPERT_CAP, SOURCES, ClubRules, required_roms
 from golf.randomizer.music import TRACKS, Track
 from golf.randomizer.roms import VanillaRom, vanilla_rom
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
@@ -216,9 +216,10 @@ class SeedView:
     par_target: int
     sources: tuple[VanillaRom, ...]
     allow_family_repeats: bool
-    #: the draw rule's name, as `golf.randomizer.manifest.DRAW_RULES` has it
+    #: `expert_cap` when the seed's rules cap the expert holes on a nine with that rule,
+    #: `uniform` when they do not
     draw_rule: str
-    #: the most expert holes on a nine under the expert cap, None under any other rule
+    #: the most expert holes on a nine under the cap, None without one
     experts_per_nine: int | None
     wind_speed_profile: str
     wind_direction_profile: str
@@ -308,8 +309,8 @@ def seed_view(
             vanilla_rom(source) for source in SOURCES if source in settings.sources
         ),
         allow_family_repeats=settings.allow_family_repeats,
-        draw_rule=settings.draw_rule.rule,
-        experts_per_nine=settings.draw_rule.per_nine,
+        draw_rule="uniform" if settings.experts_per_nine is None else EXPERT_CAP,
+        experts_per_nine=settings.experts_per_nine,
         wind_speed_profile=settings.wind_speed_profile,
         wind_direction_profile=settings.wind_direction_profile,
         mercy_point=course.mercy_point,

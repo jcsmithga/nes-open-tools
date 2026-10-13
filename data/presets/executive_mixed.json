@@ -1,0 +1,37 @@
+{
+  "about": "No par 5s, eight to twelve par 3s, par 60 to 64, and never more than three par 3s in a row.",
+  "include": [
+    "derived"
+  ],
+  "constraints": [
+    {
+      "rule": "par_counts",
+      "counts": {
+        "3": {
+          "min": 8,
+          "max": 12
+        },
+        "5": 0
+      }
+    },
+    {
+      "rule": "total_par",
+      "min": 60,
+      "max": 64
+    },
+    {
+      "rule": "balanced_nines"
+    },
+    {
+      "rule": "no_consecutive",
+      "pars": [
+        3
+      ],
+      "run": 3
+    },
+    {
+      "rule": "expert_cap",
+      "per_nine": 1
+    }
+  ]
+}

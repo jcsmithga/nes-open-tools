@@ -1,0 +1,18 @@
+{
+  "about": "A standard par 72 where neighboring holes differ by at least 60 yards.",
+  "constraints": [
+    {
+      "rule": "standard",
+      "par": 72
+    },
+    {
+      "rule": "gap",
+      "of": "distance",
+      "min": 60
+    },
+    {
+      "rule": "expert_cap",
+      "per_nine": 1
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "about": "A standard par 72 with no cap on expert holes, but each nine's predicted strokes over par held to 3: a hard hole is paid for by easy ones around it.",
+  "constraints": [
+    {
+      "rule": "standard",
+      "par": 72
+    },
+    {
+      "rule": "sum",
+      "of": "over_par",
+      "scope": "each_nine",
+      "max": 3.0
+    }
+  ]
+}

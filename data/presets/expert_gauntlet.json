@@ -1,0 +1,16 @@
+{
+  "about": "A standard par 72 with at least twelve expert holes.",
+  "constraints": [
+    {
+      "rule": "standard",
+      "par": 72
+    },
+    {
+      "rule": "require",
+      "where": {
+        "tag": "expert"
+      },
+      "min": 12
+    }
+  ]
+}

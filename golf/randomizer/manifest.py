@@ -5,7 +5,7 @@ Three parts:
 
 - The version fields: the manifest `schema`, generator, unfinished-build and finish-ABI
   versions, catalog version and the curation stamp that produced it.
-- `settings`: every input to generation, the PRNG seed and the draw rule included, so
+- `settings`: every input to generation, the PRNG seed and the course's rules included, so
   the same catalog, curation and settings reproduce the manifest under one generator
   version.
 - `course`: concrete values, and the only part the recipe reads after version checks.
@@ -36,18 +36,23 @@ from .catalog import (
 )
 from .layout import COUNTS
 from .music import RANDOM, TRACKS, track
+from .rules import Rule, RuleError, parse_rules
 from .transforms import TransformError, parse_transform
 from .wind import DIRECTION_PROFILES, SPEED_PROFILES, VANILLA
 from .words import MagicWordsError, check_magic_words
 
-SCHEMA = 4
-#: schemas this code still reads whose settings have no `draw_rule` or wind profiles,
-#: and whose holes have no wind anchors
+SCHEMA = 5
+#: schemas this code still reads whose settings have no wind profiles, whose holes have
+#: no wind anchors and whose courses had no cap on expert holes
 LEGACY_SCHEMAS = (1, 2)
 #: schemas this code still reads whose settings have no `include`: their pools held
 #: vanilla holes only
 VANILLA_ONLY_SCHEMAS = (*LEGACY_SCHEMAS, 3)
-READABLE_SCHEMAS = (*VANILLA_ONLY_SCHEMAS, SCHEMA)
+#: schemas this code still reads whose settings have no `constraints`: their courses
+#: were standard ones of the settings' par, and schemas 3 and 4 said whether expert
+#: holes were capped in a `draw_rule` setting
+RULELESS_SCHEMAS = (*VANILLA_ONLY_SCHEMAS, 4)
+READABLE_SCHEMAS = (*RULELESS_SCHEMAS, SCHEMA)
 LEGACY_SCHEMA = 1
 LEGACY_BUILD_VERSION = 1
 LEGACY_FINISH_ABI_VERSION = 1
@@ -61,9 +66,9 @@ DEFAULT_MERCY_POINT = 9
 MERCY_POINTS = range(1, 256)
 HOLE_PARS = (3, 4, 5)
 NINE = 9
-UNIFORM = "uniform"
+#: the rule that caps the expert holes on each nine, and its cap on a default course
 EXPERT_CAP = "expert_cap"
-DRAW_RULES = (UNIFORM, EXPERT_CAP)
+DEFAULT_EXPERTS_PER_NINE = 1
 WIND_SEEDS = range(0x10000)
 
 
@@ -177,50 +182,52 @@ class ClubRules:
         )
 
 
-@dataclass(frozen=True)
-class DrawRule:
-    """How generation draws a course's holes from the pool.
+def _check_par(par: object) -> None:
+    if not _is_int(par) or par not in COUNTS:
+        raise ManifestError(f"par must be one of {sorted(COUNTS)}, got {par!r}")
 
-    - `uniform`: every family in the pool is as likely as any other.
-    - `expert_cap`: at most `per_nine` expert holes on each nine, the holes curation tags
-      `expert`. 0 leaves them out of the course.
+
+def standard_rules(
+    par: int, experts_per_nine: int | None = DEFAULT_EXPERTS_PER_NINE
+) -> tuple[Rule, ...]:
+    """The rules of a standard course of `par` with at most `experts_per_nine` expert
+    holes on each nine, or with no cap when that is None."""
+    _check_par(par)
+    rules: list[dict] = [{"rule": "standard", "par": par}]
+    if experts_per_nine is not None:
+        rules.append({"rule": EXPERT_CAP, "per_nine": experts_per_nine})
+    try:
+        return parse_rules(rules)
+    except RuleError as problem:
+        raise ManifestError(str(problem)) from None
+
+
+#: what a schema 3 or 4 manifest's `draw_rule` called a course with no expert cap
+_UNCAPPED = "uniform"
+
+
+def _constraints_from_draw_rule(data: object, par: int) -> tuple[Rule, ...] | None:
+    """The constraints a schema 3 or 4 manifest's `draw_rule` stands for.
+
+    Those settings held `{"rule": "uniform"}` for no cap on expert holes, or
+    `{"rule": "expert_cap", "per_nine": N}`. Their courses were standard ones.
     """
+    rule = data.get("rule") if isinstance(data, dict) else None
+    keys = ("rule", "per_nine") if rule == EXPERT_CAP else ("rule",)
+    data = _fields(data, keys, "draw_rule")
+    if rule == _UNCAPPED:
+        return standard_rules(par, None)
+    if rule != EXPERT_CAP:
+        raise ManifestError(
+            f"draw rule must be one of {[_UNCAPPED, EXPERT_CAP]}, got {rule!r}"
+        )
+    per_nine = data["per_nine"]
+    if not _is_int(per_nine) or not 0 <= per_nine <= NINE:
+        raise ManifestError(f"expert_cap per_nine must be 0-{NINE}, got {per_nine!r}")
+    if per_nine == DEFAULT_EXPERTS_PER_NINE:
+        return None
+    return standard_rules(par, per_nine)
 
-    rule: str = UNIFORM
-    #: the most expert holes on a nine under `expert_cap`; None under any other rule
-    per_nine: int | None = None
-
-    def __post_init__(self):
-        if self.rule not in DRAW_RULES:
-            raise ManifestError(
-                f"draw rule must be one of {list(DRAW_RULES)}, got {self.rule!r}"
-            )
-        if self.rule == EXPERT_CAP:
-            if not _is_int(self.per_nine) or not 0 <= self.per_nine <= NINE:
-                raise ManifestError(
-                    f"expert_cap per_nine must be 0-{NINE}, got {self.per_nine!r}"
-                )
-        elif self.per_nine is not None:
-            raise ManifestError(f"draw rule {self.rule!r} takes no per_nine")
-
-    @classmethod
-    def expert_cap(cls, per_nine: int) -> "DrawRule":
-        return cls(EXPERT_CAP, per_nine)
-
-    def to_json(self) -> dict:
-        if self.rule == EXPERT_CAP:
-            return {"rule": self.rule, "per_nine": self.per_nine}
-        return {"rule": self.rule}
-
-    @classmethod
-    def from_json(cls, data: object) -> "DrawRule":
-        rule = data.get("rule") if isinstance(data, dict) else None
-        keys = ("rule", "per_nine") if rule == EXPERT_CAP else ("rule",)
-        data = _fields(data, keys, "draw_rule")
-        return cls(data["rule"], data.get("per_nine"))
-
-
-DEFAULT_DRAW_RULE = DrawRule.expert_cap(1)
 
 _SLOT_KEYS = ("id", "par", "transforms", "wind_seed", "wind_direction", "wind_speed")
 _LEGACY_SLOT_KEYS = ("id", "par", "transforms", "wind_seed")
@@ -234,7 +241,20 @@ _LEGACY_SETTINGS_KEYS = (
     "mercy_point",
     "clubs",
 )
-_SETTINGS_KEYS = (
+_SCHEMA_3_SETTINGS_KEYS = (
+    "prng_seed",
+    "par",
+    "sources",
+    "exclude_tags",
+    "allow_family_repeats",
+    "draw_rule",
+    "wind_speed_profile",
+    "wind_direction_profile",
+    "music",
+    "mercy_point",
+    "clubs",
+)
+_SCHEMA_4_SETTINGS_KEYS = (
     "prng_seed",
     "par",
     "sources",
@@ -248,15 +268,30 @@ _SETTINGS_KEYS = (
     "mercy_point",
     "clubs",
 )
-#: the settings a schema 4 manifest added
-_SCHEMA_4_SETTINGS = ("include",)
-_SCHEMA_3_SETTINGS_KEYS = tuple(
-    key for key in _SETTINGS_KEYS if key not in _SCHEMA_4_SETTINGS
+_SETTINGS_KEYS = (
+    "prng_seed",
+    "par",
+    "sources",
+    "include",
+    "exclude_tags",
+    "allow_family_repeats",
+    "constraints",
+    "wind_speed_profile",
+    "wind_direction_profile",
+    "music",
+    "mercy_point",
+    "clubs",
 )
-#: the settings a schema 1 or 2 manifest doesn't have
-_SCHEMA_3_SETTINGS = tuple(
-    key for key in _SETTINGS_KEYS if key not in _LEGACY_SETTINGS_KEYS
-)
+
+
+def _settings_keys(schema: int) -> tuple[str, ...]:
+    if schema in LEGACY_SCHEMAS:
+        return _LEGACY_SETTINGS_KEYS
+    if schema in VANILLA_ONLY_SCHEMAS:
+        return _SCHEMA_3_SETTINGS_KEYS
+    if schema in RULELESS_SCHEMAS:
+        return _SCHEMA_4_SETTINGS_KEYS
+    return _SETTINGS_KEYS
 
 
 @dataclass(frozen=True)
@@ -270,7 +305,11 @@ class Settings:
     include: frozenset[str] = frozenset()
     exclude_tags: frozenset[str] = frozenset()
     allow_family_repeats: bool = False
-    draw_rule: DrawRule = DEFAULT_DRAW_RULE
+    #: the course's rules (`golf/randomizer/rules.py`). None is the default course:
+    #: a standard one of `par` with at most `DEFAULT_EXPERTS_PER_NINE` expert holes on
+    #: each nine. A list is the whole of the rules, with nothing added but the family
+    #: rule, and `par` then says nothing.
+    constraints: tuple[Rule, ...] | None = None
     #: how the holes' wind speeds are chosen, one of `wind.SPEED_PROFILES`
     wind_speed_profile: str = VANILLA
     #: how the holes' wind directions are chosen, one of `wind.DIRECTION_PROFILES`
@@ -291,10 +330,7 @@ class Settings:
             raise ManifestError(
                 f"prng_seed must be a non-empty string, got {self.prng_seed!r}"
             )
-        if not _is_int(self.par) or self.par not in COUNTS:
-            raise ManifestError(
-                f"par must be one of {sorted(COUNTS)}, got {self.par!r}"
-            )
+        _check_par(self.par)
         if not self.sources or not self.sources <= set(SOURCES):
             raise ManifestError(
                 f"sources must be a non-empty selection of {list(SOURCES)}, got {list(self.sources)}"
@@ -309,8 +345,12 @@ class Settings:
             )
         if not isinstance(self.allow_family_repeats, bool):
             raise ManifestError("allow_family_repeats must be true or false")
-        if not isinstance(self.draw_rule, DrawRule):
-            raise ManifestError(f"draw_rule must be a DrawRule, got {self.draw_rule!r}")
+        if self.constraints is not None:
+            try:
+                rules = parse_rules(self.constraints)
+            except RuleError as problem:
+                raise ManifestError(f"constraints: {problem}") from None
+            object.__setattr__(self, "constraints", rules)
         if self.wind_speed_profile not in SPEED_PROFILES:
             raise ManifestError(
                 f"wind_speed_profile must be one of {', '.join(SPEED_PROFILES)}, "
@@ -329,6 +369,22 @@ class Settings:
         if not isinstance(self.clubs, ClubRules):
             raise ManifestError(f"clubs must be ClubRules, got {self.clubs!r}")
 
+    @property
+    def rules(self) -> tuple[Rule, ...]:
+        """The rules the settings ask for: their constraints, or the default course's."""
+        if self.constraints is None:
+            return standard_rules(self.par)
+        return self.constraints
+
+    @property
+    def experts_per_nine(self) -> int | None:
+        """The cap the rules' `expert_cap` sets, the lowest if there are several. None
+        when no rule of that name is among them."""
+        caps = [
+            rule.to_json()["per_nine"] for rule in self.rules if rule.name == EXPERT_CAP
+        ]
+        return min(caps, default=None)
+
     def to_json(self) -> dict:
         return {
             "prng_seed": self.prng_seed,
@@ -337,7 +393,9 @@ class Settings:
             "include": [kind for kind in INCLUDABLE if kind in self.include],
             "exclude_tags": sorted(self.exclude_tags),
             "allow_family_repeats": self.allow_family_repeats,
-            "draw_rule": self.draw_rule.to_json(),
+            "constraints": None
+            if self.constraints is None
+            else [rule.to_json() for rule in self.constraints],
             "wind_speed_profile": self.wind_speed_profile,
             "wind_direction_profile": self.wind_direction_profile,
             "music": self.music,
@@ -349,19 +407,25 @@ class Settings:
     def from_json(cls, data: object, schema: int = SCHEMA) -> "Settings":
         """Settings from a manifest of this schema.
 
-        A schema 1 or 2 manifest's have no `draw_rule` or wind profiles: every seed then
-        was drawn uniformly, with the wind its seeds dealt. A schema 3 manifest's or older
-        have no `include`: every pool then held vanilla holes only."""
+        A schema 1 or 2 manifest's have no wind profiles and no word on expert holes:
+        every seed then was a standard course with no cap on them, with the wind its
+        seeds dealt. A schema 3 manifest's or older have no `include`: every pool then
+        held vanilla holes only. A schema 4 manifest's or older have no `constraints`:
+        every course then was a standard one, and schemas 3 and 4 hold a `draw_rule`
+        that says whether its expert holes were capped."""
         legacy = schema in LEGACY_SCHEMAS
         vanilla_only = schema in VANILLA_ONLY_SCHEMAS
-        keys = (
-            _LEGACY_SETTINGS_KEYS
-            if legacy
-            else _SCHEMA_3_SETTINGS_KEYS
-            if vanilla_only
-            else _SETTINGS_KEYS
-        )
-        data = _fields(data, keys, "settings")
+        data = _fields(data, _settings_keys(schema), "settings")
+        if legacy:
+            constraints = standard_rules(data["par"], None)
+        elif schema in RULELESS_SCHEMAS:
+            constraints = _constraints_from_draw_rule(data["draw_rule"], data["par"])
+        else:
+            constraints = data["constraints"]
+            if constraints is not None and not isinstance(constraints, list):
+                raise ManifestError(
+                    f"constraints must be null or a list of rules, got {constraints!r}"
+                )
         return cls(
             prng_seed=data["prng_seed"],
             par=data["par"],
@@ -371,7 +435,7 @@ class Settings:
             else frozenset(_strings(data["include"], "include")),
             exclude_tags=frozenset(_strings(data["exclude_tags"], "exclude_tags")),
             allow_family_repeats=data["allow_family_repeats"],
-            draw_rule=DrawRule() if legacy else DrawRule.from_json(data["draw_rule"]),
+            constraints=None if constraints is None else tuple(constraints),
             wind_speed_profile=VANILLA if legacy else data["wind_speed_profile"],
             wind_direction_profile=VANILLA
             if legacy
@@ -617,16 +681,25 @@ class Manifest:
                 f"unsupported manifest schema {self.schema!r}; this code reads schemas "
                 f"{_READABLE}"
             )
+        if self.schema in RULELESS_SCHEMAS:
+            settings = self.settings
+            standard = standard_rules(settings.par, settings.experts_per_nine)
+            if settings.rules != standard:
+                raise ManifestError(
+                    f"manifest schema {self.schema} has no constraints; its course was "
+                    "a standard one, with or without a cap on expert holes"
+                )
         if self.schema in VANILLA_ONLY_SCHEMAS and self.settings.include:
             raise ManifestError(
                 f"manifest schema {self.schema} has no include; its pool held vanilla "
                 f"holes only, got {sorted(self.settings.include)}"
             )
         if self.schema in LEGACY_SCHEMAS:
-            if self.settings.draw_rule != DrawRule():
+            if self.settings.experts_per_nine is not None:
                 raise ManifestError(
-                    f"manifest schema {self.schema} has no draw_rule; its seeds were "
-                    f"drawn uniformly, got {self.settings.draw_rule.to_json()}"
+                    f"manifest schema {self.schema} has no cap on expert holes; its "
+                    "seeds were drawn without one, got a cap of "
+                    f"{self.settings.experts_per_nine}"
                 )
             profiles = (
                 self.settings.wind_speed_profile,
@@ -678,13 +751,15 @@ class Manifest:
             data["finish_abi_version"] = self.finish_abi_version
         settings = self.settings.to_json()
         course = self.course.to_json()
-        if self.schema in VANILLA_ONLY_SCHEMAS:
-            for key in _SCHEMA_4_SETTINGS:
-                del settings[key]
+        if self.schema in RULELESS_SCHEMAS:
+            cap = self.settings.experts_per_nine
+            settings["draw_rule"] = (
+                {"rule": _UNCAPPED}
+                if cap is None
+                else {"rule": EXPERT_CAP, "per_nine": cap}
+            )
+            settings = {key: settings[key] for key in _settings_keys(self.schema)}
         if self.schema in LEGACY_SCHEMAS:
-            for key in _SCHEMA_3_SETTINGS:
-                if key in settings:
-                    del settings[key]
             for hole in course["holes"]:
                 del hole["wind_direction"], hole["wind_speed"]
         return data | {

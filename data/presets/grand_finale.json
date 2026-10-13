@@ -1,0 +1,30 @@
+{
+  "about": "A standard par 72 whose 18th is a par 5 and the hardest hole on the course, and whose 1st is the easiest.",
+  "constraints": [
+    {
+      "rule": "standard",
+      "par": 72
+    },
+    {
+      "rule": "slot",
+      "hole": 18,
+      "where": {
+        "par": 5
+      }
+    },
+    {
+      "rule": "highest",
+      "of": "over_par",
+      "hole": 18
+    },
+    {
+      "rule": "lowest",
+      "of": "over_par",
+      "hole": 1
+    },
+    {
+      "rule": "expert_cap",
+      "per_nine": 1
+    }
+  ]
+}

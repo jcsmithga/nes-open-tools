@@ -1,0 +1,33 @@
+{
+  "about": "A standard par 72 whose nines are within 50 yards and within a quarter of a predicted stroke of each other.",
+  "constraints": [
+    {
+      "rule": "standard",
+      "par": 72
+    },
+    {
+      "rule": "compare",
+      "of": {
+        "sum": "distance"
+      },
+      "left": "front",
+      "right": "back",
+      "min": -50,
+      "max": 50
+    },
+    {
+      "rule": "compare",
+      "of": {
+        "sum": "over_par"
+      },
+      "left": "front",
+      "right": "back",
+      "min": -0.25,
+      "max": 0.25
+    },
+    {
+      "rule": "expert_cap",
+      "per_nine": 1
+    }
+  ]
+}

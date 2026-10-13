@@ -1,0 +1,22 @@
+{
+  "about": "Four par 3s, ten par 4s and four par 5s, each hole longer than the one before it.",
+  "constraints": [
+    {
+      "rule": "par_counts",
+      "counts": {
+        "3": 4,
+        "4": 10,
+        "5": 4
+      }
+    },
+    {
+      "rule": "step",
+      "of": "distance",
+      "min": 1
+    },
+    {
+      "rule": "expert_cap",
+      "per_nine": 1
+    }
+  ]
+}

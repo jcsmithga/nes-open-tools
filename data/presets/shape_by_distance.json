@@ -1,0 +1,52 @@
+{
+  "about": "Four short holes (260 yards or less), ten middle ones and four long ones (481 yards or more) with no two short or two long holes in a row, at most one hole of 750 yards or more, and whatever par that comes to.",
+  "constraints": [
+    {
+      "rule": "count",
+      "where": {
+        "distance": {
+          "max": 260
+        }
+      },
+      "exactly": 4
+    },
+    {
+      "rule": "count",
+      "where": {
+        "distance": {
+          "min": 481
+        }
+      },
+      "exactly": 4
+    },
+    {
+      "rule": "no_consecutive",
+      "where": {
+        "distance": {
+          "max": 260
+        }
+      }
+    },
+    {
+      "rule": "no_consecutive",
+      "where": {
+        "distance": {
+          "min": 481
+        }
+      }
+    },
+    {
+      "rule": "count",
+      "where": {
+        "distance": {
+          "min": 750
+        }
+      },
+      "max": 1
+    },
+    {
+      "rule": "expert_cap",
+      "per_nine": 1
+    }
+  ]
+}

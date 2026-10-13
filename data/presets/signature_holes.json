@@ -1,0 +1,21 @@
+{
+  "about": "A standard par 72 that has the 18th of NES Open's US course and the 18th of Mario Open's UK course somewhere on it.",
+  "constraints": [
+    {
+      "rule": "standard",
+      "par": 72
+    },
+    {
+      "rule": "require",
+      "where": {
+        "id": "nes_us/18"
+      }
+    },
+    {
+      "rule": "require",
+      "where": {
+        "id": "jp_uk/18"
+      }
+    }
+  ]
+}

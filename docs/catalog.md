@@ -102,8 +102,8 @@ An uncurated lineage gets the defaults, so a new catalog entry is drawable with 
 Unknown fields and versioned keys are load errors, and a test checks that every curated
 lineage exists in the index.
 
-**The `expert` tag** marks an expert hole, which the `expert_cap` draw rule limits on each
-nine ([manifest.md](manifest.md), **Draw rules**). It is on the 21 Mario Open holes that
+**The `expert` tag** marks an expert hole, which the `expert_cap` rule limits on each
+nine ([manifest.md](manifest.md), **The expert cap**). It is on the 21 Mario Open holes that
 play worse against par than every NES Open hole ([hole_difficulty.md](hole_difficulty.md),
 **Expert holes**), a list jdharms's league-mates reviewed. The tag is the record: it was
 set from that list once, and a later re-solve that moves a hole across the line changes

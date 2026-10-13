@@ -1,0 +1,18 @@
+{
+  "about": "Eighteen par 3s.",
+  "include": [
+    "derived"
+  ],
+  "constraints": [
+    {
+      "rule": "par_counts",
+      "counts": {
+        "3": 18
+      }
+    },
+    {
+      "rule": "expert_cap",
+      "per_nine": 1
+    }
+  ]
+}

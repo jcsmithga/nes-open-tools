@@ -26,15 +26,17 @@ from golf.randomizer.build import (
 )
 from golf.randomizer.catalog import US_ROM, Catalog, HoleStore
 from golf.randomizer.curation import CurationSnapshot
-from golf.randomizer.generate import generate
+from golf.randomizer.generate import generate, stream
+from golf.randomizer.legacy_draw import draw_legacy
 from golf.randomizer.manifest import (
     LEGACY_BUILD_VERSION,
     LEGACY_FINISH_ABI_VERSION,
     LEGACY_SCHEMA,
     ClubRules,
-    DrawRule,
     Settings,
+    standard_rules,
 )
+from golf.randomizer.pool import build_pool
 from golf.randomizer.transforms import apply_transforms
 from tests.new_save import new_save
 
@@ -102,14 +104,37 @@ def curation() -> CurationSnapshot:
     return CurationSnapshot.load()
 
 
+def with_the_version_two_draw(catalog, curation, settings):
+    """A manifest for these settings holding the holes generator version 2 drew.
+
+    The golden hashes below pin the build, and were taken when a seed's holes came from
+    the layout-first draw. Giving the manifests that draw's holes keeps the hashes about
+    the build alone: they did not move when generation was rewritten.
+    """
+    manifest = generate(catalog, curation, settings)
+    drawn = draw_legacy(
+        build_pool(catalog, curation, settings),
+        settings,
+        stream(settings.prng_seed, "layout"),
+        stream(settings.prng_seed, "holes"),
+    )
+    holes = tuple(
+        replace(slot, id=entry.id, par=entry.par)
+        for slot, entry in zip(manifest.course.holes, drawn, strict=True)
+    )
+    return replace(manifest, course=replace(manifest.course, holes=holes))
+
+
 @pytest.fixture(scope="module")
 def jp_manifest(catalog, curation, vanilla_jp_courses):
     """Drawn uniformly, like `nes_manifest`, so the golden hashes below move with the
-    build and not with the default draw rule."""
+    build and not with the default expert cap."""
     settings = Settings(
-        prng_seed="build-stages-jp", music="jp_france", draw_rule=DrawRule()
+        prng_seed="build-stages-jp",
+        music="jp_france",
+        constraints=standard_rules(72, None),
     )
-    return generate(catalog, curation, settings)
+    return with_the_version_two_draw(catalog, curation, settings)
 
 
 @pytest.fixture(scope="module")
@@ -119,9 +144,9 @@ def nes_manifest(catalog, curation):
         sources=frozenset({US_ROM}),
         music="nes_us",
         mercy_point=None,
-        draw_rule=DrawRule(),
+        constraints=standard_rules(72, None),
     )
-    return generate(catalog, curation, settings)
+    return with_the_version_two_draw(catalog, curation, settings)
 
 
 @pytest.fixture(scope="module")
@@ -294,7 +319,7 @@ def legacy(manifest):
         schema=LEGACY_SCHEMA,
         build_version=LEGACY_BUILD_VERSION,
         finish_abi_version=LEGACY_FINISH_ABI_VERSION,
-        settings=replace(manifest.settings, draw_rule=DrawRule()),
+        settings=replace(manifest.settings, constraints=standard_rules(72, None)),
     )
 
 

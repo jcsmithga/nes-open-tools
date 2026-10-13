@@ -12,9 +12,10 @@ Holes a curator put in one family form one `Family`; every other hole is a famil
 own, and so is every hole when the settings allow family repeats. Generation draws a
 family per slot and then a member of it, so a hole with a twin is no likelier than a hole
 without one. The pool also names its expert holes, the ones curation tags `expert`, for
-the draw rule that caps them. See docs/manifest.md.
+the rule that caps them. See docs/manifest.md.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from .catalog import VANILLA, Catalog, CatalogEntry, HoleId
@@ -42,8 +43,10 @@ class Pool:
     """Families sorted by key, members sorted by id, so seeded draws are reproducible."""
 
     families: tuple[Family, ...]
-    #: the pool's holes curation tags `expert`, which the expert-cap draw rule counts
+    #: the pool's holes curation tags `expert`, which the `expert_cap` rule counts
     experts: frozenset[HoleId] = frozenset()
+    #: the curation tags of each hole in the pool that has any, for the rules that read them
+    tags: Mapping[HoleId, frozenset[str]] = field(default_factory=dict)
 
     def families_with_par(self, par: int) -> int:
         return sum(par in family.pars for family in self.families)
@@ -59,6 +62,7 @@ def build_pool(
 ) -> Pool:
     groups: dict[str, list[CatalogEntry]] = {}
     experts = set()
+    tags = {}
     for lineage, entry in sorted(catalog.newest().items()):
         record = curation.for_hole(entry.id)
         if not record.drawable:
@@ -77,7 +81,10 @@ def build_pool(
         groups.setdefault(key, []).append(entry)
         if EXPERT_TAG in record.tags:
             experts.add(entry.id)
+        if record.tags:
+            tags[entry.id] = record.tags
     return Pool(
         tuple(Family(key, tuple(members)) for key, members in sorted(groups.items())),
         frozenset(experts),
+        tags,
     )

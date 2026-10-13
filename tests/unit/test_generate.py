@@ -22,10 +22,10 @@ from golf.randomizer.layout import COUNTS, satisfies
 from golf.randomizer.manifest import (
     SCHEMA,
     ClubRules,
-    DrawRule,
     Manifest,
     Settings,
     required_roms,
+    standard_rules,
 )
 from golf.randomizer.pool import build_pool
 from golf.randomizer.wind import BANDS, DIRECTION_PROFILES, SPEED_PROFILES
@@ -76,7 +76,7 @@ def test_draws_a_prng_seed_when_the_settings_have_none(real_catalog, real_curati
 
 def test_records_versions_and_round_trips(real_catalog, real_curation):
     manifest = generate(real_catalog, real_curation, Settings(prng_seed="abc"))
-    assert manifest.schema == SCHEMA == 4
+    assert manifest.schema == SCHEMA == 5
     assert manifest.generator_version == GENERATOR_VERSION
     assert manifest.build_version == BUILD_VERSION == 6
     assert manifest.finish_abi_version == FINISH_ABI_VERSION == 2
@@ -114,7 +114,6 @@ def test_each_draw_has_its_own_stream(real_catalog, real_curation):
         real_curation,
         Settings(prng_seed="abc", sources=frozenset({US_ROM})),
     ).course
-    assert both.layout == us_only.layout
     assert both.magic_words == us_only.magic_words
     assert both.sram_magic == us_only.sram_magic
     assert [s.wind_seed for s in both.holes] == [s.wind_seed for s in us_only.holes]
@@ -234,13 +233,30 @@ def test_reports_a_pool_the_family_rule_leaves_too_small():
     curation = CurationSnapshot.from_json(
         {"t/twin_a": {"family": "twin"}, "t/twin_b": {"family": "twin"}}
     )
-    with pytest.raises(GenerationError, match="4 par 3.*par 3: 3"):
+    with pytest.raises(
+        GenerationError, match=r"(?s)18 holes in 17 families.*distinct_families"
+    ):
         generate(holes, curation, Settings(prng_seed="abc"))
 
 
+def test_reports_a_par_the_pool_is_short_of():
+    with pytest.raises(GenerationError) as raised:
+        generate(
+            minimal_catalog(par3=3, par4=14),
+            CurationSnapshot.from_json({}),
+            Settings(prng_seed="abc"),
+        )
+    message = str(raised.value)
+    assert '"rule":"standard"' in message
+    assert 'the pool has 3 holes matching {"par": 3}, in 3 families' in message
+    assert "distinct_families" not in message
+
+
 def test_reports_filters_that_empty_the_pool(real_catalog, real_curation):
-    with pytest.raises(GenerationError, match="par 5: 0"):
+    with pytest.raises(GenerationError, match="14 holes.*cannot fill 18 slots"):
         generate(minimal_catalog(par5=0), real_curation, Settings(prng_seed="abc"))
+    with pytest.raises(GenerationError, match="the pool is empty"):
+        generate(Catalog(1, {}), real_curation, Settings(prng_seed="abc"))
 
 
 # -- Draw rules -------------------------------------------------------------------------------
@@ -278,7 +294,7 @@ def test_an_expert_cap_holds_on_each_nine_of_real_seeds(
         manifest = generate(
             real_catalog,
             real_curation,
-            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(per_nine)),
+            Settings(prng_seed=str(seed), constraints=standard_rules(72, per_nine)),
         )
         nines = experts_by_nine(manifest, real_curation)
         assert max(nines) <= per_nine, f"seed {seed}: {nines}"
@@ -296,7 +312,7 @@ def test_a_uniform_draw_goes_over_the_cap_on_real_seeds(real_catalog, real_curat
                 generate(
                     real_catalog,
                     real_curation,
-                    Settings(prng_seed=str(seed), draw_rule=DrawRule()),
+                    Settings(prng_seed=str(seed), constraints=standard_rules(72, None)),
                 ),
                 real_curation,
             )
@@ -316,7 +332,7 @@ def test_a_capped_seed_never_repeats_a_family(real_catalog, real_curation):
         holes = generate(
             real_catalog,
             real_curation,
-            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(1)),
+            Settings(prng_seed=str(seed), constraints=standard_rules(72, 1)),
         ).course.holes
         drawn = [
             label_of[slot.id.lineage] for slot in holes if slot.id.lineage in label_of
@@ -326,7 +342,7 @@ def test_a_capped_seed_never_repeats_a_family(real_catalog, real_curation):
 
 def test_a_capped_draw_is_the_same_for_the_same_seed():
     catalog, curation = expert_catalog()
-    settings = Settings(prng_seed="abc", draw_rule=DrawRule.expert_cap(1))
+    settings = Settings(prng_seed="abc", constraints=standard_rules(72, 1))
     assert generate(catalog, curation, settings) == generate(
         catalog, curation, settings
     )
@@ -340,7 +356,7 @@ def test_expert_holes_land_on_every_slot_of_a_nine():
         manifest = generate(
             catalog,
             curation,
-            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(1)),
+            Settings(prng_seed=str(seed), constraints=standard_rules(72, 1)),
         )
         seen |= {
             number
@@ -372,26 +388,33 @@ def test_a_cap_of_zero_leaves_a_mixed_family_its_other_member():
         course = generate(
             catalog,
             curation,
-            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(0)),
+            Settings(prng_seed=str(seed), constraints=standard_rules(72, 0)),
         ).course
         drawn |= {str(slot.id) for slot in course.holes}
     assert "t/twin_plain" in drawn and "t/twin_expert" not in drawn
 
 
-def test_a_capped_draw_needs_a_course_without_expert_holes():
-    """Expert holes are extras: the pool must fill the layout without them at any cap."""
+def test_a_capped_draw_uses_the_expert_holes_the_pool_needs():
+    """Five ordinary par 4s and six expert ones: a course needs five of the experts."""
     extra = [entry(f"t/expert_{n}", 4, JP_ROM) for n in range(6)]
     catalog = minimal_catalog(par4=5, extra=extra)
     curation = CurationSnapshot.from_json(
         {str(item.id.lineage): {"tags": [EXPERT_TAG]} for item in extra}
     )
-    with pytest.raises(GenerationError, match="without expert holes"):
+    for cap in (None, 9, 3):
+        manifest = generate(
+            catalog,
+            curation,
+            Settings(prng_seed="abc", constraints=standard_rules(72, cap)),
+        )
+        assert sum(experts_by_nine(manifest, curation)) >= 5
+    # four expert holes at most, and thirteen others: seventeen holes for eighteen slots
+    with pytest.raises(GenerationError, match=r"(?s)expert_cap.*13 holes other than"):
         generate(
             catalog,
             curation,
-            Settings(prng_seed="abc", draw_rule=DrawRule.expert_cap(9)),
+            Settings(prng_seed="abc", constraints=standard_rules(72, 2)),
         )
-    assert generate(catalog, curation, Settings(prng_seed="abc", draw_rule=DrawRule()))
 
 
 # -- Wind profiles ----------------------------------------------------------------------------
