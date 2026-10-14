@@ -37,7 +37,7 @@ and rules in, a course out), `golf/randomizer/solver.py` (the search),
   800 steps, about 3 to 10 ms. Rules with an order to keep, or a course near the
   longest the pool allows, are still moving after 1,600 steps.
 - **A naive search is not enough.** The first version thrashed on a standard course.
-  Eight additions to the solver were needed, each for a kind of rule the presets use.
+  Seven additions to the solver were needed, each for a kind of rule the presets use.
   They are most of the solver's thousand lines, and the real cost of the design.
 - **Impossible requests mostly fail fast and say why.** Of 600 random rule sets, 473
   found a course, 116 were proved impossible (usually in about 20 ms, naming the rules
@@ -177,7 +177,6 @@ specific failure.
 |---|---|---|
 | Kinds before holes | 80 par 4s refused one at a time for a slot no par 4 could fill | One refusal a kind |
 | A sum and a difference read together | Four par 3s and balanced nines: three could land on the front before anything objected | A standard course takes 0.1 dead ends |
-| Twins leave together | A hole that leads nowhere retried as each hole just like it | Used for every hole choice |
 | Sums that know the holes differ | A course under 6,950 yards: 4 of 40 gave up, 1.3 s each | 15 ms, none fail |
 | Counts checked together (`Tally`) | Twelve expert holes on a standard course: 343 dead ends, 200 ms | 2 dead ends, 19 ms |
 | Sums in that check | 8,400 yards gave up after 13 s | Found in 25 to 50 ms; 8,500 proved impossible in 60 ms |
@@ -491,7 +490,7 @@ proved impossible in 60 ms.
 
 - **Speed.** About 10 ms to draw a standard course and 3 ms to compile its rules,
   against 0.6 to 2.7 ms for the old draw.
-- **Code.** The solver is 1,050 lines, composing 870 and the rules 610. The draw they
+- **Code.** The solver is 1,040 lines, composing 925 and the rules 610. The draw they
   replace is 170, with 140 for layouts.
 - **A formula.** A family's share was slots over families. Now it is measured.
 - **One seed, one layout.** The layout had its own stream, so a seed drew the same

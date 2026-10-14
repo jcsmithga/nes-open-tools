@@ -957,7 +957,6 @@ class Solver:
         smallest_first: bool = False,
         start: Sequence[int] | None = None,
         classes: Sequence[Sequence[int]] | None = None,
-        twins: Sequence[int] | None = None,
     ) -> list[int]:
         """A value for every slot.
 
@@ -972,11 +971,6 @@ class Solver:
         values: when a kind of value cannot go in a slot, every value of the kind leaves
         at once, and by the time values are picked the propagators know what kind each
         slot holds. Any classes are sound: they only decide how the choices are grouped.
-
-        `twins[value]` is the set of values no propagator can tell from `value`: swap the
-        two throughout any solution and it is still one. When a value leads nowhere in a
-        slot, so does each twin that is in exactly the same domains at that moment, and
-        they all leave together. Unlike `classes`, this must be true of the problem.
         """
         domains = list(start) if start is not None else self.start()
         order = list(range(self.slot_count))
@@ -1034,12 +1028,6 @@ class Solver:
                     if budget < 0 or self.work > work_ends:
                         raise BudgetError from None
                 # the choice led nowhere: drop it here, and let that narrow the rest
-                if twins is not None and not by_kind:
-                    alike = twins[value] & domains[slot]
-                    for other, domain in enumerate(domains):
-                        if other != slot and alike != decision:
-                            alike &= domain if domain >> value & 1 else ~domain
-                    decision |= alike
                 domains[slot] &= ~decision
                 if not domains[slot]:
                     raise ContradictionError

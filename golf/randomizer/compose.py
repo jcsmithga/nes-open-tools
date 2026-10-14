@@ -21,10 +21,10 @@ and what the pool offers each of them. A search that gives up says so instead, a
 names the rules a course is found without: it has proved nothing.
 
 **What compiling adds.** Beside a propagator for each rule, `Problem` hands the solver
-what makes the search short: the kinds of hole (`_classes`), the holes no rule can tell
-apart (`_twins`), the joint check of the counts and sums over big scopes (`_add_tally`),
-and a few things that follow from two rules together or from a rule over every run of
-holes (`_whole`, `_together`, `_spread`).
+what makes the search short: the kinds of hole (`_classes`), the joint check of the
+counts and sums over big scopes (`_add_tally`), and a few things that follow from two
+rules together or from a rule over every run of holes (`_whole`, `_together`,
+`_spread`).
 
 See docs/generation_rewrite.md.
 """
@@ -225,9 +225,8 @@ class Problem:
         self.size = len(self.candidates)
         self._everything = (1 << self.size) - 1
         self._masks: dict[str, list[int]] = {}
-        #: every set of holes a count reads, by slot, and every number and grouping in use
+        #: every set of holes a count reads, by slot, and every number in use
         self._counted: list[list[int]] = []
-        self._limited: list[str] = []
         self._values: dict[str, solver.Values] = {}
         self._groups: dict[str, tuple[list[int], list[int]]] = {}
         self.family_of, self.family_masks = self.groups("family")
@@ -270,7 +269,6 @@ class Problem:
             and scopes(rule.get("scope", "course")) == scopes("course")
             for _, rule in general
         ):
-            self._limited.append("id")
             self._supply.append((self.groups("id")[1], 1))
             self._apart = (self.groups("id")[0], 1)
             self.propagators.append(
@@ -285,7 +283,6 @@ class Problem:
         self._add_tally()
         self.solver = solver.Solver(HOLES, self.size, self.propagators)
         self.classes = self._classes()
-        self.twins = self._twins()
         #: for `mix`: each family's holes, and the propagators that read each slot
         by_family: dict[int, list[int]] = {}
         for value, family in enumerate(self.family_of):
@@ -486,33 +483,6 @@ class Problem:
             )
         self.propagators.append(solver.Tally(atoms, cells, rows, caps, sums=sums))
 
-    def _twins(self) -> list[int]:
-        """For each hole, the holes no rule can tell from it.
-
-        Two holes are twins when every count reads them alike in every slot, every number
-        in use is the same for both, and every grouping in use either puts them in one
-        group or puts each in a group of its own. Swapping two such holes throughout a
-        course that keeps the rules gives another that does.
-        """
-        columns: list[Sequence[object]] = []
-        for masks in self._counted:
-            for mask in dict.fromkeys(masks):
-                columns.append([mask >> value & 1 for value in range(self.size)])
-        columns.extend(values.numbers for values in self._values.values())
-        for key in dict.fromkeys(self._limited):
-            group_of, group_masks = self.groups(key)
-            columns.append(
-                [
-                    -1 if group_masks[group].bit_count() == 1 else group
-                    for group in group_of
-                ]
-            )
-        by_signature: dict[tuple, int] = {}
-        signatures = list(zip(*columns, strict=True)) if columns else [()] * self.size
-        for value, signature in enumerate(signatures):
-            by_signature[signature] = by_signature.get(signature, 0) | 1 << value
-        return [by_signature[signature] for signature in signatures]
-
     def _group_labels(self, key: str) -> list[object]:
         group_of, group_masks = self.groups(key)
         labels: list[object] = [None] * len(group_masks)
@@ -683,7 +653,6 @@ class Problem:
 
     def _compile_limit(self, origin: int, rule: Mapping) -> None:
         group_of, group_masks = self.groups(rule["per"])
-        self._limited.append(rule["per"])
         labels = self._group_labels(rule["per"])
         if scopes(rule.get("scope", "course")) == scopes("course"):
             self.notes.setdefault(origin, []).append(
@@ -769,7 +738,6 @@ class Problem:
                     smallest_first=smallest_first,
                     start=start,
                     classes=self.classes,
-                    twins=self.twins,
                 )
             except solver.BudgetError:
                 continue
@@ -891,7 +859,6 @@ class Problem:
                         smallest_first=smallest_first,
                         start=start,
                         classes=trial.classes,
-                        twins=trial.twins,
                     )
                     return True
                 except solver.BudgetError:

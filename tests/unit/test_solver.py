@@ -88,7 +88,7 @@ def tally_of(tallied, sets, group_masks, limited, slots, size) -> Tally:
 
 def random_problem(rng: random.Random, slots=SLOTS, size=SIZE):
     """A handful of random propagators over `slots` slots of `size` values, with the classes
-    and twins a caller would hand the solver for them."""
+    a caller would hand the solver for them."""
     numbers = [rng.choice([1, 2, 2, 3, 5, None]) for _ in range(size)]
     values = Values(numbers)
     group_of = [rng.randrange(4) for _ in range(size)]
@@ -113,7 +113,6 @@ def random_problem(rng: random.Random, slots=SLOTS, size=SIZE):
     limited = rng.random() < 0.6
     if limited:
         propagators.append(Limit(range(slots), group_of, group_masks, 1))
-    used_numbers = False
     tallied = []
     for _ in range(rng.randint(1, 4)):
         kind = rng.choice(["count", "total", "difference", "limit", "step", "gap"])
@@ -124,7 +123,6 @@ def random_problem(rng: random.Random, slots=SLOTS, size=SIZE):
             propagators.append(Bound(counted, low, high))
             tallied.append(([counted], [], low, high))
         elif kind == "total":
-            used_numbers = True
             groups = (group_of, 1) if limited else None
             propagators.append(Bound(Total(scope(), values, groups), low * 3, high * 4))
         elif kind == "difference":
@@ -136,38 +134,28 @@ def random_problem(rng: random.Random, slots=SLOTS, size=SIZE):
         elif kind == "limit":
             propagators.append(Limit(scope(), group_of, group_masks, rng.randint(1, 2)))
         elif kind == "step":
-            used_numbers = True
             propagators.append(Step(scope(), values, low - 1, high))
         else:
-            used_numbers = True
             propagators.append(Gap(scope(), values, rng.randint(1, 2)))
     if tallied:
         propagators.append(tally_of(tallied, sets, group_masks, limited, slots, size))
 
     def signature(value: int) -> tuple:
-        return (
-            tuple(mask >> value & 1 for mask in sets),
-            numbers[value] if used_numbers else 0,
-            -1 if group_masks[group_of[value]].bit_count() == 1 else group_of[value],
-        )
+        return tuple(mask >> value & 1 for mask in sets)
 
-    twins = [
-        mask_of(v for v in range(size) if signature(v) == signature(value))
-        for value in range(size)
-    ]
     classes = [
         [
-            mask_of(v for v in range(size) if signature(v)[0] == signature(value)[0])
+            mask_of(v for v in range(size) if signature(v) == signature(value))
             for value in range(size)
         ]
     ] * slots
-    return propagators, classes, twins
+    return propagators, classes
 
 
 @pytest.mark.parametrize("seed", range(150))
 def test_random_problems_agree_with_brute_force(seed):
     rng = random.Random(seed)
-    propagators, classes, twins = random_problem(rng)
+    propagators, classes = random_problem(rng)
     answers = brute_force(propagators)
     problem = Solver(SLOTS, SIZE, propagators)
     found = set()
@@ -177,7 +165,6 @@ def test_random_problems_agree_with_brute_force(seed):
                 picks = problem.solve(
                     random.Random(f"{seed}/{attempt}"),
                     classes=classes,
-                    twins=twins,
                     smallest_first=smallest_first,
                     dead_end_limit=100_000,
                 )
@@ -195,25 +182,21 @@ def small_problem(seed: int):
     one of them can be waited for."""
     rng = random.Random(seed)
     while True:
-        propagators, classes, twins = random_problem(rng, 3, 5)
+        propagators, classes = random_problem(rng, 3, 5)
         answers = brute_force(propagators, 3, 5)
         if 2 <= len(answers) <= 30:
-            return propagators, classes, twins, answers
+            return propagators, classes, answers
 
 
 @pytest.mark.parametrize("seed", range(60))
 def test_every_solution_can_be_drawn(seed):
     """Nothing the search does for speed puts a valid assignment out of reach."""
-    propagators, classes, twins, answers = small_problem(seed)
+    propagators, classes, answers = small_problem(seed)
     problem = Solver(3, 5, propagators)
     found = set()
     for attempt in range(200 * len(answers)):
         found.add(
-            tuple(
-                problem.solve(
-                    random.Random(f"{seed}/{attempt}"), classes=classes, twins=twins
-                )
-            )
+            tuple(problem.solve(random.Random(f"{seed}/{attempt}"), classes=classes))
         )
         if found == answers:
             break
