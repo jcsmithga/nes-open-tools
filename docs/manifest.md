@@ -165,7 +165,7 @@ Generation draws a `prng_seed` of 16 hex characters when the settings have none,
 records it. The site's form offers neither the PRNG seed, the mercy point, included kinds
 nor excluded tags, so a seed from it has a drawn seed, the default mercy point, no
 excluded tags, and vanilla holes only, or vanilla and derived ones for a par 3 course;
-the CLI and a request file set all four. The form's transform chances are 0, 25, 50, 75
+the CLI sets all four, and a request file every one but the mercy point. The form's transform chances are 0, 25, 50, 75
 and 100; a request may give any whole percent.
 
 `include` adds to the pool where `exclude_tags` takes away. A hole's kind is read from its
@@ -349,9 +349,9 @@ form makes a request, as does an uploaded request file on its mystery page and
 `golf-randomize --request`. A request is one of:
 
 - **A settings request**: a partial settings object over the defaults, `{}` being a
-  default seed. A key left out takes its default, inside `clubs` too. Any field may be a
-  weighted choice, `{"one_of": [{"weight": 3, "value": 9}, {"weight": 1, "value":
-  null}]}`.
+  default seed. A key left out takes its default, inside `clubs` too. Any field but
+  `mercy_point`, which a request can't set, may be a weighted choice,
+  `{"one_of": [{"weight": 3, "value": "nes_us"}, {"weight": 1, "value": "random"}]}`.
 - **A sets request**: `{"sets": [{"weight": 7, "settings": {...}}, ...]}`, a weighted
   choice of settings requests, with nothing beside `sets`.
 
@@ -370,7 +370,8 @@ Weights are whole numbers 0 or more, relative to each other, and every choice ne
 above 0. `resolve` picks the set, then each weighted field in settings order, from
 `stream(prng_seed, "request")`. A request is checked when it is given: every set, and
 every value of every weighted field, must make legal settings, so an unknown key, a
-`prng_seed` (a seed is an argument, `--seed`), a weighted choice inside a field, or a
+`prng_seed` (a seed is an argument, `--seed`), a `mercy_point` (players don't choose it
+for now; the CLI's `--mercy-point` flag does), a weighted choice inside a field, or a
 near miss of `sets` is refused. A request that resolves to settings no course can be
 made from fails that seed rather than rolling again. The manifest keeps the request as
 given beside the settings it resolved to.

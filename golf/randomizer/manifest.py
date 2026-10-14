@@ -54,7 +54,8 @@ SOURCES = (US_ROM, JP_ROM)
 #: vanilla holes only (ADR 0023)
 INCLUDABLE = (DERIVED, COMMUNITY)
 DEFAULT_MERCY_POINT = 9
-MERCY_POINTS = range(1, 256)
+#: the tap-in records the hole as one stroke past the mercy point, in a byte
+MERCY_POINTS = range(1, 255)
 HOLE_PARS = (3, 4, 5)
 NINE = 9
 #: the rule that caps the expert holes on each nine, and its cap on a default course
@@ -101,7 +102,7 @@ def _check_mercy(mercy_point: object) -> None:
     if mercy_point is not None and not (
         _is_int(mercy_point) and mercy_point in MERCY_POINTS
     ):
-        raise ManifestError(f"mercy_point must be null or 1-255, got {mercy_point!r}")
+        raise ManifestError(f"mercy_point must be null or 1-254, got {mercy_point!r}")
 
 
 def check_sram_magic(sram_magic: object) -> None:

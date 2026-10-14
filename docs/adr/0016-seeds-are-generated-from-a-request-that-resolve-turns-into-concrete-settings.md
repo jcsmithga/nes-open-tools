@@ -111,6 +111,8 @@ The parsing rules:
 - `prng_seed` is refused in a request, with an error pointing at `--seed`. It is a
   `Settings` field, so a manifest's `settings` pasted in as a request would otherwise
   bring the old seed along.
+- `mercy_point` is refused in a request for now, so players can't choose it; seeds take
+  its default, and only the CLI's `--mercy-point` sets another.
 - A weighted field is written `{"one_of": [{"weight": w, "value": v}, ...]}`, not as a
   map from values to weights, because some values are lists or objects (`sources`,
   `clubs`) and can't be keys.

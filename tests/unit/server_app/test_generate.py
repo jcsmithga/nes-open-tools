@@ -292,10 +292,10 @@ def test_a_mystery_request_is_resolved_and_recorded_as_given(client, fake_builde
             {
                 "weight": 1,
                 "settings": {
-                    "mercy_point": {
+                    "music": {
                         "one_of": [
-                            {"weight": 1, "value": None},
-                            {"weight": 1, "value": 9},
+                            {"weight": 1, "value": "random"},
+                            {"weight": 1, "value": "nes_us"},
                         ]
                     }
                 },
@@ -320,6 +320,7 @@ def test_a_mystery_request_is_resolved_and_recorded_as_given(client, fake_builde
         (b"\xff\xfe", "mystery.error.not_json"),
         (b'{"set": []}', "mystery.error.bad_request problem=request: unknown key"),
         (b'{"music": "bogus"}', "mystery.error.bad_request problem=request: music"),
+        (b'{"mercy_point": 5}', "mystery.error.bad_request problem=request: a request"),
     ],
 )
 def test_a_request_the_site_cannot_roll_is_refused(unwritten_client, content, key):

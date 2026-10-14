@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from golf.core.patches.mercy_tap_in import mercy_tap_in_patches
 from golf.core.patches.sram_defaults import Club
 from golf.core.rng import predict_hole
 from golf.randomizer.build import BUILD_VERSION, FINISH_ABI_VERSION
@@ -23,6 +24,7 @@ from golf.randomizer.manifest import (
     DEFAULT_EXPERTS_PER_NINE,
     LEGACY_BUILD_VERSION,
     LEGACY_FINISH_ABI_VERSION,
+    MERCY_POINTS,
     SCHEMA,
     ClubRules,
     Course,
@@ -220,7 +222,7 @@ def test_rejects_bad_club_json(data):
         dict(sources={"nes_open_eu"}),
         dict(music="nes_mars"),
         dict(mercy_point=0),
-        dict(mercy_point=256),
+        dict(mercy_point=255),
         dict(prng_seed=""),
         dict(allow_family_repeats="yes"),
     ],
@@ -228,6 +230,12 @@ def test_rejects_bad_club_json(data):
 def test_rejects_bad_settings(settings):
     with pytest.raises(ManifestError):
         Settings(**settings)
+
+
+def test_every_legal_mercy_point_builds_its_patch():
+    for mercy_point in (MERCY_POINTS[0], MERCY_POINTS[-1]):
+        Settings(mercy_point=mercy_point)
+        mercy_tap_in_patches(mercy_point)
 
 
 def test_rejects_bad_courses():

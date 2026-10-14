@@ -49,12 +49,12 @@ def test_a_request_sets_only_what_it_names():
 
 
 def test_a_weighted_field_resolves_to_one_of_its_values_by_weight():
-    request = {"mercy_point": one_of(9, None, 5, weights=[3, 1, 0])}
-    seen = Counter(resolve(request, str(seed)).mercy_point for seed in range(400))
-    assert set(seen) == {9, None}
-    assert 0.65 < seen[9] / 400 < 0.85
+    request = {"music": one_of("nes_us", "random", "nes_uk", weights=[3, 1, 0])}
+    seen = Counter(resolve(request, str(seed)).music for seed in range(400))
+    assert set(seen) == {"nes_us", "random"}
+    assert 0.65 < seen["nes_us"] / 400 < 0.85
     assert resolve(request, "same") == resolve(request, "same")
-    assert is_weighted(request) and not is_weighted({"mercy_point": 9})
+    assert is_weighted(request) and not is_weighted({"music": "nes_us"})
 
 
 def test_a_weighted_object_field_is_partial_like_any_other():
@@ -83,7 +83,7 @@ def test_a_sets_request_picks_a_set_then_its_weighted_fields():
                 "weight": 3,
                 "settings": {
                     "sources": [US_ROM, JP_ROM],
-                    "mercy_point": one_of(9, None),
+                    "music": one_of("nes_us", "random"),
                 },
             },
         ]
@@ -91,9 +91,9 @@ def test_a_sets_request_picks_a_set_then_its_weighted_fields():
     resolved = [resolve(request, str(seed)) for seed in range(400)]
     us_only = [settings for settings in resolved if settings.sources == {US_ROM}]
     assert 0.6 < len(us_only) / 400 < 0.8
-    assert {settings.mercy_point for settings in us_only} == {9}
+    assert {settings.music for settings in us_only} == {"random"}
     both = [settings for settings in resolved if settings.sources != {US_ROM}]
-    assert {settings.mercy_point for settings in both} == {9, None}
+    assert {settings.music for settings in both} == {"nes_us", "random"}
     assert is_weighted(request)
 
 
@@ -111,12 +111,18 @@ def test_a_sets_request_picks_a_set_then_its_weighted_fields():
         ({"sets": [{"weight": 0, "settings": {}}]}, "every weight is 0"),
         ({"sets": [{"weight": 1, "settings": []}]}, "expected an object"),
         ({"sets": [{"weight": 1}]}, '"settings"'),
-        ({"mercy_point": {"one_of": []}}, "non-empty list"),
-        ({"mercy_point": one_of(9, weights=[-1])}, "weight must be"),
-        ({"mercy_point": one_of(9, weights=[1.5])}, "weight must be"),
-        ({"mercy_point": {"one_of": [{"weight": 1, "value": 9}], "x": 1}}, "only"),
+        ({"mirror_chance": {"one_of": []}}, "non-empty list"),
+        ({"mirror_chance": one_of(9, weights=[-1])}, "weight must be"),
+        ({"mirror_chance": one_of(9, weights=[1.5])}, "weight must be"),
+        ({"mirror_chance": {"one_of": [{"weight": 1, "value": 9}], "x": 1}}, "only"),
         ({"clubs": {"max": one_of(10)}}, "whole field"),
-        ({"mercy_point": one_of(9, 300)}, r"mercy_point\.one_of\[1\]"),
+        ({"mirror_chance": one_of(9, 300)}, r"mirror_chance\.one_of\[1\]"),
+        ({"mercy_point": 5}, "can't set mercy_point"),
+        ({"mercy_point": one_of(9, None)}, "can't set mercy_point"),
+        (
+            {"sets": [{"weight": 1, "settings": {"mercy_point": None}}]},
+            r"sets\[0\] settings: a request can't set mercy_point",
+        ),
         ({"constraints": [{"rule": "shuffle"}]}, "unknown rule"),
         (
             {"constraints": [{"rule": "count", "where": {"par": 3}, "max": 1}]},

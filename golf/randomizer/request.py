@@ -15,7 +15,7 @@ Weights are non-negative integers, relative to one another, and every choice nee
 above zero. `resolve` picks the set, then each weighted field in `Settings` field order,
 from the seed's own stream (`stream(prng_seed, "request")`), so within one release the
 same request and seed resolve the same way. The PRNG seed is an argument, never part of
-the request.
+the request, and the mercy point is not a request's to set: it takes its default.
 
 `check_request` is what a request is judged by when it is submitted: every set, and
 every value of every weighted field, must make legal settings, so a request that resolves
@@ -37,6 +37,9 @@ SETS = "sets"
 ONE_OF = "one_of"
 #: keys a request reserves at the top level, which no settings field may take
 RESERVED = (SETS,)
+#: settings a request may not set, which always take their defaults: players don't
+#: choose the mercy point for now
+HELD = ("mercy_point",)
 #: what a near miss of a reserved key looks like, lowercased
 _NEAR_SETS = ("set", "sets", "settings_sets")
 
@@ -47,7 +50,9 @@ class RequestError(ManifestError):
 
 def _fields() -> list[str]:
     """The settings fields a request may set, in `Settings` field order."""
-    return [key for key in Settings().to_json() if key != "prng_seed"]
+    return [
+        key for key in Settings().to_json() if key != "prng_seed" and key not in HELD
+    ]
 
 
 def _weights(options: object, what: str, value_key: str) -> list[tuple[int, object]]:
@@ -109,6 +114,10 @@ def _check_keys(request: Mapping, what: str) -> None:
             )
         if key in fields:
             continue
+        if key in HELD:
+            raise RequestError(
+                f"{what}: a request can't set {key}; seeds take its default"
+            )
         if key.lower() in _NEAR_SETS:
             raise RequestError(f"{what}: unknown key {key!r}; did you mean {SETS!r}?")
         raise RequestError(
