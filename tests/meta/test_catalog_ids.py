@@ -1,8 +1,10 @@
-"""The catalog index is append-only across its whole git history.
+"""No catalog id is ever removed or given to another hole, across the index's git history.
 
-Every entry ever committed to data/catalog/holes.json is still in the working tree with
-the same fields; the one permitted change is `withdrawn` going from absent to true. The
-index version never decreases. See docs/catalog.md.
+Seeds keep the holes they were built with and what their pages show of them (ADR 0024), so
+an entry's hash, par, distance or author may be corrected in place. What must hold is
+what stats join on: every id ever committed is still in the index, with the same source,
+and once withdrawn stays withdrawn. The index version never decreases. See
+docs/catalog.md.
 """
 
 import json
@@ -32,7 +34,7 @@ def _committed_indexes() -> list[tuple[str, dict]]:
     ]
 
 
-def test_no_committed_entry_was_removed_or_changed():
+def test_no_committed_id_was_removed_or_given_another_hole():
     current = json.loads((ROOT / INDEX).read_text())
     problems = []
     for commit, past in _committed_indexes():
@@ -47,10 +49,9 @@ def test_no_committed_entry_was_removed_or_changed():
                 continue
             if fields.get("withdrawn") and not now.get("withdrawn"):
                 problems.append(f"{commit}: {hole_id} was un-withdrawn")
-            if {k: v for k, v in now.items() if k != "withdrawn"} != {
-                k: v for k, v in fields.items() if k != "withdrawn"
-            }:
+            if now["source"] != fields["source"]:
                 problems.append(
-                    f"{commit}: {hole_id} changed; publish a new version instead"
+                    f"{commit}: {hole_id} has another source; publish a new lineage "
+                    "or version instead"
                 )
     assert not problems, "\n".join(problems)

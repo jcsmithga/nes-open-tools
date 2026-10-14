@@ -1,11 +1,12 @@
 +++
-status = "accepted"
-date = 2026-10-06
+status = "superseded"
+date = 2026-10-14
 area = "randomizer"
 permanent = false
 revisit_when = "the site rebuilds a stored seed from its manifest instead of serving its stored unfinished IPS, or one release must build more than one unfinished build version"
 drafted_by = "Claude"
 supersedes = []
+superseded_by = 24
 +++
 
 # Hole transform output is pinned by golden hashes and the build version, not by frozen code

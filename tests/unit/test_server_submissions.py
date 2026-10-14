@@ -14,7 +14,7 @@ from golf.randomizer.manifest import Settings
 from server.db import Database
 from server.entries import load_entry, upsert_entry
 from server.rounds import RoundHole
-from server.seeds import MAX_QR_SEED_ID, insert_seed
+from server.seeds import MAX_QR_SEED_ID
 from server.submissions import (
     MALFORMED,
     UNFINISHED,
@@ -23,6 +23,7 @@ from server.submissions import (
     submit_scan,
 )
 from server.users import sign_in
+from tests.stored_seeds import store_seed
 from tests.unit.test_server_seeds import seed_row
 
 LUIGI = PlayerOptions("LUIGI", frozenset({Club.W1, Club.PW}))
@@ -83,7 +84,7 @@ class Player:
 
 @pytest.fixture
 def seed_id(db, manifest):
-    return insert_seed(db, manifest, b"PATCHEOF")
+    return store_seed(db, manifest)
 
 
 @pytest.fixture
@@ -242,7 +243,7 @@ def test_an_unfinished_roms_zero_ids_are_rejected(db, alice, field, width):
 
 
 def test_a_payload_matching_no_entry_is_not_recognized(db, manifest, seed_id, alice):
-    other_seed = insert_seed(db, manifest, b"PATCHEOF")
+    other_seed = store_seed(db, manifest)
     bob = sign_in(db, "dev:bob", "bob", None, None)
     cases = {
         "unknown seed": alice.scan(

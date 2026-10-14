@@ -14,6 +14,7 @@ from server.config import Config
 from server.forms import FormState
 from server.strings import Entry, Strings
 from tests.app_state import app_state
+from tests.synthetic_holes import built_holes
 
 IPS = b"PATCH\x00\x00\x10\x00\x01\xeaEOF"
 FINISHED = b"PATCH\x00\x00\x20\x00\x01\x60EOF"
@@ -25,7 +26,7 @@ class FakeBuilder(SeedBuilder):
 
     def build(self, manifest: Manifest, sample=None) -> BuiltSeed:
         self.built = manifest
-        return BuiltSeed(IPS, ())
+        return BuiltSeed(IPS, built_holes(manifest, self.catalog))
 
     def finish(self, manifest, unfinished_ips, options, credentials=None):
         self.finished = (manifest, unfinished_ips, options)

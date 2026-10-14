@@ -22,8 +22,8 @@ from golf.randomizer.manifest import Manifest
 from server.app import create_app
 from server.builder import SeedBuilder
 from server.config import Config
-from server.seeds import insert_seed
 from tests.app_state import app_state
+from tests.stored_seeds import store_seed
 
 ROOT = Path(__file__).resolve().parents[2]
 ROM_PATH = ROOT / "nes_open_us.nes"
@@ -68,7 +68,7 @@ def stored_seed(frozen, tmp_path):
     with TestClient(
         create_app(Config(database=":memory:", dev_login=True), builder=builder)
     ) as client:
-        seed_id = insert_seed(app_state(client).db, manifest, patch)
+        seed_id = store_seed(app_state(client).db, manifest, patch, catalog)
         yield client, seed_id, metadata
 
 

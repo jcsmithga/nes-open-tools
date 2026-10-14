@@ -9,9 +9,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
 from golf.randomizer.build import credentials_for
-from golf.randomizer.catalog import CatalogError
 from golf.randomizer.generate import GenerationError
-from golf.randomizer.manifest import required_roms
 
 from ..auth import current_user
 from ..builder import BuilderUnavailableError, SeedBuilder
@@ -30,7 +28,7 @@ from ..forms import (
 )
 from ..ratelimit import client_key
 from ..rounds import rounds_for_seed
-from ..seeds import insert_seed, load_seed, load_unfinished_ips
+from ..seeds import insert_seed, load_seed, load_seed_holes, load_unfinished_ips
 from ..strings import Strings
 from ..timings import OK, Sample
 from ..views import download_stem, generate_options, seed_view
@@ -130,8 +128,9 @@ def seed_router(templates: Jinja2Templates) -> APIRouter:
                     db,
                     manifest,
                     built.unfinished_ips,
+                    built.holes,
+                    seed_builder.catalog,
                     creator_id=user_id,
-                    holes=built.holes,
                 )
 
         try:
@@ -164,22 +163,11 @@ def seed_router(templates: Jinja2Templates) -> APIRouter:
         row = load_seed(db, seed_id)
         if row is None:
             raise not_found()
-        seed_builder: SeedBuilder = request.app.state.builder
         sample: Sample = request.state.sample
-        try:
-            with sample.phase("render"):
-                book = yardage_book(
-                    db,
-                    row,
-                    seed_builder.catalog,
-                    seed_builder.store,
-                    request.app.state.renders,
-                    RANGEFINDER_DATA_URL,
-                )
-        except CatalogError as problem:
-            log.error("cannot show the yardage book of %s: %s", seed_id, problem)
-            outcome(request, UNAVAILABLE)
-            return json_refusal(503, UNAVAILABLE)
+        with sample.phase("render"):
+            book = yardage_book(
+                db, row, request.app.state.renders, RANGEFINDER_DATA_URL
+            )
         return JSONResponse(book, headers={"Cache-Control": "no-cache"})
 
     @router.get("/h/{seed_id}/book", response_class=HTMLResponse)
@@ -209,7 +197,7 @@ def seed_router(templates: Jinja2Templates) -> APIRouter:
         strings: Strings = request.app.state.strings
         view = seed_view(
             row,
-            seed_builder.catalog,
+            load_seed_holes(request.app.state.db, seed_id),
             seed_builder.curation,
             starting_settings(request, seed_id),
         )
@@ -243,7 +231,7 @@ def seed_router(templates: Jinja2Templates) -> APIRouter:
         manifest = row.manifest
         state = DownloadState.from_form(await request.form())
         try:
-            check_rom_hashes(state, required_roms(manifest, seed_builder.catalog))
+            check_rom_hashes(state, row.required_roms)
         except FormError as problem:
             outcome(request, problem.reason)
             return json_refusal(403, problem.reason, problem.values)

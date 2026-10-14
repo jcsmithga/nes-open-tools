@@ -61,7 +61,7 @@ After checking the build and finish-ABI versions, an unfinished build reads only
 and nothing in `course` needs interpreting: hole ids rather than filters, a music slug
 rather than "random", wind seeds rather than the string they were derived from. A slot's
 `transforms` are the exception. They name code whose output may change from one release
-to the next (ADR 0024), so the site stores each transformed hole beside the seed
+to the next (ADR 0024), so the site stores every hole as built beside the seed
 (ADR 0021) rather than working it out again. Loading
 is strict: a missing or unknown field is an error. `golf/randomizer/build.py` turns
 `course` into the seed's unfinished ROM, and finishes that ROM per player
@@ -88,8 +88,8 @@ is strict: a missing or unknown field is an error. `golf/randomizer/build.py` tu
   share an ABI. Finishing dispatches on this version and promises safe personalization,
   not byte-identical output across releases. See `docs/patch_stack.md`.
 - `catalog_version` and `curation_stamp` record what generation read, as provenance.
-  Hole ids resolve through the frozen catalog forever (`docs/catalog.md`), so neither is
-  needed to build.
+  Neither is needed to build, and nothing upstream of a stored seed is read again to show
+  it (ADR 0024).
 
 ### Schema history
 
@@ -235,7 +235,7 @@ data is already in the ROM, and imports a Mario Open theme from its dump (`music
   player's entry and the finishing stage.
 - **Required ROMs.** `required_roms` computes them from the holes and the music: the US
   ROM always, and the Mario Open ROM when any hole, the base of any derived hole or the
-  theme comes from it.
+  theme comes from it. The site stores them on the seed row when the seed is made.
 
 ## Generation
 

@@ -106,9 +106,13 @@ in this package.
 - `server/ids.py` holds the base62 alphabet and codec every public id shares. A seed's is
   the encoding of its `qr_seed_id`; a round's permalink id is drawn as text.
 - `server/seeds.py` is the only code that writes `seeds`, `seed_holes` and `hole_data`,
-  and the only place seed ids are drawn or converted. `insert_seed` takes the holes the
-  build made and stores those with transforms in `hole_data`, compressed, under their
-  content hash (ADR 0021); a manifest with transforms and no holes is refused. It owns withdrawal and restoration: each changes
+  and the only place seed ids are drawn or converted. `insert_seed` takes the 18 holes
+  the build made and the catalog it built from, stores every hole in `hole_data`,
+  compressed, under its content hash, and keeps on the seed what its pages show from the
+  catalog: each hole's distance, author and source, and the required ROMs (ADR 0021,
+  ADR 0024). Pages read these, never the catalog, for a stored seed. A seed stored before
+  migration 7 has them NULL until `backfill` (`golf-site-backfill`) fills them in, and
+  the app refuses to start while any seed is unfilled. It owns withdrawal and restoration: each changes
   only `withdrawn_at` and records an audit action in the same transaction. The seed's
   manifest and unfinished IPS are never changed. The row repeats the manifest's build and
   finish-ABI versions for operations, and loading verifies that the copies agree.

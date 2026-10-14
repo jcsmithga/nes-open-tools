@@ -18,9 +18,9 @@ from server.rounds import (
     unflag_round,
     void_round,
 )
-from server.seeds import insert_seed
 from server.submissions import UNRECOGNIZED, ScanError, submit_scan
 from server.users import sign_in
+from tests.stored_seeds import store_seed
 from tests.unit import test_server_submissions as scans
 
 #: rounds are recorded the way a scan records them, from the submission tests' players
@@ -77,7 +77,7 @@ def test_a_seeds_rounds_carry_each_holes_strokes_and_the_nines(db, seed_id, alic
 def test_a_players_rounds_list_newest_first_with_their_seeds(
     db, manifest, seed_id, alice
 ):
-    other_seed = insert_seed(db, manifest, b"PATCHEOF")
+    other_seed = store_seed(db, manifest)
     alice_elsewhere = Player(db, other_seed, "alice", "Alice")
     bob = Player(db, seed_id, "bob")
     submit_scan(db, alice.scan(), now="2026-09-17T10:00:00Z")

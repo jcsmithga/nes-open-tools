@@ -12,9 +12,9 @@ from markupsafe import Markup
 from golf.core import jp_rom_utils, rom_utils
 from golf.core.patches.sram_defaults import BAG_SIZE, NAME_LENGTH
 from golf.randomizer.build import FINISH_ABI_VERSION
-from golf.randomizer.catalog import JP_ROM, US_ROM, Catalog, RomSource
+from golf.randomizer.catalog import JP_ROM, US_ROM
 from golf.randomizer.curation import CurationSnapshot
-from golf.randomizer.manifest import SOURCES, ClubRules, required_roms
+from golf.randomizer.manifest import SOURCES, ClubRules
 from golf.randomizer.music import TRACKS, Track
 from golf.randomizer.roms import VanillaRom, vanilla_rom
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
@@ -30,7 +30,7 @@ from .forms import (
     writes_option_defaults,
 )
 from .rounds import Round, VoidedRound
-from .seeds import SeedRow
+from .seeds import SeedHole, SeedRow
 
 #: (ROM id, course directory name) -> the course's display name
 COURSE_NAMES: dict[tuple[str, str], str] = {
@@ -231,30 +231,27 @@ class SeedView:
     download: DownloadView
 
 
-def _hole_view(
-    number: int, slot, catalog: Catalog, curation: CurationSnapshot
-) -> HoleView:
-    entry = catalog[slot.id]
-    source = entry.source
-    vanilla = isinstance(source, RomSource)
+def _hole_view(hole: SeedHole, curation: CurationSnapshot) -> HoleView:
+    """A hole as the seed stored it. Its display name is the one curation gives it now."""
+    rom, course = hole.source_rom, hole.source_course
     return HoleView(
-        number=number,
-        id=str(slot.id),
-        display_name=curation.for_hole(slot.id).display_name,
-        par=slot.par,
-        distance=entry.distance,
-        author=entry.author,
-        rom_title=vanilla_rom(source.rom).title if vanilla else None,
-        course=COURSE_NAMES.get((source.rom, source.course), source.course)
-        if vanilla
-        else None,
-        source_hole=source.hole if vanilla else None,
+        number=hole.position,
+        id=hole.hole_id,
+        display_name=curation.for_hole(hole.hole_id).display_name,
+        par=hole.par,
+        distance=hole.distance,
+        author=hole.author,
+        rom_title=None if rom is None else vanilla_rom(rom).title,
+        course=None
+        if rom is None or course is None
+        else COURSE_NAMES.get((rom, course), course),
+        source_hole=hole.source_hole,
     )
 
 
 def seed_view(
     row: SeedRow,
-    catalog: Catalog,
+    seed_holes: list[SeedHole],
     curation: CurationSnapshot,
     saved: SavedSettings | None = None,
 ) -> SeedView:
@@ -262,13 +259,10 @@ def seed_view(
     manifest = row.manifest
     course = manifest.course
     settings = manifest.settings
-    holes = tuple(
-        _hole_view(number, slot, catalog, curation)
-        for number, slot in enumerate(course.holes, start=1)
-    )
+    holes = tuple(_hole_view(hole, curation) for hole in seed_holes)
     theme = TRACKS[course.music]
     rules = course.clubs
-    required = tuple(vanilla_rom(rom) for rom in required_roms(manifest, catalog))
+    required = tuple(vanilla_rom(rom) for rom in row.required_roms)
     required_bag = (
         None
         if rules.required_bag is None

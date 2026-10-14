@@ -32,7 +32,7 @@ A golden test (`tests/unit/test_transforms.py`) hashes each transform's output f
 every vanilla hole, so a change that alters it is noticed. A change made on purpose
 updates the digests; the transform's own version is bumped only if what it means
 changed, for example a hazard style's probabilities. Neither bumps `BUILD_VERSION`: a
-seed's transformed holes are stored with it when it is built (ADR 0021), so a later
+seed's holes are stored with it, as built, when it is built (ADR 0021), so a later
 release transforming a hole differently changes no existing seed (ADR 0024). A version
 stays in the registry after a newer one ships, because the site still loads manifests
 naming it.

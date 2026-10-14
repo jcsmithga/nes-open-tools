@@ -1,5 +1,5 @@
 +++
-status = "proposed"
+status = "accepted"
 date = 2026-10-14
 area = "randomizer"
 permanent = false
@@ -23,46 +23,68 @@ neither the site nor `golf-randomize build` can.
 > guarantees upstream of it exist only to keep rebuilding safe, which nothing does any
 > more.
 
-An audit of what reads a seed after it is created found:
+An audit of what read a seed after it was created found:
 
-- **A download** reads the stored IPS and, from the manifest, `finish_abi_version`,
+- **A download** read the stored IPS and, from the manifest, `finish_abi_version`,
   `sram_magic` and the club rules, with `qr_seed_id` and the entry's keys from their rows.
-  `required_roms` also reads each hole's catalog entry.
-- **The seed page** reads the catalog entry of each hole id for its distance, author and
+  `required_roms` also read each hole's catalog entry.
+- **The seed page** read the catalog entry of each hole id for its distance, author and
   source, and the current curation for its display name.
-- **The yardage book** reads a transformed slot's hole from `hole_data` (ADR 0021), and
-  any other slot's from the catalog and hole store, checked against its content hash.
-- **The round, account and admin pages** parse the whole manifest for its magic words
+- **The yardage book** read a transformed slot's hole from `hole_data` (ADR 0021), and
+  any other slot's from the catalog and the hole store, checked against its content hash.
+- **The round, account and admin pages** parsed the whole manifest for its magic words
   and pars.
-- **A scan** reads its payload, the seed by `qr_seed_id`, the entry's keys and
+- **A scan** read its payload, the seed by `qr_seed_id`, the entry's keys and
   `seed_holes.par`.
 
-Nothing reads a seed's `settings` to generate it again, and nothing rebuilds its
-unfinished ROM. Several guarantees exist only for that:
+Nothing read a seed's `settings` to generate it again, and nothing rebuilt its unfinished
+ROM. Several guarantees existed only for that, or only because a stored seed still read
+the catalog:
 
 - the same catalog, curation and settings regenerating the same manifest under one
-  `generator_version` (`docs/manifest.md`), which also cannot hold in practice, since
-  curation is edited freely and a manifest records only its stamp;
+  `generator_version` (`docs/manifest.md`), which could not hold in practice anyway,
+  since curation is edited freely and a manifest records only its stamp;
 - `build_version` bumped for any change that could alter the unfinished ROM's bytes;
 - each transform's output pinned by golden hashes, any change to them bumping
   `BUILD_VERSION` (ADR 0015);
 - a catalog id resolving to the same hole data forever, and no committed entry ever
-  changed (`docs/catalog.md`), which, since vanilla hole data is not committed, also
-  freezes the dumpers and the canonical hole form;
+  changed (`docs/catalog.md`), which, since vanilla hole data is not committed, also froze
+  the dumpers and the canonical hole form;
 - deltas never edited, and the delta format permanent (ADR 0022);
 - a strict reader for every manifest schema, which keeps every transform name registered
   and makes each new settings field a schema bump with its own loader branch, as
-  `include` (ADR 0023) was.
+  `include` (ADR 0023) was, though nothing reads a stored seed's `include`.
 
-The catalog machinery has not yet been used: the index is at version 1, with 144
+The catalog machinery had not yet been used: the index was at version 1, with 144
 vanilla holes and none withdrawn, derived or community.
 
 ## Decision
 
 A seed's identity is what the site stored when it was created: the manifest text as
-issued, the unfinished IPS, its rows in `seed_holes` and the built holes in `hole_data`.
-Nothing upstream of those has to reproduce them.
+issued, the unfinished IPS, its rows in `seed_holes` and its built holes in `hole_data`.
+Nothing upstream of those has to reproduce them, and a seed's pages read nothing a later
+release could change.
 
+- **Every hole as built is stored.** `insert_seed` takes the build's 18 holes and stores
+  each in `hole_data`, not only the transformed ones. This reverses the alternative ADR
+  0021 rejected, "storing every slot's hole", whose reason was that an untransformed slot
+  resolves through the catalog in any release; that is no longer promised. A hole two
+  seeds share is stored once, so the vanilla holes add at most one row each.
+- **What a seed's pages read from the catalog is kept on the seed** (migration 7): the
+  required ROMs on `seeds`, and each hole's distance, author and source on `seed_holes`.
+  The seed page, the download's ROM check and the yardage book read these rows. A hole's
+  display name still comes from the current curation, and the admin pages still show
+  whether the catalog has withdrawn a hole since.
+- **Seeds stored before migration 7 are filled in once.** `golf-site-backfill`, run by
+  hand at the deploy that brings the migration, works every seed out from the manifest,
+  the catalog and the hole store before writing anything, and writes nothing unless all
+  of them can be filled. The site refuses to start while any seed is unfilled.
+- **The catalog promises what stats need, and no more.** No committed id is ever removed,
+  given another source or un-withdrawn (`tests/meta/test_catalog_ids.py`), and a change to
+  a hole that matters to play is a new version. An entry's hash, par, distance or author,
+  and a derived hole's delta, may be corrected in place. `HoleStore.load` still checks
+  hole data against its entry, as a check that a rehydration matches the index it was
+  made for.
 - **No regeneration.** Generation is deterministic in its inputs within one release,
   which the tests check and `golf-randomize generate --seed` relies on, but nothing
   promises that a later release generates the same manifest from the same settings.
@@ -83,15 +105,20 @@ Nothing upstream of those has to reproduce them.
   > I think that essentially hole id is always a primary differentiator, and the list of
   > transforms applied is a secondary one.
 
-  A lineage is never reused for a different hole design, and a change that matters to
-  play is a new version, so stats can group a lineage's versions or split them. A seeded
-  transform groups by its name without the seed (`hazards@1`), and `build_version` or a
-  stored hole's content hash can split a group when a transform's output changed between
-  releases.
+  Stats can group a lineage's versions or split them. A seeded transform groups by its
+  name without the seed (`hazards@1`), and `build_version` or a stored hole's content
+  hash can split a group when a transform's output changed between releases.
+- **A stored manifest is read for what its pages need.** Strict loading, with every field
+  checked, is for a manifest about to be built. Reading a stored seed takes only the
+  fields its pages and its finisher use, so a schema needs no loader branch to stay
+  readable, and a transform name no longer has to stay registered for its manifests to
+  load. The finish inputs (`finish_abi_version`, `sram_magic`, the club rules) stay
+  checked. This follows migration 7 as its own release, because the backfill reads old
+  manifests through the strict loader.
 
 The finish ABI, the QR payload protocols, the SRAM magic, seed ids, player ids and MAC
-keys, the append-only migrations, and the rule that a seed row is never rewritten are
-unchanged: those are owed to the artifacts and ROMs already issued.
+keys, the append-only migrations, and the rule that a seed row's manifest and IPS are
+never rewritten are unchanged: those are owed to the artifacts and ROMs already issued.
 
 ## Rejected alternatives
 
@@ -105,39 +132,48 @@ unchanged: those are owed to the artifacts and ROMs already issued.
 - **A stored hole's content hash as the stats key.** It needs no catalog promise at all,
   but a hole with and without transforms would then be two unrelated keys, and comparing
   them is one of the things stats are for.
+- **Backfill at startup.** The site would fill old seeds itself and need no deploy step,
+  but every start would be a data migration, run where a failure takes the site down.
+- **Read a hole's distance from `hole_data` instead of keeping a column.** It would store
+  one value fewer, but the seed page would decompress all 18 holes on every view.
 
 ## Consequences
 
+- No stored seed reads the catalog or the hole store. The hole store serves only new
+  builds and the backfill.
+- A stored hole takes about 1.1 KB under zlib (ADR 0021). Vanilla holes are shared, as
+  is a hole with only unseeded transforms such as `mirror@1`, so only a seeded transform
+  adds rows of its seed's own.
 - Improving the forest fill, feature detection or the mirror table means updating the
   transform digests, not bumping `BUILD_VERSION`.
 - `build_version` no longer says that two seeds' unfinished ROMs were built by
   byte-identical recipes, only that nothing players would notice differs between them.
 - Changes to generation, including the request resolve of ADR 0016, need no version bump
   to stay correct, only one to stay informative.
-- What follows from this, in order, is not done yet:
-  1. Store every slot's built hole in `hole_data`, not only the transformed ones, and
-     backfill existing seeds from the catalog, so the yardage book reads only the
-     database. This extends ADR 0021.
-  2. Store on the seed what its pages read from the catalog: the required ROMs and each
-     hole's distance, author and source. No existing seed then reads the catalog, and
-     `docs/catalog.md`'s guarantees narrow to ids never being removed or reused: an
-     entry's metadata or a delta may then be corrected in place.
-  3. Read stored manifests tolerantly, taking only the fields a page needs, and load
-     strictly only a manifest about to be built. The legacy schema loaders retire, a
-     transform name no longer has to stay registered, and a settings field only
-     generation reads needs no schema bump.
-
-  Until the first two are done, the catalog's guarantees stand as they are.
+- This softens one consequence of ADR 0022, that "the delta format is as permanent as
+  the entries that name it." A delta can be rewritten in a new format in place, so
+  `apply` needs to read only the formats the checked-in deltas use.
+- A database from before migration 7, such as an old backup, needs `golf-site-backfill`
+  from a release that still has the strict legacy loaders. Once the tolerant reader
+  ships and production has run the backfill, the command can retire.
+- A seed stored by an unreleased development build may not load at all: one in a
+  development database had a schema 3 manifest from before schema 3 gained its wind
+  profiles. The backfill names such a seed and writes nothing, and it has to be deleted.
 
 ## Sources
 
 - `docs/manifest.md`, `docs/catalog.md`, `docs/hole_transforms.md`,
-  `docs/patch_stack.md`, `docs/planning/compatibility_breadcrumb.md`
+  `docs/patch_stack.md`, `docs/yardage_book.md`, `docs/deployment.md`,
+  `docs/planning/compatibility_breadcrumb.md`
 - `golf/randomizer/build.py`, `golf/randomizer/generate.py`,
-  `golf/randomizer/transforms.py`, `server/seeds.py`, `server/views.py`,
-  `server/yardage_book.py`, `server/routes/seed_pages.py`;
-  `tests/unit/test_transforms.py`, `tests/meta/test_catalog_frozen.py`
+  `golf/randomizer/transforms.py`, `server/seeds.py`, `server/migrations.py`,
+  `server/views.py`, `server/yardage_book.py`, `server/routes/seed_pages.py`,
+  `tools/site_backfill.py`; `tests/unit/test_transforms.py`,
+  `tests/meta/test_catalog_ids.py`
 - ADR 0015, ADR 0016, ADR 0021, ADR 0022, ADR 0023
 - Claude Code session 2026-10-13 `018V5k6x`: the audit of every read of a stored seed and
   every compatibility guarantee, and jdharms's choices of hole id over content hash as
-  the stats key and of the order of the work.
+  the stats key, of the order of the work, of a one-time backfill run at deploy, with the
+  stored holes and catalog facts in one migration, and of the tolerant reader following
+  in its own release. A dry run of the backfill on a restored production backup found
+  every seed fillable.

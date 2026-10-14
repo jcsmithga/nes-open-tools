@@ -210,6 +210,33 @@ sudo systemctl reload caddy
 A migration moves the database forward, and an older release refuses a database newer than
 it knows. Rolling back past a migration is restoring the database from before it.
 
+### Backfilling seeds after migration 7
+
+Migration 7 keeps every seed's holes as built, and what its pages show from the catalog,
+on the seed (ADR 0024). Seeds stored before it lack them, and `golf-site` refuses to start
+until `golf-site-backfill` has filled them in from the catalog and the hole store. It is
+run once, by hand, on the first deploy of a release with migration 7:
+
+```bash
+/opt/golf-site/deploy/deploy.sh server-vX.Y.Z    # the restart fails: seeds need a backfill
+sudo systemctl stop golf-site
+sudo systemd-run --pipe --wait --uid=golf --gid=golf \
+    -p EnvironmentFile=/etc/golf-site/env -p WorkingDirectory=/opt/golf-site \
+    /opt/golf-site/.venv/bin/golf-site-backfill --dry-run
+sudo systemd-run --pipe --wait --uid=golf --gid=golf \
+    -p EnvironmentFile=/etc/golf-site/env -p WorkingDirectory=/opt/golf-site \
+    /opt/golf-site/.venv/bin/golf-site-backfill
+sudo systemctl reset-failed golf-site
+sudo systemctl start golf-site
+```
+
+`systemd-run` runs it as the service's user with the service's environment, which only
+root can read. The failed restart has already run the unit's `golf-rehydrate` check, so
+the hole store is current. The backfill migrates the database, works out every unfilled
+seed before writing anything, and writes nothing if a hole is missing from the store or a
+transformed hole was never stored; `--dry-run` lists the seeds it would fill. Run again,
+it finds nothing to do. The site is down from the deploy until the start.
+
 ## Operating
 
 | Task | Command |

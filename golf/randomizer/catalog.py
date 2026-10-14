@@ -1,10 +1,11 @@
 """
 The hole catalog: every hole a randomizer seed can reference, under ids that never change.
 
-The catalog is frozen and append-only. An entry binds an id to one hole's content, through
-a content hash, and to its provenance. Nothing here steers generation: tags, retirement and
-families are curation (`golf.randomizer.curation`). A changed hole is a new version of its
-lineage, `nes_uk/01@2`, never an edit to an existing entry. See docs/catalog.md.
+No id is ever removed or given another hole. An entry binds an id to one hole's content,
+through a content hash, and to its provenance. Nothing here steers generation: tags,
+retirement and families are curation (`golf.randomizer.curation`). A change that matters
+to play is a new version of its lineage, `nes_uk/01@2`; anything else may be corrected in
+place, since a seed keeps the holes it was built with (ADR 0024). See docs/catalog.md.
 
 A hole has one of three kinds, read from its source: a vanilla hole is dumped from a ROM,
 a derived hole is a vanilla hole with a delta applied (`golf.randomizer.delta`,
@@ -148,7 +149,7 @@ class DerivedSource:
     """A derived hole: a vanilla hole and the delta that changes it.
 
     `base` is the base's own catalog entry, so a derived entry resolves with nothing but
-    itself, and names one version of the base forever. `delta` is the delta file,
+    itself, and names one version of the base. `delta` is the delta file,
     relative to `root`, the directory the catalog index is in.
     """
 

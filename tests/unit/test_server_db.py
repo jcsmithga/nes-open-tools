@@ -75,6 +75,13 @@ def seed_row(**overrides):
     return row
 
 
+#: a `seed_holes` row with only the columns every seed has had
+SEED_HOLE_INSERT = (
+    "INSERT INTO seed_holes (seed_id, position, hole_id, transforms, par, wind_seed, "
+    "pin_index, wind_direction, wind_speed) VALUES "
+)
+
+
 def insert_seed(db: Database, **overrides) -> None:
     row = seed_row(**overrides)
     columns = ", ".join(row)
@@ -284,7 +291,7 @@ def test_seed_holes_need_their_seed(db):
     db.migrate()
     with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:
         conn.execute(
-            "INSERT INTO seed_holes VALUES ('0000000001', 1, 'nes_us/01', '[]', 4, 1, 0, 0, 0, NULL)"
+            SEED_HOLE_INSERT + "('0000000001', 1, 'nes_us/01', '[]', 4, 1, 0, 0, 0)"
         )
 
 
@@ -293,11 +300,11 @@ def test_seed_hole_positions_run_1_to_18(db):
     insert_seed(db)
     with db.transaction() as conn:
         conn.execute(
-            "INSERT INTO seed_holes VALUES ('0000000001', 18, 'nes_us/18', '[]', 4, 1, 0, 0, 0, NULL)"
+            SEED_HOLE_INSERT + "('0000000001', 18, 'nes_us/18', '[]', 4, 1, 0, 0, 0)"
         )
     with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:
         conn.execute(
-            "INSERT INTO seed_holes VALUES ('0000000001', 19, 'nes_us/01', '[]', 4, 1, 0, 0, 0, NULL)"
+            SEED_HOLE_INSERT + "('0000000001', 19, 'nes_us/01', '[]', 4, 1, 0, 0, 0)"
         )
 
 

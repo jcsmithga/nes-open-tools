@@ -16,16 +16,17 @@ from server.seeds import insert_seed, withdraw_seed
 from server.users import sign_in
 from server.yardage_book import COURSE
 from tests.app_state import app_state
-from tests.synthetic_holes import synthetic_hole
+from tests.synthetic_holes import built_holes, synthetic_hole
 from tests.unit.server_app.helpers import IPS, UNWRITTEN, FakeBuilder
 
 #: what the seed's build made; any 18 holes do, since nothing here transforms
 HOLES = [synthetic_hole(number) for number in range(1, 19)]
 
 
-def book_client(tmp_path, catalog, curation, holes_dir=None) -> TestClient:
-    """A client whose renders go under `tmp_path`, and whose hole store is empty unless given."""
-    store = HoleStore(holes_dir if holes_dir is not None else tmp_path / "no-holes")
+def book_client(tmp_path, catalog, curation) -> TestClient:
+    """A client whose renders go under `tmp_path`, with an empty hole store: a book reads
+    only the seed's stored holes."""
+    store = HoleStore(tmp_path / "no-holes")
     builder = FakeBuilder(catalog, curation, store, tmp_path / "unused.nes")
     config = Config(database=":memory:", rangefinder_dir=tmp_path / "rangefinder")
     return TestClient(create_app(config, strings=UNWRITTEN, builder=builder))
@@ -42,13 +43,15 @@ def plain_manifest(client: TestClient) -> Manifest:
 
 
 def transformed_seed(client: TestClient) -> tuple[str, Manifest]:
-    """A seed whose every hole has a transform, so its book needs no hole store."""
+    """A seed whose every hole has a transform, built as `HOLES`."""
     manifest = plain_manifest(client)
     slots = tuple(
         replace(slot, transforms=("mirror@1",)) for slot in manifest.course.holes
     )
     manifest = replace(manifest, course=replace(manifest.course, holes=slots))
-    return insert_seed(app_state(client).db, manifest, IPS, holes=HOLES), manifest
+    state = app_state(client)
+    seed_id = insert_seed(state.db, manifest, IPS, HOLES, state.builder.catalog)
+    return seed_id, manifest
 
 
 def book_holes(client: TestClient, seed_id: str) -> list[dict]:
@@ -113,26 +116,16 @@ def test_the_books_images_are_rendered_and_served_for_good(client, tmp_path):
     assert {path: path.stat().st_mtime_ns for path in rendered} == stamps
 
 
-def test_a_hole_without_transforms_comes_from_the_hole_store(
-    tmp_path, catalog, curation, vanilla_courses
-):
-    with book_client(tmp_path, catalog, curation, vanilla_courses) as client:
-        manifest = plain_manifest(client)
-        seed_id = insert_seed(app_state(client).db, manifest, IPS)
-        holes = book_holes(client, seed_id)
-        for hole, slot in zip(holes, manifest.course.holes, strict=True):
-            entry = catalog[slot.id]
-            assert f"/variants/{entry.content_hash}/" in hole["image"]
-            assert hole["distance"] == entry.distance
-        assert client.get(holes[0]["image"]).status_code == 200
-
-
-def test_a_book_whose_holes_the_store_lacks_is_unavailable(client, caplog):
-    seed_id = insert_seed(app_state(client).db, plain_manifest(client), IPS)
-    response = client.get(f"/h/{seed_id}/book.json")
-    assert response.status_code == 503
-    assert response.json() == {"error": "unavailable", "values": {}}
-    assert "cannot show the yardage book" in caplog.text
+def test_a_hole_without_transforms_is_the_one_stored_with_the_seed(client):
+    state = app_state(client)
+    manifest = plain_manifest(client)
+    built = built_holes(manifest, state.builder.catalog)
+    seed_id = insert_seed(state.db, manifest, IPS, built, state.builder.catalog)
+    holes = book_holes(client, seed_id)
+    for hole, made in zip(holes, built, strict=True):
+        assert f"/variants/{content_hash(made)}/" in hole["image"]
+        assert hole["distance"] == made.metadata["distance"]
+    assert client.get(holes[0]["image"]).status_code == 200
 
 
 def test_the_book_page_is_the_viewer_for_one_course_at_one_pin(client):
