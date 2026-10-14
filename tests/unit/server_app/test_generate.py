@@ -69,7 +69,7 @@ def test_the_generate_form_offers_every_setting_with_its_default(client):
             ("75", ""),
             ("100", ""),
         ]
-    assert 'href="/mystery"' in page
+    assert 'href="/mystery"' not in page
     for rom in VANILLA_ROMS:
         assert re.search(rf'name="sources"\s+value="{rom.id}"\s+checked', page)
     assert 'name="allow_family_repeats"' in page
@@ -271,13 +271,38 @@ def test_a_pool_that_cannot_fill_is_logged_with_its_settings(
 # -- The mystery page -------------------------------------------------------------------------
 
 
+@pytest.fixture
+def mystery_client(fake_builder):
+    with app_client(mystery_seeds=True, builder=fake_builder) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def mystery_unwritten_client(fake_builder):
+    with app_client(
+        mystery_seeds=True, strings=UNWRITTEN, builder=fake_builder
+    ) as test_client:
+        yield test_client
+
+
+def test_the_mystery_page_is_off_unless_configured(client):
+    assert 'href="/mystery"' not in client.get("/generate").text
+    assert client.get("/mystery").status_code == 404
+    assert post_request(client, b"{}").status_code == 404
+    assert seed_count(client) == 0
+
+
+def test_the_generate_page_links_to_the_mystery_page_when_it_is_on(mystery_client):
+    assert 'href="/mystery"' in mystery_client.get("/generate").text
+
+
 def post_request(client: TestClient, content: bytes | None, **kwargs):
     files = None if content is None else {"request": ("mine.json", content)}
     return client.post("/mystery", files=files, follow_redirects=False, **kwargs)
 
 
-def test_the_mystery_page_takes_a_request_file(unwritten_client):
-    page = unwritten_client.get("/mystery").text
+def test_the_mystery_page_takes_a_request_file(mystery_unwritten_client):
+    page = mystery_unwritten_client.get("/mystery").text
     assert 'enctype="multipart/form-data"' in page
     assert re.search(
         r'<input type="file"\s+id="mystery-request"\s+name="request"', page
@@ -285,7 +310,9 @@ def test_the_mystery_page_takes_a_request_file(unwritten_client):
     assert "mystery.file_help max_kb=16" in page
 
 
-def test_a_mystery_request_is_resolved_and_recorded_as_given(client, fake_builder):
+def test_a_mystery_request_is_resolved_and_recorded_as_given(
+    mystery_client, fake_builder
+):
     request = {
         "sets": [
             {"weight": 1, "settings": {"constraints": [{"rule": "par_3"}]}},
@@ -302,10 +329,10 @@ def test_a_mystery_request_is_resolved_and_recorded_as_given(client, fake_builde
             },
         ]
     }
-    response = post_request(client, json.dumps(request).encode())
+    response = post_request(mystery_client, json.dumps(request).encode())
     assert response.status_code == 303
     seed_id = response.headers["location"].removeprefix("/h/")
-    stored = client.get(f"/h/{seed_id}.json").json()
+    stored = mystery_client.get(f"/h/{seed_id}.json").json()
     assert stored["request"] == request
     assert stored == fake_builder.built.to_json()
     assert fake_builder.built.settings.prng_seed
@@ -323,17 +350,20 @@ def test_a_mystery_request_is_resolved_and_recorded_as_given(client, fake_builde
         (b'{"mercy_point": 5}', "mystery.error.bad_request problem=request: a request"),
     ],
 )
-def test_a_request_the_site_cannot_roll_is_refused(unwritten_client, content, key):
-    response = post_request(unwritten_client, content)
+def test_a_request_the_site_cannot_roll_is_refused(
+    mystery_unwritten_client, content, key
+):
+    response = post_request(mystery_unwritten_client, content)
     assert response.status_code == 400
     assert 'role="alert"' in response.text and key in response.text
-    assert seed_count(unwritten_client) == 0
+    assert seed_count(mystery_unwritten_client) == 0
 
 
 def test_a_mystery_request_that_rolls_no_course_says_what_was_rolled(
     catalog, curation, tmp_path
 ):
     with app_client(
+        mystery_seeds=True,
         strings=UNWRITTEN,
         builder=PoolTooSmall(catalog, curation, HoleStore(), tmp_path / "x.nes"),
     ) as test_client:
@@ -346,7 +376,10 @@ def test_a_mystery_request_that_rolls_no_course_says_what_was_rolled(
 
 def test_mystery_seeds_share_the_generate_rate_limit(fake_builder):
     with app_client(
-        strings=UNWRITTEN, builder=fake_builder, rate_limiter=RateLimiter(1, 3600)
+        mystery_seeds=True,
+        strings=UNWRITTEN,
+        builder=fake_builder,
+        rate_limiter=RateLimiter(1, 3600),
     ) as test_client:
         assert post_request(test_client, b"{}").status_code == 303
         refused = post_request(test_client, b"{}")

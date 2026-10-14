@@ -196,5 +196,7 @@
     <button type="submit">{{ t("generate.submit") }}</button>
   </form>
 
-  <p><a href="/mystery">{{ t("generate.mystery_link") }}</a></p>
+  {% if mystery_seeds %}
+    <p><a href="/mystery">{{ t("generate.mystery_link") }}</a></p>
+  {% endif %}
 {% endblock %}

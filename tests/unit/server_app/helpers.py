@@ -34,8 +34,9 @@ class FakeBuilder(SeedBuilder):
         return FINISHED
 
 
-def app_client(**kwargs) -> TestClient:
-    return TestClient(create_app(Config(database=":memory:"), **kwargs))
+def app_client(mystery_seeds: bool = False, **kwargs) -> TestClient:
+    config = Config(database=":memory:", mystery_seeds=mystery_seeds)
+    return TestClient(create_app(config, **kwargs))
 
 
 def catalog_with_text(text_for) -> Strings:

@@ -18,6 +18,7 @@ def test_an_empty_environment_gives_the_defaults():
     assert config.base_url == "http://127.0.0.1:8000"
     assert config.discord_client_id is None
     assert config.dev_login is False
+    assert config.mystery_seeds is False
 
 
 def test_every_variable_overrides_its_field():
@@ -33,6 +34,7 @@ def test_every_variable_overrides_its_field():
             "GOLF_SESSION_SECRET": "session",
             "GOLF_ADMIN_USERS": "1234, 5678",
             "GOLF_DEV_LOGIN": "1",
+            "GOLF_MYSTERY_SEEDS": "on",
         }
     )
     assert config == Config(
@@ -46,6 +48,7 @@ def test_every_variable_overrides_its_field():
         session_secret="session",
         admin_users=frozenset({"1234", "5678"}),
         dev_login=True,
+        mystery_seeds=True,
     )
 
 

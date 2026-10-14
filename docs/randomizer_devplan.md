@@ -235,7 +235,7 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `GET /pages/<slug>` | A checked-in Markdown page, or a collection page with one card per entry file; enabled unlisted pages remain available by direct URL, while disabled pages answer 404. Each enabled page is registered as a route of its own, so its timings are too |
 | `GET /rom` | ROM setup, pure client-side: pick files, hash, store in IndexedDB, show verified status |
 | `GET /generate`, `POST /generate` | Settings form: course mode (and the course, for a vanilla course), source ROMs, the expert cap, the mirror and hazard chances, wind, music or random, and club rules in a collapsed section of their own, open when a returned form has them set. The mercy point and tag filters take their defaults. POST makes a request (ADR 0016), resolves it and redirects to the seed page |
-| `GET /mystery`, `POST /mystery` | A request file a player uploads, weighted choices and sets allowed, at most 16 KB, checked and resolved like the form's (ADR 0016). POST redirects to the seed page |
+| `GET /mystery`, `POST /mystery` | A request file a player uploads, weighted choices and sets allowed, at most 16 KB, checked and resolved like the form's (ADR 0016). POST redirects to the seed page. Not found unless `GOLF_MYSTERY_SEEDS` is on |
 | `GET /h/<id>` | Seed page: the magic words, hole list with source, par and yards, totals, music, settings, required ROMs, recorded rounds (collapsed until the viewer has recorded one of their own), and either the download form or a withdrawn notice |
 | `GET /h/<id>.json` | The manifest |
 | `GET /h/<id>/book` | The seed's yardage book: the rangefinder for its 18 holes as built, each at the seed's pin, with its tee-shot wind. Stays up for a withdrawn seed (`docs/yardage_book.md`) |
@@ -264,8 +264,8 @@ the file names in `golf/randomizer/roms.py` (`nes_open_us.nes`, `mario_open_jp.n
 base; the QR URL prefix is assembled into the port and fixed before the first public seed
 ships), the Discord client id and secret `GOLF_DISCORD_CLIENT_ID` and
 `GOLF_DISCORD_CLIENT_SECRET`, the session secret `GOLF_SESSION_SECRET`, the admin users
-`GOLF_ADMIN_USERS`, the development login bypass `GOLF_DEV_LOGIN`, and the log level
-`GOLF_LOG_LEVEL`.
+`GOLF_ADMIN_USERS`, the development login bypass `GOLF_DEV_LOGIN`, the log level
+`GOLF_LOG_LEVEL`, and `GOLF_MYSTERY_SEEDS`, which turns on the mystery seed page.
 
 ## Development plan
 

@@ -262,7 +262,7 @@ def create_app(
     )
     app.include_router(admin_router(templates))
     app.include_router(site_router(templates, pages))
-    app.include_router(seed_router(templates))
+    app.include_router(seed_router(templates, mystery_seeds=config.mystery_seeds))
     app.include_router(round_router(templates))
     app.include_router(account_router(templates))
 

@@ -24,7 +24,7 @@ in this package.
   - `server/routes/site.py` (`site_router`): `/`, `/rom`, `/rangefinder`, the Markdown
     pages under `/pages/`, `/favicon.ico` and `/healthz`
   - `server/routes/seed_pages.py` (`seed_router`): `/generate`, `/mystery` (a seed from
-    an uploaded request file, ADR 0016) and `/h/<id>`, with its manifest, its IPS
+    an uploaded request file, ADR 0016; not found unless `Config.mystery_seeds`) and `/h/<id>`, with its manifest, its IPS
     download and its yardage book
   - `server/routes/round_pages.py` (`round_router`): `/s/<scan>` and `/r/<id>`
   - `server/routes/account.py` (`account_router`): `/me` and `/auth/`

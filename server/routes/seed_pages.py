@@ -80,7 +80,9 @@ def starting_settings(request: Request, seed_id: str) -> SavedSettings:
     return saved
 
 
-def seed_router(templates: Jinja2Templates) -> APIRouter:
+def seed_router(templates: Jinja2Templates, mystery_seeds: bool = False) -> APIRouter:
+    """With `mystery_seeds` off, `/mystery` is not found and the generate page has no
+    link to it."""
     router = APIRouter()
 
     def generate_page(
@@ -97,6 +99,7 @@ def seed_router(templates: Jinja2Templates) -> APIRouter:
                 "page": "generate",
                 "options": generate_options(),
                 "form": state,
+                "mystery_seeds": mystery_seeds,
                 "error": error,
                 "error_values": error_values or {},
             },
@@ -145,12 +148,16 @@ def seed_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.get("/mystery", response_class=HTMLResponse)
     def mystery_form(request: Request):
+        if not mystery_seeds:
+            raise not_found()
         return mystery_page(request)
 
     @router.post("/mystery", response_class=HTMLResponse)
     async def mystery_seed(request: Request):
         """A seed from a request file a player uploads (ADR 0016). The file is
         untrusted: its size is limited and it is parsed strictly."""
+        if not mystery_seeds:
+            raise not_found()
         upload = (await request.form()).get("request")
         if upload is None or isinstance(upload, str):
             outcome(request, NO_FILE)

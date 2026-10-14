@@ -221,6 +221,7 @@ variables:
 | `GOLF_ADMIN_USERS` | unset | Discord ids, separated by commas or spaces, of the users the `/admin` pages admit; `dev:<name>` ids only with `GOLF_DEV_LOGIN` |
 | `GOLF_DEV_LOGIN` | off | Development-only sign-in bypass (`1`, `true`, `yes` or `on`) |
 | `GOLF_LOG_LEVEL` | `INFO` | The level the site logs at, as a `logging` level name; the log is JSON lines on stderr |
+| `GOLF_MYSTERY_SEEDS` | off | The mystery seed page, `/mystery`, and the generate page's link to it (`1`, `true`, `yes` or `on`); off, `/mystery` is not found |
 
 For development, keep these in a `.env` file in the repository root (gitignored) and run
 `uv run --env-file .env golf-site --reload`, or set `UV_ENV_FILE=.env` in your shell so
