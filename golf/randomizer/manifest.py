@@ -39,7 +39,7 @@ from .catalog import (
 )
 from .layout import COUNTS
 from .music import RANDOM, TRACKS, track
-from .rules import Rule, RuleError, parse_rules
+from .rules import Rule, RuleError, check_public, parse_rules
 from .transforms import TransformError, parse_transform
 from .wind import DIRECTION_PROFILES, SPEED_PROFILES, VANILLA
 from .words import MagicWordsError, check_magic_words
@@ -326,6 +326,7 @@ class Settings:
         if self.constraints is not None:
             try:
                 rules = parse_rules(self.constraints)
+                check_public(rules)
             except RuleError as problem:
                 raise ManifestError(f"constraints: {problem}") from None
             object.__setattr__(self, "constraints", rules)

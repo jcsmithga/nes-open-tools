@@ -37,7 +37,12 @@ from golf.randomizer.catalog import (
 )
 from golf.randomizer.compose import Problem
 from golf.randomizer.curation import DEFAULT_CURATION, CurationSnapshot
-from golf.randomizer.generate import GenerationError, course_rules, generate
+from golf.randomizer.generate import (
+    MIX_STEPS,
+    GenerationError,
+    course_rules,
+    generate,
+)
 from golf.randomizer.layout import COUNTS
 from golf.randomizer.manifest import (
     DEFAULT_EXPERTS_PER_NINE,
@@ -56,9 +61,9 @@ from golf.randomizer.manifest import (
 )
 from golf.randomizer.music import RANDOM, TRACKS
 from golf.randomizer.pool import build_pool
-from golf.randomizer.request import load_request, presets
+from golf.randomizer.request import load_request
 from golf.randomizer.rules import RULES
-from golf.randomizer.survey import legacy, report, survey, uniform
+from golf.randomizer.survey import report, survey, uniform
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES, compass
 
 EXAMPLES = """
@@ -68,9 +73,8 @@ examples:
   golf-randomize generate --experts-per-nine 0
   golf-randomize generate --no-expert-cap
   golf-randomize generate --wind-speed storm_rolling_in --wind-direction out_and_back
-  golf-randomize generate --request data/presets/par_3_course.json
-  golf-randomize generate --preset vanilla_jp_uk --seed week-6
-  golf-randomize survey --preset executive -n 1000
+  golf-randomize generate --request my_request.json --seed week-6
+  golf-randomize survey --request my_request.json -n 1000
   golf-randomize rules
   golf-randomize build nes_open_us.nes demo.json -o demo.nes
   golf-randomize build nes_open_us.nes demo.json --unfinished --ips demo.unfinished.ips
@@ -117,13 +121,6 @@ def describe_draw_rule(rule: StoredDrawRule) -> str:
 def settings_from_args(args: argparse.Namespace) -> Settings:
     """The settings the flags ask for, or a request's: a request stands in for every
     settings flag but `--seed`."""
-    if args.preset is not None:
-        known = presets()
-        if args.preset not in known:
-            raise ManifestError(
-                f"no preset {args.preset!r}; the presets are {', '.join(known)}"
-            )
-        return load_request(known[args.preset], args.seed)
     if args.request is not None:
         return load_request(args.request, args.seed)
     defaults = Settings()
@@ -257,9 +254,7 @@ def cmd_survey(args: argparse.Namespace) -> int:
     catalog = Catalog.load(args.catalog)
     curation = CurationSnapshot.load(args.curation)
     pool = build_pool(catalog, curation, settings)
-    if args.legacy:
-        result = legacy(pool, settings, args.draws, args.seed or "survey")
-    elif args.uniform:
+    if args.uniform:
         problem = Problem(pool, course_rules(settings))
         result, dealt = uniform(problem, args.draws, args.seed or "survey")
         print(f"one random course in {dealt / args.draws:.0f} kept the rules")
@@ -273,8 +268,8 @@ def cmd_survey(args: argparse.Namespace) -> int:
 
 def cmd_rules(args: argparse.Namespace) -> int:
     for name, kind in sorted(RULES.items()):
-        written = "" if kind.expand is None else "  (written in other rules)"
-        print(f"{name:<18} {kind.summary}{written}")
+        if kind.public:
+            print(f"{name:<16} {kind.summary}")
     return 0
 
 
@@ -350,18 +345,12 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 def add_settings_arguments(gen: argparse.ArgumentParser) -> None:
     """The flags `settings_from_args` reads, shared by `generate` and `survey`."""
-    asked = gen.add_mutually_exclusive_group()
-    asked.add_argument(
+    gen.add_argument(
         "--request",
         type=Path,
         metavar="FILE",
         help="a settings file (a partial settings object) to take every setting from; "
         "the other settings flags are then ignored",
-    )
-    asked.add_argument(
-        "--preset",
-        metavar="NAME",
-        help="a checked-in request from data/presets/, by name",
     )
     gen.add_argument(
         "--seed", help="the PRNG seed every random choice comes from (default: drawn)"
@@ -470,13 +459,7 @@ def build_parser() -> argparse.ArgumentParser:
     measured.add_argument(
         "-n", "--draws", type=int, default=500, help="courses to roll (default: 500)"
     )
-    how = measured.add_mutually_exclusive_group()
-    how.add_argument(
-        "--legacy",
-        action="store_true",
-        help="roll the layout-first draw of generator version 2 instead",
-    )
-    how.add_argument(
+    measured.add_argument(
         "--uniform",
         action="store_true",
         help="deal random courses and keep the ones that pass, so each is equally "
@@ -485,14 +468,17 @@ def build_parser() -> argparse.ArgumentParser:
     measured.add_argument(
         "--mix",
         type=int,
-        default=0,
+        default=MIX_STEPS,
         metavar="STEPS",
         help="put each course through this many random changes that keep the rules, "
-        "which takes out the composed draw's lean toward limits (default: 0)",
+        "which takes out the search's lean toward limits; 0 shows the search alone "
+        f"(default: {MIX_STEPS}, as generation does)",
     )
     measured.set_defaults(func=cmd_survey)
 
-    rules = commands.add_parser("rules", help="list the course rules")
+    rules = commands.add_parser(
+        "rules", help="list the course rules a request's constraints may hold"
+    )
     rules.set_defaults(func=cmd_rules)
 
     build = commands.add_parser("build", help="manifest in, ROM or IPS out")

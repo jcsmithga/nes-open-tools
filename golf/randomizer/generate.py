@@ -9,7 +9,9 @@ others where they were.
 
 The holes are composed (`golf/randomizer/compose.py`): `course_rules` turns the settings
 into a list of rules, and the course is eighteen holes of the pool that keep them all.
-Nothing is added to the rules the settings hold but the family rule.
+Nothing is added to the rules the settings hold but the family rule. The course the
+search finds is then mixed for `MIX_STEPS` steps, which takes out the search's lean
+toward the limits of the rules (ADR 0025).
 
 Within one release, the same catalog, curation, settings and seed give the same
 manifest. That is a property the tests hold generation to, not a promise across releases:
@@ -36,7 +38,10 @@ from .rules import Rule
 from .wind import draw_directions, draw_speeds
 from .words import draw_magic_words
 
-GENERATOR_VERSION = 3
+GENERATOR_VERSION = 4
+#: the steps of `Problem.mix` every course is put through: enough to bring a standard
+#: course, with or without the expert cap, to the figures of a uniform draw
+MIX_STEPS = 800
 PRNG_SEED_BYTES = 8
 
 
@@ -44,7 +49,13 @@ PRNG_SEED_BYTES = 8
 SRAM_MAGIC_BYTES = range(0x01, 0xFF)
 
 
-__all__ = ["GENERATOR_VERSION", "GenerationError", "course_rules", "generate"]
+__all__ = [
+    "GENERATOR_VERSION",
+    "MIX_STEPS",
+    "GenerationError",
+    "course_rules",
+    "generate",
+]
 
 
 def new_prng_seed() -> str:
@@ -76,7 +87,9 @@ def generate(
         settings.prng_seed if settings.prng_seed is not None else new_prng_seed()
     )
     pool = build_pool(catalog, curation, settings)
-    entries = Problem(pool, course_rules(settings)).draw(stream(prng_seed, "holes"))
+    entries = Problem(pool, course_rules(settings)).draw(
+        stream(prng_seed, "holes"), mix=MIX_STEPS
+    )
 
     if settings.music == RANDOM:
         mario_open = any(source_rom(entry) == JP_ROM for entry in entries)

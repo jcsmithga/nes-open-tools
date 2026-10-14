@@ -1,6 +1,4 @@
-"""Unit tests for requests, the settings files a seed is rolled from, and the presets."""
-
-import json
+"""Unit tests for requests, the settings files a seed is rolled from."""
 
 import pytest
 
@@ -9,7 +7,6 @@ from golf.randomizer.manifest import ManifestError, Settings
 from golf.randomizer.request import (
     RequestError,
     load_request,
-    presets,
     settings_from_request,
 )
 from golf.randomizer.rules import Rule
@@ -25,18 +22,14 @@ def test_a_request_sets_only_what_it_names():
         {
             "sources": [US_ROM],
             "clubs": {"max": 10},
-            "constraints": [{"rule": "total_par", "max": 70}],
+            "constraints": [{"rule": "par_3"}],
         }
     )
     assert settings.sources == {US_ROM}
     assert settings.experts_per_nine is None
     assert settings.clubs.max == 10 and settings.clubs.banned == frozenset()
-    assert settings.constraints == (Rule.parse({"rule": "total_par", "max": 70}),)
+    assert settings.constraints == (Rule.parse({"rule": "par_3"}),)
     assert settings.mercy_point == Settings().mercy_point
-
-
-def test_about_is_for_people_and_is_dropped():
-    assert settings_from_request({"about": "a default seed"}) == Settings()
 
 
 @pytest.mark.parametrize(
@@ -44,10 +37,15 @@ def test_about_is_for_people_and_is_dropped():
     [
         ([], "an object of settings"),
         ({"pars": 72}, "unknown settings"),
+        ({"about": "a default seed"}, "unknown settings"),
         ({"prng_seed": "abc"}, "holds no prng_seed"),
         ({"sets": [{"weight": 1, "settings": {}}]}, "weighted request"),
         ({"par": {"one_of": [{"weight": 1, "value": 72}]}}, "weighted request"),
         ({"constraints": [{"rule": "shuffle"}]}, "unknown rule"),
+        (
+            {"constraints": [{"rule": "count", "where": {"par": 3}, "max": 1}]},
+            "not a rule settings may hold",
+        ),
         ({"constraints": {"rule": "standard"}}, "constraints must be null or a list"),
         ({"par": 54}, "par must be one of"),
     ],
@@ -62,16 +60,3 @@ def test_a_request_file_that_is_not_json_is_refused(tmp_path):
     path.write_text("{")
     with pytest.raises(RequestError, match="not JSON"):
         load_request(path)
-
-
-def test_every_preset_loads_and_says_what_it_is():
-    found = presets()
-    assert {"par_3_course", "executive", "vanilla_nes_us", "vanilla_jp_uk"} <= set(
-        found
-    )
-    for name, path in found.items():
-        data = json.loads(path.read_text())
-        assert isinstance(data.get("about"), str) and data["about"], name
-        settings = load_request(path, "abc")
-        assert settings.constraints, name
-        assert settings.prng_seed == "abc"

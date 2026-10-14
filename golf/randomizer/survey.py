@@ -4,7 +4,7 @@ Surveys: what a set of rules gives over many seeds.
 The composed draw (`golf/randomizer/compose.py`) has no closed form for how often a hole
 appears. Two holes no rule tells apart are equally likely, and everything past that is
 measured. `survey` rolls a problem many times and counts; `golf-randomize survey` prints
-it. `legacy` runs the layout-first draw the same way, for comparison.
+it.
 
 `uniform` is the yardstick. It deals eighteen families at random, a hole of each, and
 throws the course away unless it keeps every rule, so every course that keeps them is
@@ -14,21 +14,33 @@ finishes it shows which way the composed draw leans, and whether `Problem.mix` h
 taken the lean out.
 """
 
+import json
 import random
 import time
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import cache
+from pathlib import Path
 from statistics import mean, pstdev
 
-from .catalog import CatalogEntry, HoleId
-from .compose import GenerationError, Problem, load_over_par
-from .legacy_draw import draw_legacy
-from .manifest import Settings
+from .catalog import REPO_ROOT, CatalogEntry, HoleId
+from .compose import GenerationError, Problem
 from .pool import Pool
 from .rules import HOLES, NINE
 
+DEFAULT_DIFFICULTY = REPO_ROOT / "data" / "difficulty" / "holes.json"
+
 Draw = Callable[[int], Sequence[CatalogEntry]]
+
+
+@cache
+def load_over_par(path: Path = DEFAULT_DIFFICULTY) -> Mapping[str, float]:
+    """Each lineage's predicted strokes over par, from the difficulty report's table."""
+    if not path.exists():
+        return {}
+    rows = json.loads(path.read_text())["holes"]
+    return {row["lineage"]: row["over_par"] for row in rows}
 
 
 @dataclass
@@ -93,20 +105,6 @@ def survey(problem: Problem, draws: int, seed: str = "survey", mix: int = 0) -> 
     return run(
         lambda number: problem.draw(random.Random(f"{seed}\0{number}"), mix),
         problem.pool,
-        draws,
-    )
-
-
-def legacy(pool: Pool, settings: Settings, draws: int, seed: str = "survey") -> Survey:
-    """`draws` courses from the layout-first draw, for the same settings."""
-    return run(
-        lambda number: draw_legacy(
-            pool,
-            settings,
-            random.Random(f"layout\0{seed}\0{number}"),
-            random.Random(f"holes\0{seed}\0{number}"),
-        ),
-        pool,
         draws,
     )
 

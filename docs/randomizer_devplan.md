@@ -279,16 +279,16 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    `randomizer.md`. Par 72 is four par 3s, ten par 4s and four par 5s; par 71 and 70 drop
    par 5s. Each par value splits evenly across the nines, an odd count putting its extra
    hole in either nine, and no par 3s or par 5s are consecutive, including holes 9 and 10.
-   That leaves 188,802 layouts at par 72, 165,564 at 71 and 35,574 at 70. Generation
-   draws from them through generator version 2 (`golf/randomizer/legacy_draw.py`); from
-   version 3 the module supplies the standard course's counts.
+   That leaves 188,802 layouts at par 72, 165,564 at 71 and 35,574 at 70. Generator
+   version 2 drew from them; from version 3 the module supplies the standard course's
+   counts.
 3. **Manifest and generation.** Done: `golf/randomizer/manifest.py`, `pool.py`,
    `generate.py`, `music.py` and `words.py`. The manifest's version fields, settings and
    concrete course with club rules and magic words, and its strict JSON; the pool from
    sources, curation tags, the newest drawable version of each lineage and families;
    `generate(catalog, curation, settings) -> Manifest`, which composes eighteen holes
    that keep the settings' rules (`rules.py`, `compose.py` and `solver.py`;
-   `docs/generation_rewrite.md`), chooses the music, derives the wind seeds and draws the
+   `docs/generation_rewrite.md`) and mixes the course found (ADR 0025), chooses the music, derives the wind seeds and draws the
    magic words, each from its own stream of the PRNG seed. Schema 2 adds `build_version` and
    `finish_abi_version`; schema 1 is read as historical build version 1 and finish ABI 1
    without being rewritten. Schema 3 adds the `draw_rule` setting, which picks the hole

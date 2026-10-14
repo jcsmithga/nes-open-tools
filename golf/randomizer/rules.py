@@ -4,33 +4,30 @@ Course rules: what a seed's settings may say about the eighteen holes it is give
 A rule is a JSON object with a `rule` name and that rule's arguments. A course satisfies a
 list of rules when it satisfies every one: rules only ever add, so a list is stricter than
 any part of it. This module is the vocabulary and nothing else. It checks a rule's shape
-and expands the convenient rules into the few general ones; `golf/randomizer/compose.py`
-turns those into a problem for `golf/randomizer/solver.py`, against a pool.
+and expands each rule into the few general ones; `golf/randomizer/compose.py` turns those
+into a problem for `golf/randomizer/solver.py`, against a pool.
 
-**General rules**, which the others are written in:
+**Public rules** are the ones a seed's settings, and so a request, may hold: the course
+modes and the expert cap (ADR 0025). The rest are building blocks the public rules
+expand into, and generation's own family rule.
+
+**General rules**, which every other rule is written in:
 
 | Rule | Holds when |
 |---|---|
 | `count` | the number of holes in a scope that match `where` is within `min`/`max` |
-| `sum` | the total of a number (`par`, `distance`, `over_par`, `original_hole`) over a scope is within `min`/`max`; with `where`, over the holes of the scope that match |
-| `compare` | one scope's count or sum (`left`), less another's (`right`), is within `min`/`max`. A side is a scope, measured by the rule's `of`, or `{"scope": .., "of": ..}` with a measure of its own |
-| `limit` | no more than `max` holes of a scope share a `per` (a family, a course, ...), and with `min`, each value in the pool has at least that many |
-| `step` | a number changes by `min` to `max` from each hole of a scope to the next |
-| `gap` | a number differs by at least `min` between neighbors in a scope |
-| `weight` | (not a rule a course can break) holes that match are `factor` times as likely to be picked |
+| `compare` | one scope's count (`left`), less another's (`right`), is within `min`/`max` |
+| `limit` | no more than `max` holes of the course share a family |
 
 **A selector** (`where`) describes holes, and a hole matches when every field does:
-`par`, `tag`, `rom`, `course`, `kind`, `family`, `id`, `author` (a value or a list of
-them), `distance` and `over_par` (`{"min": .., "max": ..}`), `original_hole` (a number, a
-list, or `"slot"` for the number of the slot the hole is being put in), `not` (a
-selector that must not match) and `any` (a list of selectors, one of which must).
+`par`, `tag`, `course` and `kind` (a value or a list of them), and `original_hole` (a
+number, a list, or `"slot"` for the number of the slot the hole is being put in).
 
 **A scope** says which holes of the course a rule looks at. Some scopes are several, and
-the rule then holds on each: `"course"`, `"front"`, `"back"`, `"each_nine"`,
-`"each_hole"`, a list of hole numbers, `{"from": 1, "to": 6}`, and `{"window": 3}` for
-every run of three holes in a row.
+the rule then holds on each: `"course"`, `"front"`, `"back"`, `"each_nine"`, a list of
+hole numbers, and `{"window": 3}` for every run of three holes in a row.
 
-See docs/generation_rewrite.md.
+See docs/manifest.md.
 """
 
 import json
@@ -43,12 +40,9 @@ from .layout import COUNTS
 HOLES = 18
 NINE = 9
 
-#: the numbers a hole carries that `sum`, `step` and `gap` can read
-NUMBERS = ("par", "distance", "over_par", "original_hole")
 #: what `limit` can group holes by
-KEYS = ("family", "course", "rom", "author", "par", "kind", "id", "original_hole")
-_VALUE_FIELDS = ("par", "tag", "rom", "course", "kind", "family", "id", "author")
-_RANGE_FIELDS = ("distance", "over_par")
+KEYS = ("family",)
+_VALUE_FIELDS = ("par", "tag", "course", "kind")
 SLOT = "slot"
 
 
@@ -58,10 +52,6 @@ class RuleError(ValueError):
 
 def _is_int(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _is_number(value: object) -> TypeGuard[int | float]:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _fields(
@@ -92,8 +82,6 @@ def scopes(spec: object, what: str = "scope") -> list[tuple[int, ...]]:
         return [tuple(range(NINE, HOLES))]
     if spec == "each_nine":
         return [tuple(range(NINE)), tuple(range(NINE, HOLES))]
-    if spec == "each_hole":
-        return [(slot,) for slot in range(HOLES)]
     if isinstance(spec, list) and spec:
         slots = tuple(_hole_number(number, what) for number in spec)
         if len(set(slots)) != len(slots):
@@ -106,15 +94,9 @@ def scopes(spec: object, what: str = "scope") -> list[tuple[int, ...]]:
         return [
             tuple(range(start, start + width)) for start in range(HOLES - width + 1)
         ]
-    if isinstance(spec, dict) and set(spec) == {"from", "to"}:
-        first = _hole_number(spec["from"], what)
-        last = _hole_number(spec["to"], what)
-        if first > last:
-            raise RuleError(f"{what}: from {spec['from']} is after to {spec['to']}")
-        return [tuple(range(first, last + 1))]
     raise RuleError(
-        f"{what}: expected course, front, back, each_nine, each_hole, a list of hole "
-        f'numbers, {{"from": a, "to": b}} or {{"window": n}}, got {spec!r}'
+        f"{what}: expected course, front, back, each_nine, a list of hole numbers or "
+        f'{{"window": n}}, got {spec!r}'
     )
 
 
@@ -128,14 +110,12 @@ def one_scope(spec: object, what: str) -> tuple[int, ...]:
 # -- Selectors --------------------------------------------------------------------------------
 
 
-def _check_range(data: object, what: str, need: bool = False) -> None:
-    if not isinstance(data, dict) or set(data) - {"min", "max"}:
+def _check_range(data: object, what: str) -> None:
+    if not isinstance(data, dict) or set(data) - {"min", "max"} or not data:
         raise RuleError(f"{what}: expected min and/or max, got {data!r}")
-    if need and not data:
-        raise RuleError(f"{what}: needs a min or a max")
     for key, value in data.items():
-        if not _is_number(value):
-            raise RuleError(f"{what}: {key} must be a number, got {value!r}")
+        if not _is_int(value):
+            raise RuleError(f"{what}: {key} must be a whole number, got {value!r}")
     if "min" in data and "max" in data and data["min"] > data["max"]:
         raise RuleError(f"{what}: min {data['min']} is over max {data['max']}")
 
@@ -149,43 +129,30 @@ def check_where(where: object, what: str = "where") -> None:
             kind = _is_int if key == "par" else lambda item: isinstance(item, str)
             if not values or not all(kind(item) for item in values):
                 raise RuleError(f"{what}: bad {key} {value!r}")
-        elif key in _RANGE_FIELDS:
-            _check_range(value, f"{what} {key}", need=True)
         elif key == "original_hole":
             if value == SLOT:
                 continue
             values = value if isinstance(value, list) else [value]
             for item in values:
                 _hole_number(item, f"{what} original_hole")
-        elif key == "not":
-            check_where(value, f"{what} not")
-        elif key == "any":
-            if not isinstance(value, list) or not value:
-                raise RuleError(f"{what} any: expected a list of selectors")
-            for item in value:
-                check_where(item, f"{what} any")
         else:
             raise RuleError(f"{what}: unknown selector field {key!r}")
 
 
 def slot_bound(where: Mapping) -> bool:
     """Whether a selector's answer depends on the slot the hole is going in."""
-    return (
-        where.get("original_hole") == SLOT
-        or ("not" in where and slot_bound(where["not"]))
-        or any(slot_bound(item) for item in where.get("any", ()))
-    )
+    return where.get("original_hole") == SLOT
 
 
-def _check_bounds(data: Mapping, name: str, integral: bool = True) -> None:
+def _check_bounds(data: Mapping, name: str) -> None:
     """`min`, `max` and `exactly`: at least one, and `exactly` alone."""
     given = [key for key in ("min", "max", "exactly") if key in data]
     if not given or ("exactly" in data and len(given) > 1):
         raise RuleError(f"{name}: needs min and/or max, or exactly alone")
     for key in given:
         value = data[key]
-        if not (_is_int(value) if integral else _is_number(value)):
-            raise RuleError(f"{name}: {key} must be a number, got {value!r}")
+        if not _is_int(value):
+            raise RuleError(f"{name}: {key} must be a whole number, got {value!r}")
     if "min" in data and "max" in data and data["min"] > data["max"]:
         raise RuleError(f"{name}: min {data['min']} is over max {data['max']}")
 
@@ -195,25 +162,6 @@ def bounds(data: Mapping) -> tuple[float, float]:
     if "exactly" in data:
         return data["exactly"], data["exactly"]
     return data.get("min", float("-inf")), data.get("max", float("inf"))
-
-
-def _check_number(name: object, what: str) -> None:
-    if name not in NUMBERS:
-        raise RuleError(f"{what}: expected one of {list(NUMBERS)}, got {name!r}")
-
-
-def _check_measure(measure: object, what: str) -> None:
-    if not isinstance(measure, dict) or len(measure) != 1:
-        raise RuleError(
-            f'{what}: expected {{"count": selector}} or {{"sum": number}}, got {measure!r}'
-        )
-    ((kind, value),) = measure.items()
-    if kind == "count":
-        check_where(value, f"{what} count")
-    elif kind == "sum":
-        _check_number(value, f"{what} sum")
-    else:
-        raise RuleError(f"{what}: unknown measure {kind!r}")
 
 
 # -- The rules --------------------------------------------------------------------------------
@@ -226,12 +174,14 @@ class RuleType:
     check: Callable[[Mapping], None]
     #: for a rule written in other rules, what it stands for
     expand: Callable[[Mapping], list[dict]] | None = None
+    #: whether a seed's settings may hold it (ADR 0025)
+    public: bool = False
 
 
 RULES: dict[str, RuleType] = {}
 
 
-def _register(name: str, summary: str, *, expand: bool = False):
+def _register(name: str, summary: str, *, expand: bool = False, public: bool = False):
     def decorate(function):
         if expand:
 
@@ -239,9 +189,9 @@ def _register(name: str, summary: str, *, expand: bool = False):
                 for inner in function(data):
                     check_rule(inner)
 
-            RULES[name] = RuleType(name, summary, check, function)
+            RULES[name] = RuleType(name, summary, check, function, public)
         else:
-            RULES[name] = RuleType(name, summary, function)
+            RULES[name] = RuleType(name, summary, function, public=public)
         return function
 
     return decorate
@@ -255,82 +205,27 @@ def _count(data: Mapping) -> None:
     _check_bounds(data, "count")
 
 
-@_register("sum", "the total of a number over a scope")
-def _sum(data: Mapping) -> None:
-    _fields(data, "sum", ("of",), ("where", "scope", "min", "max", "exactly"))
-    _check_number(data["of"], "sum of")
-    if "where" in data:
-        check_where(data["where"], "sum where")
-        if slot_bound(data["where"]):
-            raise RuleError("sum where: a sum's selector cannot depend on the slot")
-    scopes(data.get("scope", "course"), "sum scope")
-    _check_bounds(data, "sum", integral=False)
-
-
-def compare_side(data: Mapping, side: str) -> tuple[tuple[int, ...], Mapping]:
-    """One side of a `compare`: its slots and its measure."""
-    spec = data[side]
-    if isinstance(spec, dict) and "scope" in spec:
-        _fields(spec, f"compare {side}", ("scope",), ("of",))
-        scope, measure = spec["scope"], spec.get("of", data.get("of"))
-    else:
-        scope, measure = spec, data.get("of")
-    if measure is None:
-        raise RuleError(f"compare {side}: no measure; give the rule or the side an of")
-    _check_measure(measure, f"compare {side} of")
-    return one_scope(scope, f"compare {side}"), measure
-
-
-@_register("compare", "one scope's count or sum less another's")
+@_register("compare", "one scope's count less another's")
 def _compare(data: Mapping) -> None:
-    _fields(data, "compare", ("left", "right"), ("of", "min", "max", "exactly"))
-    compare_side(data, "left")
-    compare_side(data, "right")
-    _check_bounds(data, "compare", integral=False)
+    """`of` is `{"count": selector}`, measured over the `left` and `right` scopes."""
+    _fields(data, "compare", ("of", "left", "right"), ("min", "max", "exactly"))
+    measure = data["of"]
+    if not isinstance(measure, dict) or set(measure) != {"count"}:
+        raise RuleError(f'compare of: expected {{"count": selector}}, got {measure!r}')
+    check_where(measure["count"], "compare of count")
+    one_scope(data["left"], "compare left")
+    one_scope(data["right"], "compare right")
+    _check_bounds(data, "compare")
 
 
-@_register("limit", "how many holes of a scope may share a family, a course, ...")
+@_register("limit", "how many holes of the course may share a family")
 def _limit(data: Mapping) -> None:
-    _fields(data, "limit", ("per",), ("scope", "max", "min"))
+    _fields(data, "limit", ("per",), ("max",))
     if data["per"] not in KEYS:
         raise RuleError(f"limit per: expected one of {list(KEYS)}, got {data['per']!r}")
-    scopes(data.get("scope", "course"), "limit scope")
-    for key in ("max", "min"):
-        if key in data and (not _is_int(data[key]) or data[key] < 0):
-            raise RuleError(f"limit {key}: expected a count, got {data[key]!r}")
-    if data.get("max", 1) < 1:
-        raise RuleError("limit max: must be at least 1; use exclude to leave holes out")
-    if "min" in data and data["min"] > data.get("max", 1) and "max" in data:
-        raise RuleError(f"limit: min {data['min']} is over max {data['max']}")
-
-
-@_register("step", "how a number changes from each hole of a scope to the next")
-def _step(data: Mapping) -> None:
-    _fields(data, "step", ("of",), ("scope", "min", "max"))
-    _check_number(data["of"], "step of")
-    scopes(data.get("scope", "course"), "step scope")
-    _check_range(
-        {key: data[key] for key in ("min", "max") if key in data}, "step", True
-    )
-
-
-@_register("gap", "how far apart neighbors' numbers must be")
-def _gap(data: Mapping) -> None:
-    _fields(data, "gap", ("of", "min"), ("scope",))
-    _check_number(data["of"], "gap of")
-    scopes(data.get("scope", "course"), "gap scope")
-    if not _is_number(data["min"]) or data["min"] <= 0:
-        raise RuleError(f"gap min: expected a positive number, got {data['min']!r}")
-
-
-@_register("weight", "make matching holes more or less likely to be picked")
-def _weight(data: Mapping) -> None:
-    _fields(data, "weight", ("where", "factor"))
-    check_where(data["where"], "weight where")
-    if not _is_number(data["factor"]) or data["factor"] <= 0:
+    if "max" in data and (not _is_int(data["max"]) or data["max"] < 1):
         raise RuleError(
-            f"weight factor: expected a positive number, got {data['factor']!r}; "
-            "use exclude to leave holes out"
+            f"limit max: expected a count of 1 or more, got {data['max']!r}"
         )
 
 
@@ -359,7 +254,7 @@ def _par_counts(data: Mapping) -> list[dict]:
         if "scope" in data:
             rule["scope"] = data["scope"]
         if isinstance(wanted, dict):
-            _check_range(wanted, f"par_counts par {par}", need=True)
+            _check_range(wanted, f"par_counts par {par}")
             rule.update(wanted)
         else:
             rule["exactly"] = wanted
@@ -412,14 +307,9 @@ def _no_consecutive(data: Mapping) -> list[dict]:
     ]
 
 
-@_register("total_par", "the course's par", expand=True)
-def _total_par(data: Mapping) -> list[dict]:
-    _fields(data, "total_par", (), ("min", "max", "exactly"))
-    _check_bounds(data, "total_par")
-    return [{**data, "rule": "sum", "of": "par"}]
-
-
-@_register("standard", "a traditional course of the given par", expand=True)
+@_register(
+    "standard", "a traditional course of the given par", expand=True, public=True
+)
 def _standard(data: Mapping) -> list[dict]:
     """Four par 3s, and par 4s and 5s to the course's par, split evenly between the
     nines, with no two par 3s or par 5s in a row."""
@@ -437,7 +327,9 @@ def _standard(data: Mapping) -> list[dict]:
     ]
 
 
-@_register("expert_cap", "at most so many expert holes on each nine", expand=True)
+@_register(
+    "expert_cap", "at most so many expert holes on each nine", expand=True, public=True
+)
 def _expert_cap(data: Mapping) -> list[dict]:
     _fields(data, "expert_cap", ("per_nine",))
     per_nine = data["per_nine"]
@@ -459,6 +351,12 @@ def _distinct_families(data: Mapping) -> list[dict]:
     return [{"rule": "limit", "per": "family"}]
 
 
+@_register("par_3", "eighteen par 3s", expand=True, public=True)
+def _par_3(data: Mapping) -> list[dict]:
+    _fields(data, "par_3", ())
+    return [{"rule": "par_counts", "counts": {"3": 18}}]
+
+
 @_register(
     "slot", "what the hole in one slot, or each of several, must be", expand=True
 )
@@ -471,88 +369,25 @@ def _slot(data: Mapping) -> list[dict]:
     ]
 
 
-@_register("pin", "the hole in one slot", expand=True)
-def _pin(data: Mapping) -> list[dict]:
-    _fields(data, "pin", ("hole", "id"))
-    if not isinstance(data["id"], str):
-        raise RuleError(f"pin id: expected a hole id, got {data['id']!r}")
-    return [{"rule": "slot", "hole": data["hole"], "where": {"id": data["id"]}}]
-
-
 @_register(
-    "vanilla_course", "a vanilla course's holes, each in its own slot", expand=True
+    "vanilla_course",
+    "a vanilla course's holes, each in its own slot",
+    expand=True,
+    public=True,
 )
 def _vanilla_course(data: Mapping) -> list[dict]:
-    """`holes` is a scope, for a vanilla nine or any other part of the course."""
-    _fields(data, "vanilla_course", ("course",), ("holes",))
+    _fields(data, "vanilla_course", ("course",))
     if not isinstance(data["course"], str):
         raise RuleError(f"vanilla_course course: got {data['course']!r}")
-    slots = one_scope(data.get("holes", "course"), "vanilla_course holes")
     return [
         {
             "rule": "slot",
-            "hole": [slot + 1 for slot in slots],
+            "hole": list(range(1, HOLES + 1)),
             "where": {
                 "course": data["course"],
                 "kind": "vanilla",
                 "original_hole": SLOT,
             },
-        }
-    ]
-
-
-def _extreme(data: Mapping, name: str, sign: int) -> list[dict]:
-    _fields(data, name, ("of", "hole"), ("among",))
-    _check_number(data["of"], f"{name} of")
-    hole = _hole_number(data["hole"], f"{name} hole")
-    others = one_scope(data.get("among", "course"), f"{name} among")
-    bound = "min" if sign > 0 else "max"
-    return [
-        {"rule": "step", "of": data["of"], "scope": [other + 1, hole + 1], bound: 0}
-        for other in others
-        if other != hole
-    ]
-
-
-@_register(
-    "highest", "one slot's hole has the greatest of a number on the course", expand=True
-)
-def _highest(data: Mapping) -> list[dict]:
-    """`among` is a scope, to be the greatest of only part of the course."""
-    return _extreme(data, "highest", 1)
-
-
-@_register(
-    "lowest", "one slot's hole has the least of a number on the course", expand=True
-)
-def _lowest(data: Mapping) -> list[dict]:
-    return _extreme(data, "lowest", -1)
-
-
-@_register("exclude", "no hole of a scope matches", expand=True)
-def _exclude(data: Mapping) -> list[dict]:
-    _fields(data, "exclude", ("where",), ("scope",))
-    return [
-        {
-            "rule": "count",
-            "where": data["where"],
-            "scope": data.get("scope", "course"),
-            "max": 0,
-        }
-    ]
-
-
-@_register(
-    "require", "at least `min` holes of a scope match (1 by default)", expand=True
-)
-def _require(data: Mapping) -> list[dict]:
-    _fields(data, "require", ("where",), ("scope", "min"))
-    return [
-        {
-            "rule": "count",
-            "where": data["where"],
-            "scope": data.get("scope", "course"),
-            "min": data.get("min", 1),
         }
     ]
 
@@ -608,3 +443,14 @@ def parse_rules(data: object, what: str = "constraints") -> tuple[Rule, ...]:
     if not isinstance(data, (list, tuple)):
         raise RuleError(f"{what} must be a list of rules, got {data!r}")
     return tuple(Rule.parse(item) for item in data)
+
+
+def check_public(rules: Sequence[Rule]) -> None:
+    """Refuse a rule a seed's settings may not hold (ADR 0025)."""
+    public = sorted(name for name, kind in RULES.items() if kind.public)
+    for rule in rules:
+        if not RULES[rule.name].public:
+            raise RuleError(
+                f"{rule.name!r} is not a rule settings may hold; they may hold "
+                f"{', '.join(public)}"
+            )

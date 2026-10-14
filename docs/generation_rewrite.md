@@ -5,12 +5,30 @@
 This is the report of a spike on the `generation-spike` branch. It replaces the hole
 draw's two fixed stages (draw a layout of pars, then fill it) with one question: which
 eighteen holes of the pool keep a list of rules? The spike was built to find out whether
-that model holds up, what it costs and where it breaks. Nothing here is a decision.
+that model holds up, what it costs and where it breaks.
 
-Code: `golf/randomizer/rules.py` (the vocabulary), `golf/randomizer/compose.py` (a pool
-and rules in, a course out), `golf/randomizer/solver.py` (the search),
-`golf/randomizer/request.py` (settings files), `golf/randomizer/survey.py`
-(measurement), and the requests in `data/presets/`. Background:
+## What became of it
+
+ADR 0025 adopted the model and cut the spike down to what the site's course modes need:
+
+- **Kept:** the search (`golf/randomizer/solver.py`), the composer
+  (`golf/randomizer/compose.py`), requests (`golf/randomizer/request.py`) and surveys
+  (`golf/randomizer/survey.py`). Mixing is on: generation puts every course through
+  `MIX_STEPS` steps of `Problem.mix`.
+- **Narrowed:** the vocabulary (`golf/randomizer/rules.py`). Settings may hold only the
+  modes (`standard`, `par_3`, `vanilla_course`, with `natural_par` and `executive` to
+  come) and `expert_cap`. `count`, `compare` and `limit` stay as what those are written
+  in, with `par_counts`, `balanced_nines`, `no_consecutive` and `slot`.
+- **Removed:** `sum`, `step`, `gap`, `weight`, `total_par`, `highest`, `lowest`,
+  `exclude`, `require` and `pin`; the selector fields and numbers only they read; the
+  solver's sums, steps and gaps; the 35 requests in `data/presets/`; and the
+  layout-first draw kept for comparison, with `survey --legacy`.
+
+The rest of this report describes the spike as it stood, and its figures were measured
+on it. Requests and rules it names that are gone are a record of what the model could
+say, not of what the code holds.
+
+Background:
 [manifest.md](manifest.md), [thoughts_on_par_6.md](thoughts_on_par_6.md),
 [derived_holes.md](derived_holes.md), ADR 0016 and ADR 0023.
 
@@ -544,12 +562,10 @@ Left alone on purpose:
 
 ```bash
 golf-randomize rules
-golf-randomize generate --preset par_3_course -o par3.json
-golf-randomize generate --preset vanilla_jp_uk --seed week-6 -o uk.json
+echo '{"include": ["derived"], "constraints": [{"rule": "par_3"}]}' > par3_request.json
+golf-randomize generate --request par3_request.json -o par3.json
 golf-randomize build nes_open_us.nes par3.json -o par3.nes
-golf-randomize survey --preset compensating_nines -n 1000
-golf-randomize survey --preset natural_par --uniform -n 1000
-golf-randomize survey --legacy -n 1000
-golf-randomize survey --preset compensating_nines --mix 800 -n 1000
-golf-randomize generate --request my_settings.json
+golf-randomize survey --experts-per-nine 1 -n 1000 --mix 0
+golf-randomize survey --experts-per-nine 1 -n 1000
+golf-randomize survey --no-expert-cap --uniform -n 1000
 ```

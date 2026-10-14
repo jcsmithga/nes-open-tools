@@ -26,15 +26,13 @@ from golf.randomizer.build import (
 )
 from golf.randomizer.catalog import US_ROM, Catalog, HoleStore
 from golf.randomizer.curation import CurationSnapshot
-from golf.randomizer.generate import generate, stream
-from golf.randomizer.legacy_draw import draw_legacy
+from golf.randomizer.generate import generate
 from golf.randomizer.manifest import (
     ClubRules,
     Settings,
     StoredManifest,
     standard_rules,
 )
-from golf.randomizer.pool import build_pool
 from golf.randomizer.transforms import apply_transforms
 from tests.legacy_manifest import as_schema
 from tests.new_save import new_save
@@ -103,37 +101,16 @@ def curation() -> CurationSnapshot:
     return CurationSnapshot.load()
 
 
-def with_the_version_two_draw(catalog, curation, settings):
-    """A manifest for these settings holding the holes generator version 2 drew.
-
-    The golden hashes below pin the build, and were taken when a seed's holes came from
-    the layout-first draw. Giving the manifests that draw's holes keeps the hashes about
-    the build alone: they did not move when generation was rewritten.
-    """
-    manifest = generate(catalog, curation, settings)
-    drawn = draw_legacy(
-        build_pool(catalog, curation, settings),
-        settings,
-        stream(settings.prng_seed, "layout"),
-        stream(settings.prng_seed, "holes"),
-    )
-    holes = tuple(
-        replace(slot, id=entry.id, par=entry.par)
-        for slot, entry in zip(manifest.course.holes, drawn, strict=True)
-    )
-    return replace(manifest, course=replace(manifest.course, holes=holes))
-
-
 @pytest.fixture(scope="module")
 def jp_manifest(catalog, curation, vanilla_jp_courses):
-    """Drawn uniformly, like `nes_manifest`, so the golden hashes below move with the
-    build and not with the default expert cap."""
+    """Drawn with no expert cap, like `nes_manifest`, so the golden hashes below move
+    with the build and not with the default expert cap."""
     settings = Settings(
-        prng_seed="build-stages-jp",
+        prng_seed="build-stages-jp-1",
         music="jp_france",
         constraints=standard_rules(72, None),
     )
-    return with_the_version_two_draw(catalog, curation, settings)
+    return generate(catalog, curation, settings)
 
 
 @pytest.fixture(scope="module")
@@ -145,7 +122,7 @@ def nes_manifest(catalog, curation):
         mercy_point=None,
         constraints=standard_rules(72, None),
     )
-    return with_the_version_two_draw(catalog, curation, settings)
+    return generate(catalog, curation, settings)
 
 
 @pytest.fixture(scope="module")
@@ -204,8 +181,8 @@ def test_build_version_six_golden_unfinished_ips_hashes(
         "jp_france_18": hashlib.sha256(unfinished.ips).hexdigest(),
         "nes_only": hashlib.sha256(nes.ips).hexdigest(),
     } == {
-        "jp_france_18": "f6c360309f74d98f0fd425ade445ddfb0db574b4df29066976da9df56ce488d7",
-        "nes_only": "1983d3ea895da794c81db316bb595068c88a08f9214779bef6836a1482e5e84d",
+        "jp_france_18": "6f45b2a7508dee316cc7b71efe01b139c5f08a1a3d5e9cbe6f4d8c60089e9077",
+        "nes_only": "0191e20fb5595358f28bcf63ee5f38e83358ab848c7f832115745d7e15461ad1",
     }
 
 

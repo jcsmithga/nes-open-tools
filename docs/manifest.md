@@ -18,7 +18,7 @@ With the hole list trimmed to one of its 18 slots:
 ```json
 {
   "schema": 5,
-  "generator_version": 3,
+  "generator_version": 4,
   "build_version": 6,
   "finish_abi_version": 2,
   "catalog_version": 1,
@@ -171,26 +171,31 @@ kind, without a tag anyone has to remember (ADR 0023). Tags then narrow what was
 `constraints` is a list of course rules (`golf/randomizer/rules.py`), each a JSON object
 with a `rule` name and that rule's arguments. A course keeps every rule in the list.
 `null` is the default course, `[{"rule": "standard", "par": <par>}, {"rule":
-"expert_cap", "per_nine": 1}]`: four par 3s, par 4s and par 5s to the par, each par split
-evenly between the nines, no two par 3s or par 5s in a row, and at most one expert hole
-on each nine. A list is the whole of the rules: a course of another shape leaves
-`standard` out, one that adds to it says `standard` first, and one with a cap on expert
-holes says `expert_cap`. The family rule alone is held to beside whatever the list
-holds.
+"expert_cap", "per_nine": 1}]`. A list is the whole of the rules: one with a cap on
+expert holes says `expert_cap`. The family rule alone is held to beside whatever the
+list holds.
+
+Settings may hold only the course modes and the expert cap (ADR 0025):
+
+| Rule | The course |
+|---|---|
+| `{"rule": "standard", "par": 72}` | Four par 3s, and par 4s and par 5s to the par, each par split evenly between the nines, no two par 3s or par 5s in a row |
+| `{"rule": "par_3"}` | Eighteen par 3s |
+| `{"rule": "vanilla_course", "course": "jp_uk"}` | A vanilla course's holes, each at its own number |
+| `{"rule": "expert_cap", "per_nine": 1}` | At most so many expert holes on each nine (below) |
 
 ```json
 "constraints": [
-  {"rule": "standard", "par": 72},
-  {"rule": "expert_cap", "per_nine": 1},
-  {"rule": "slot", "hole": [9, 18], "where": {"par": 5}},
-  {"rule": "sum", "of": "over_par", "scope": "each_nine", "max": 3.0}
+  {"rule": "par_3"},
+  {"rule": "expert_cap", "per_nine": 0}
 ]
 ```
 
-`golf-randomize rules` lists the rules; the vocabulary, what each rule means and the
-checked-in requests that use them are in [generation_rewrite.md](generation_rewrite.md).
-A rule this release does not know, or one written wrongly, fails when the settings or
-the manifest load.
+The modes expand into a few general rules, `count`, `compare` and `limit`, and shorthands
+over them (`par_counts`, `balanced_nines`, `no_consecutive`, `slot`), which only code
+writes. `golf-randomize rules` lists the rules settings may hold. A rule this release
+does not know, one settings may not hold, or one written wrongly, fails when the
+settings or the manifest load.
 
 ### The expert cap
 
@@ -336,7 +341,10 @@ entry's hash, par, distance or author, or a delta, stays as it was.
    still open to it, so a hole with a twin is no likelier than a hole without one. Two
    holes no rule tells apart are equally likely to be on a course. A family holding
    holes of different pars, such as a par 5 and its forward-tee par 3, can fill either
-   kind of slot but only one. When no course keeps the rules, `GenerationError` names
+   kind of slot but only one. The search leans toward the limits of the rules, so the
+   course it finds is then put through `MIX_STEPS` (800) random changes, each kept only
+   if every rule still holds, which leaves each course that keeps them about as likely
+   as any other (ADR 0025). When no course keeps the rules, `GenerationError` names
    the smallest set of them found that cannot hold together and what the pool offers
    each; when the search gives up without proving that, it says so.
 5. **Music.** A named slug is used as given. `random` draws from the NES Open themes, or
@@ -374,9 +382,8 @@ golf-randomize generate --par 71 --sources nes_open_us --music nes_uk --mercy-po
 golf-randomize generate --experts-per-nine 0
 golf-randomize generate --no-expert-cap
 golf-randomize generate --wind-speed storm_rolling_in --wind-direction out_and_back
-golf-randomize generate --preset par_3_course
 golf-randomize generate --request my_settings.json --seed week-6
-golf-randomize survey --preset executive -n 1000
+golf-randomize survey --request my_settings.json -n 1000
 golf-randomize rules
 golf-randomize build nes_open_us.nes demo.json -o demo.nes
 golf-randomize build nes_open_us.nes demo.json --unfinished --ips demo.unfinished.ips
@@ -392,18 +399,18 @@ golf-randomize show demo.json
   `--wind-speed` and `--wind-direction`. Lists are comma-separated; clubs use the choose-clubs labels. It
   writes the manifest to `-o` (default `manifest.json`) and prints the course.
 - `--request FILE` takes every setting from a request, a JSON object holding the
-  settings that differ from the defaults (`golf/randomizer/request.py`), and `--preset
-  NAME` from one of the requests checked in under `data/presets/`. Either stands in for
-  every settings flag but `--seed`. A request is the only way to give `constraints`.
+  settings that differ from the defaults (`golf/randomizer/request.py`). It stands in
+  for every settings flag but `--seed`, and is the only way to give a par 3 course or a
+  vanilla course.
 - `survey` takes the same settings flags, rolls them `-n` times (500 by default) and
   prints what came out: the course pars, yardage, predicted strokes over par, expert
   holes, how often each hole of the pool appeared, and the share of each par at each
-  slot. `--legacy` rolls generator version 2's layout-first draw instead, and
-  `--uniform` deals random courses and keeps the ones that pass, so that each is
-  equally likely, where those are not too rare for it to finish. `--mix STEPS` puts each
-  composed course through that many random changes that keep the rules
+  slot. `--mix STEPS` sets how many random changes each course is put through, by
+  default the `MIX_STEPS` generation uses; 0 shows the search alone
   ([generation_rewrite.md](generation_rewrite.md), **Mixing the lean out**).
-- `rules` lists the course rules.
+  `--uniform` deals random courses and keeps the ones that pass, so that each is
+  equally likely, where those are not too rare for it to finish.
+- `rules` lists the course rules settings may hold.
 - `build` runs `build_unfinished` and then `finish` on the unfinished IPS, as the site
   does. With no stage flag the result is a guest ROM. `--unfinished` stops after the first
   stage, which is what the site stores. `--credentials` finishes signed in with a

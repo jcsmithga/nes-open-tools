@@ -12,13 +12,9 @@ from golf.randomizer.solver import (
     ContradictionError,
     Count,
     Difference,
-    Gap,
     Limit,
     Solver,
-    Step,
     Tally,
-    Total,
-    Values,
     bits,
 )
 
@@ -89,8 +85,6 @@ def tally_of(tallied, sets, group_masks, limited, slots, size) -> Tally:
 def random_problem(rng: random.Random, slots=SLOTS, size=SIZE):
     """A handful of random propagators over `slots` slots of `size` values, with the classes
     a caller would hand the solver for them."""
-    numbers = [rng.choice([1, 2, 2, 3, 5, None]) for _ in range(size)]
-    values = Values(numbers)
     group_of = [rng.randrange(4) for _ in range(size)]
     group_masks = [
         mask_of(v for v in range(size) if group_of[v] == group) for group in range(4)
@@ -115,28 +109,21 @@ def random_problem(rng: random.Random, slots=SLOTS, size=SIZE):
         propagators.append(Limit(range(slots), group_of, group_masks, 1))
     tallied = []
     for _ in range(rng.randint(1, 4)):
-        kind = rng.choice(["count", "total", "difference", "limit", "step", "gap"])
+        kind = rng.choice(["count", "difference", "limit"])
         low = rng.randint(0, 3)
         high = low + rng.randint(0, 3)
         if kind == "count":
             counted = count(limited)
             propagators.append(Bound(counted, low, high))
             tallied.append(([counted], [], low, high))
-        elif kind == "total":
-            groups = (group_of, 1) if limited else None
-            propagators.append(Bound(Total(scope(), values, groups), low * 3, high * 4))
         elif kind == "difference":
             left, right = count(), count()
             propagators.append(
                 Difference(left, right, low - 2, high - 2, integral=True)
             )
             tallied.append(([left], [right], low - 2, high - 2))
-        elif kind == "limit":
-            propagators.append(Limit(scope(), group_of, group_masks, rng.randint(1, 2)))
-        elif kind == "step":
-            propagators.append(Step(scope(), values, low - 1, high))
         else:
-            propagators.append(Gap(scope(), values, rng.randint(1, 2)))
+            propagators.append(Limit(scope(), group_of, group_masks, rng.randint(1, 2)))
     if tallied:
         propagators.append(tally_of(tallied, sets, group_masks, limited, slots, size))
 
@@ -234,31 +221,6 @@ def test_a_count_knows_the_groups_it_can_draw_on():
     )
     with pytest.raises(ContradictionError):
         problem.start()
-
-
-def test_a_total_narrows_to_what_the_rest_can_still_reach():
-    values = Values([1, 2, 3, 4, 5, 6, 7])
-    problem = Solver(3, SIZE, [Bound(Total(range(3), values), 20, 21)])
-    domains = problem.start()
-    assert all(set(bits(domain)) == {5, 6} for domain in domains)  # only 6s and 7s
-
-
-def test_a_total_of_different_groups_is_tighter():
-    values = Values([1, 2, 3, 4, 5, 6, 7])
-    apart = (list(range(SIZE)), 1)
-    alone = Solver(3, SIZE, [Bound(Total(range(3), values), 0, 5)])
-    assert all(domain == mask_of(range(3)) for domain in alone.start())
-    # three different values come to 6 or more
-    with pytest.raises(ContradictionError):
-        Solver(3, SIZE, [Bound(Total(range(3), values, apart), 0, 5)]).start()
-    domains = Solver(3, SIZE, [Bound(Total(range(3), values, apart), 0, 6)]).start()
-    assert all(domain == mask_of(range(3)) for domain in domains)
-
-
-def test_a_value_with_no_number_is_in_no_total():
-    values = Values([1, None, 3, None, 5, 6, 7])
-    domains = Solver(2, SIZE, [Bound(Total(range(2), values), 0, 100)]).start()
-    assert all(domain == values.known for domain in domains)
 
 
 def test_a_sum_and_a_difference_pin_both_sides():

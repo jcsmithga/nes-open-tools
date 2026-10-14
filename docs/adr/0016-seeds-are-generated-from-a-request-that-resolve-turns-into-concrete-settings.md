@@ -18,8 +18,9 @@ chose; the only randomness in a field is `music: "random"`, which generation res
 against the holes it drew, because Mario Open themes are only eligible on a course with
 Mario Open holes.
 
-The settings now hold options players will want rolled, not chosen: a hole draw rule
-and two wind profiles, one for speed and one for direction (ADR 0018). Players will also
+The settings now hold options players will want rolled, not chosen: a course mode and
+its cap on expert holes (ADR 0025), and two wind profiles, one for speed and one for
+direction (ADR 0018). Players will also
 want odds across them, such as a 30% chance of Mario Open holes, or an 80% chance of
 leaving expert holes out and 20% of one per nine.
 
@@ -30,7 +31,7 @@ the conditions when they step onto the course. Players there keep a tuned settin
 and roll it again and again, and players here will do the same with their requests.
 
 If a weighted value stayed in `Settings`, a seed's record would say what was asked for
-but not what was rolled, and stats could not be grouped by the draw rule or wind profiles
+but not what was rolled, and stats could not be grouped by the mode or wind profiles
 a seed actually used. If the site rolled the dice and passed concrete settings on, the
 randomness would live outside the package, the CLI would need its own copy, and the
 roll would not come from the seed's PRNG.
@@ -45,7 +46,7 @@ Generation gains a step in front of it:
   all produce one. The site's named choices (presets) are requests the server defines.
 - **resolve** (in `golf/randomizer/`): turns a Request into concrete `Settings`, drawing
   from the seed's PRNG seed on its own stream (`stream(prng_seed, "request")`), as the
-  layout, hole draw and music already do. The site never rolls.
+  hole draw, wind and music already do. The site never rolls.
 - **Settings**: concrete and typed, every field a single legal value. They are what
   generation ran with, and what stats group by.
 
@@ -104,6 +105,9 @@ The parsing rules:
   that object's default, so `{"clubs": {"max": 10}}` means a bag of at most 10 clubs,
   none banned and no required bag. A manifest about to be built is still loaded
   strictly, where a missing field is an error; a request's defaults never reach it.
+- A request's `constraints` hold only the rules ADR 0025 allows a request: the mode
+  rules and `expert_cap`. A weighted `constraints` is a choice between such lists, such
+  as a mode with or without a cap.
 - `prng_seed` is refused in a request, with an error pointing at `--seed`. It is a
   `Settings` field, so a manifest's `settings` pasted in as a request would otherwise
   bring the old seed along.
@@ -123,15 +127,15 @@ The parsing rules:
 ### Which randomness belongs where
 
 Randomness that is part of a rule stays in generation. Choosing *which* wind profiles or
-draw rule a seed uses is the request's job. The variation the chosen rule produces
-(hole-to-hole wind under a profile, the uniform hole draw, picking a track
-that fits the course) happens in generation. So `music: "random"` stays a concrete
+course mode a seed uses is the request's job. The variation the chosen rule produces
+(hole-to-hole wind under a profile, the hole draw, a mode's par mix (ADR 0025), picking
+a track that fits the course) happens in generation. So `music: "random"` stays a concrete
 setting.
 
 ### The manifest
 
-The manifest gains a `request` block beside `settings` and `course`, in a schema bump
-of its own:
+The manifest gains a `request` block beside `settings` and `course`, in the next schema
+the site issues:
 
 - `request`: the request as submitted, kept so a seed shows how it came to be and the
   site can offer another seed from the same request.
@@ -162,7 +166,7 @@ keep it secret from anyone who reads the JSON.
   randomness would live outside the package that owns every other roll, the CLI would
   need a second implementation, and the roll would not come from the seed's PRNG.
 - **Weighted values stored in `Settings`, resolved inside generation.** That's how
-  `music: "random"` works, but a seed's record would not say which draw rule or wind
+  `music: "random"` works, but a seed's record would not say which mode or wind
   profiles it actually used, and every reader of `settings` would have to understand
   weighted values.
 - **ALTTP's form: per-field weighting only, with a value-to-weight map.** Per-field
@@ -189,7 +193,7 @@ keep it secret from anyone who reads the JSON.
   "full control" is a request file rather than a bigger form.
 - A request file is reusable as is: it holds no seed, and the simplest one is a plain
   settings object.
-- Stats and seed pages read concrete settings, so seeds can be grouped by draw rule,
+- Stats and seed pages read concrete settings, so seeds can be grouped by mode,
   wind profiles or sources without parsing weights.
 - New settings fields can be weighted without new request syntax, but can never be
   named `sets` or any other reserved key.
@@ -212,3 +216,5 @@ keep it secret from anyone who reads the JSON.
   and per-nine over-par ceilings, the plans for the wind update, ALTTP mystery seeds as
   the comparison, and jdharms's choices of weighted sets of weighted fields, the PRNG
   seed as an argument, and the reserved `sets` key telling the two request shapes apart.
+- Claude Code session 2026-10-14 `018V5k6x`: the draw rule replaced by course modes,
+  and requests limited to the mode rules and the expert cap (ADR 0025).

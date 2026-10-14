@@ -338,7 +338,7 @@ def test_the_expert_cap_is_read_from_the_rules():
     def cap(*rules: dict) -> int | None:
         return Settings(constraints=parse_rules(list(rules))).experts_per_nine
 
-    assert cap({"rule": "total_par", "max": 70}) is None
+    assert cap({"rule": "par_3"}) is None
     assert cap({"rule": "expert_cap", "per_nine": 3}) == 3
     assert (
         cap(
@@ -477,10 +477,7 @@ def test_required_roms_count_holes_and_music():
 
 
 def test_constraints_are_checked_rules_and_round_trip():
-    rules = [
-        {"rule": "par_counts", "counts": {"3": 18}},
-        {"rule": "expert_cap", "per_nine": 0},
-    ]
+    rules = [{"rule": "par_3"}, {"rule": "expert_cap", "per_nine": 0}]
     value = manifest(settings=Settings(prng_seed="abc", constraints=parse_rules(rules)))
     assert value.settings.constraints == tuple(Rule.parse(rule) for rule in rules)
     data = json.loads(json.dumps(value.to_json()))
@@ -491,7 +488,14 @@ def test_constraints_are_checked_rules_and_round_trip():
 
 
 @pytest.mark.parametrize(
-    "constraints", [[{"rule": "shuffle"}], [{"par": 3}], ["standard"], "standard"]
+    "constraints",
+    [
+        [{"rule": "shuffle"}],
+        [{"par": 3}],
+        ["standard"],
+        "standard",
+        [{"rule": "par_counts", "counts": {"3": 18}}],
+    ],
 )
 def test_a_rule_the_vocabulary_does_not_have_is_refused(constraints):
     with pytest.raises(ManifestError, match="constraints"):

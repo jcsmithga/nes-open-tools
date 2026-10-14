@@ -10,20 +10,14 @@ Not here: weighted fields (`one_of`) and weighted sets (`sets`), which ADR 0016 
 which this refuses by name. `prng_seed` is refused too: a seed belongs to one roll, and
 is an argument.
 
-`about` is the one key that is not a setting. It holds a line of text for people, since
-JSON has no comments, and is dropped.
-
-See docs/generation_rewrite.md for the requests in `data/presets/`.
+See docs/manifest.md.
 """
 
 import json
 from pathlib import Path
 
-from .catalog import REPO_ROOT
 from .manifest import ManifestError, Settings
 
-PRESETS = REPO_ROOT / "data" / "presets"
-ABOUT = "about"
 #: keys ADR 0016's weighted requests use, refused here with a pointer to it
 _WEIGHTED = ("sets", "one_of")
 
@@ -56,7 +50,7 @@ def settings_from_request(data: object, prng_seed: str | None = None) -> Setting
             "a request holds no prng_seed: a seed belongs to one roll; pass it with --seed"
         )
     defaults = Settings().to_json()
-    asked = {key: value for key, value in data.items() if key != ABOUT}
+    asked = data
     unknown = sorted(set(asked) - set(defaults))
     if unknown:
         raise RequestError(
@@ -80,8 +74,3 @@ def load_request(path: Path, prng_seed: str | None = None) -> Settings:
     except json.JSONDecodeError as problem:
         raise RequestError(f"{path}: not JSON: {problem}") from None
     return settings_from_request(data, prng_seed)
-
-
-def presets(root: Path = PRESETS) -> dict[str, Path]:
-    """The checked-in requests, by name."""
-    return {path.stem: path for path in sorted(root.glob("*.json"))}

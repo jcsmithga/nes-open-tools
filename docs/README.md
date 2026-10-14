@@ -19,7 +19,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [hole_transforms.md](hole_transforms.md) | Hole transforms: mirroring and hazard redraws, their names, versions and golden test |
 | [yardage_book.md](yardage_book.md) | A seed's yardage book: its holes as built, at its pins, with tee-shot wind; the stored holes and the render cache |
 | [thoughts_on_par_6.md](thoughts_on_par_6.md) | Design note: fitting par 6 (and any scarce par) into layout generation |
-| [generation_rewrite.md](generation_rewrite.md) | Spike report: the hole draw as rules and a search, the course rule vocabulary, the presets, and how the draw measures against the old one |
+| [generation_rewrite.md](generation_rewrite.md) | Spike report: the hole draw as rules and a search, what ADR 0025 kept of it, and how the draw measures against the old one and a uniform one |
 | [jp_extraction.md](jp_extraction.md) | Extracting Mario Open Golf (JP) courses for import into the US ROM |
 
 ## How the vanilla ROM works

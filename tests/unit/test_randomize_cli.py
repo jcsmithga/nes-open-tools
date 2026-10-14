@@ -199,25 +199,36 @@ def test_show_refuses_a_malformed_manifest(tmp_path):
     assert completed.stderr.startswith("error:")
 
 
-# -- Requests, presets and surveys --------------------------------------------------------------
+# -- Requests and surveys ----------------------------------------------------------------------
 
 
-def test_generate_takes_every_setting_from_a_preset(tmp_path):
+def write_request(tmp_path, data: dict):
+    path = tmp_path / "request.json"
+    path.write_text(json.dumps(data))
+    return path
+
+
+PAR_3 = {
+    "include": ["derived"],
+    "constraints": [{"rule": "par_3"}, {"rule": "expert_cap", "per_nine": 1}],
+}
+
+
+def test_generate_takes_every_setting_from_a_request(tmp_path):
     path = tmp_path / "seed.json"
-    completed = run(
-        "generate", "--preset", "par_3_course", "--seed", "short", "-o", path
-    )
+    request = write_request(tmp_path, PAR_3)
+    completed = run("generate", "--request", request, "--seed", "short", "-o", path)
     assert completed.returncode == 0, completed.stderr
     manifest = load(path)
     assert manifest.course.layout == (3,) * 18
     assert manifest.course.par == 54
     assert manifest.settings.prng_seed == "short"
     assert [rule.name for rule in manifest.settings.constraints or ()] == [
-        "par_counts",
+        "par_3",
         "expert_cap",
     ]
     assert "total: par 54" in completed.stdout
-    assert 'rule: {"counts":{"3":18},"rule":"par_counts"}' in completed.stdout
+    assert 'rule: {"rule":"par_3"}' in completed.stdout
 
 
 def test_generate_takes_a_request_file(tmp_path):
@@ -244,38 +255,34 @@ def test_generate_reports_a_request_the_pool_cannot_meet(tmp_path):
         json.dumps(
             {
                 "sources": [US_ROM],
-                "constraints": [{"rule": "par_counts", "counts": {"3": 18}}],
+                "constraints": [{"rule": "par_3"}],
             }
         )
     )
     completed = run("generate", "--request", request, "-o", tmp_path / "seed.json")
     assert completed.returncode == 1
     assert 'the pool has 12 holes matching {"par": 3}' in completed.stderr
-    unknown = run("generate", "--preset", "nonesuch", "-o", tmp_path / "seed.json")
-    assert unknown.returncode == 1 and "no preset 'nonesuch'" in unknown.stderr
 
 
-def test_survey_reports_what_a_preset_gives():
-    completed = run("survey", "--preset", "executive", "-n", "15")
+def test_survey_reports_what_a_request_gives(tmp_path):
+    request = write_request(tmp_path, PAR_3)
+    completed = run("survey", "--request", request, "-n", "15", "--mix", "0")
     assert completed.returncode == 0, completed.stderr
     assert "15 courses, 0 failures" in completed.stdout
-    assert "course par: 58 (100%)" in completed.stdout
-    mixed = run("survey", "--preset", "executive", "-n", "15", "--mix", "100")
+    assert "course par: 54 (100%)" in completed.stdout
+    mixed = run("survey", "--request", request, "-n", "15")
     assert mixed.returncode == 0, mixed.stderr
-    assert "course par: 58 (100%)" in mixed.stdout
+    assert "course par: 54 (100%)" in mixed.stdout
     assert mixed.stdout != completed.stdout
-    legacy = run("survey", "--legacy", "-n", "15")
-    assert legacy.returncode == 0, legacy.stderr
-    assert "course par: 72 (100%)" in legacy.stdout
-    uniform = run("survey", "--preset", "natural_par", "--uniform", "-n", "5")
+    uniform = run("survey", "--no-expert-cap", "--uniform", "-n", "5")
     assert uniform.returncode == 0, uniform.stderr
     assert "kept the rules" in uniform.stdout and "5 courses" in uniform.stdout
-    rare = run("survey", "--preset", "par_3_course", "--uniform", "-n", "1")
+    rare = run("survey", "--request", request, "--uniform", "-n", "1")
     assert rare.returncode == 1 and "too rare" in rare.stderr
 
 
-def test_rules_lists_the_vocabulary():
+def test_rules_lists_the_rules_a_request_may_use():
     completed = run("rules")
     assert completed.returncode == 0, completed.stderr
-    for name in ("count", "standard", "vanilla_course", "weight"):
-        assert name in completed.stdout
+    listed = [line.split()[0] for line in completed.stdout.splitlines()]
+    assert listed == ["expert_cap", "par_3", "standard", "vanilla_course"]

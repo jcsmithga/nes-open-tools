@@ -11,9 +11,10 @@ not), then each is given a hole. A slot takes a family, each as likely as any ot
 open to it, and then one of that family's holes still open to it, so a hole with a twin
 is no likelier than a hole without one. Nothing about the draw prefers one hole to
 another except the rules: two holes no rule tells apart are equally likely to be on the
-course. A `weight` rule is the one way to say otherwise. Past that, how often a hole
-appears is something to measure (`golf/randomizer/survey.py`), and the draw is not
-uniform over the courses that keep the rules: it runs toward their limits.
+course. Past that, the search is not uniform over the courses that keep the rules: it
+runs toward their limits. `Problem.mix` then walks the course it found through random
+changes that keep the rules, which takes the lean out (`golf/randomizer/survey.py`
+measures both).
 
 **When no course is found.** A search that runs out of choices has proved there is none.
 `explain` then names the smallest set of rules it can find that cannot hold together,
@@ -22,35 +23,22 @@ names the rules a course is found without: it has proved nothing.
 
 **What compiling adds.** Beside a propagator for each rule, `Problem` hands the solver
 what makes the search short: the kinds of hole (`_classes`), the joint check of the
-counts and sums over big scopes (`_add_tally`), and a few things that follow from two
-rules together or from a rule over every run of holes (`_whole`, `_together`,
-`_spread`).
+counts over big scopes (`_add_tally`), and a few things that follow from two rules
+together or from a rule over every run of holes (`_whole`, `_together`, `_spread`).
 
-See docs/generation_rewrite.md.
+See docs/manifest.md and docs/generation_rewrite.md.
 """
 
 import json
 import random
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from functools import cache, cached_property
-from pathlib import Path
+from functools import cached_property
 
 from . import solver
-from .catalog import REPO_ROOT, CatalogEntry, DerivedSource, RomSource
+from .catalog import CatalogEntry, DerivedSource, RomSource
 from .pool import Pool
-from .rules import (
-    HOLES,
-    SLOT,
-    Rule,
-    bounds,
-    compare_side,
-    expand,
-    scopes,
-    slot_bound,
-)
-
-DEFAULT_DIFFICULTY = REPO_ROOT / "data" / "difficulty" / "holes.json"
+from .rules import HOLES, SLOT, Rule, bounds, expand, one_scope, scopes, slot_bound
 
 #: (dead ends allowed, smallest domain first) for each try at a course. The shuffled
 #: order is the fair one, so it goes first; smallest first is for problems tight enough
@@ -78,22 +66,10 @@ _IMPLICIT = "a hole is on the course once"
 #: a count over fewer slots than this is left out of the joint check of counts
 #: (`solver.Tally`): small scopes would split the course into too many parts to tally
 TALLY_SCOPE = 5
-#: a limit on every run of holes is turned into a cap on the course for each group
-#: only when there are this few groups: pars or ROMs, not families
-SPREAD_GROUPS = 12
 
 
 class GenerationError(Exception):
     """Settings the catalog cannot satisfy, such as a pool too small for the rules."""
-
-
-@cache
-def load_over_par(path: Path = DEFAULT_DIFFICULTY) -> Mapping[str, float]:
-    """Each lineage's predicted strokes over par, from the difficulty report's table."""
-    if not path.exists():
-        return {}
-    rows = json.loads(path.read_text())["holes"]
-    return {row["lineage"]: row["over_par"] for row in rows}
 
 
 @dataclass(frozen=True)
@@ -103,7 +79,6 @@ class Candidate:
     entry: CatalogEntry
     family: str
     tags: frozenset[str]
-    over_par: float | None
 
     @cached_property
     def origin(self) -> RomSource | None:
@@ -127,18 +102,9 @@ class Candidate:
     def original_hole(self) -> int | None:
         return self.origin.hole if self.origin is not None else None
 
-    def number(self, name: str) -> float | None:
-        if name == "par":
-            return self.entry.par
-        if name == "distance":
-            return self.entry.distance
-        if name == "original_hole":
-            return self.original_hole
-        return self.over_par
-
     def key(self, name: str) -> object:
-        """What `limit` groups by. None is a hole with no such thing, which shares it
-        with no other hole."""
+        """What a selector or `limit` reads. None is a hole with no such thing, which
+        shares it with no other hole."""
         if name == "family":
             return self.family
         if name == "id":
@@ -148,23 +114,7 @@ class Candidate:
         return getattr(self.entry, name)
 
     def matches(self, where: Mapping, slot: int) -> bool:
-        entry = self.entry
         for field, wanted in where.items():
-            if field == "not":
-                if self.matches(wanted, slot):
-                    return False
-                continue
-            if field == "any":
-                if not any(self.matches(option, slot) for option in wanted):
-                    return False
-                continue
-            if field in ("distance", "over_par"):
-                number = self.number(field)
-                if number is None or not (
-                    wanted.get("min", number) <= number <= wanted.get("max", number)
-                ):
-                    return False
-                continue
             if field == "original_hole":
                 if wanted == SLOT:
                     wanted = [slot + 1]
@@ -177,9 +127,6 @@ class Candidate:
                 wanted = [wanted]
             if field == "tag":
                 if not self.tags & set(wanted):
-                    return False
-            elif field == "id":
-                if str(entry.id) not in wanted and entry.id.lineage not in wanted:
                     return False
             elif self.key(field) not in wanted:
                 return False
@@ -203,31 +150,19 @@ def _range(low: float, high: float) -> str:
 class Problem:
     """A pool and rules, compiled. `draw` gives a course; `violations` judges one."""
 
-    def __init__(
-        self,
-        pool: Pool,
-        rules: Sequence[Rule | Mapping],
-        over_par: Mapping[str, float] | None = None,
-    ):
+    def __init__(self, pool: Pool, rules: Sequence[Rule | Mapping]):
         self.pool = pool
         self.rules = tuple(Rule.parse(rule) for rule in rules)
-        scores = self._scores = load_over_par() if over_par is None else over_par
         self.candidates = [
-            Candidate(
-                member,
-                family.key,
-                pool.tags.get(member.id, frozenset()),
-                scores.get(member.id.lineage),
-            )
+            Candidate(member, family.key, pool.tags.get(member.id, frozenset()))
             for family in pool.families
             for member in family.members
         ]
         self.size = len(self.candidates)
         self._everything = (1 << self.size) - 1
         self._masks: dict[str, list[int]] = {}
-        #: every set of holes a count reads, by slot, and every number in use
+        #: every set of holes a count reads, by slot
         self._counted: list[list[int]] = []
-        self._values: dict[str, solver.Values] = {}
         self._groups: dict[str, tuple[list[int], list[int]]] = {}
         self.family_of, self.family_masks = self.groups("family")
 
@@ -241,41 +176,19 @@ class Problem:
             (self.groups(rule["per"])[1], rule.get("max", 1))
             for _, rule in general
             if rule["rule"] == "limit"
-            and scopes(rule.get("scope", "course")) == scopes("course")
         ]
         self._general = general
         #: counts over big scopes, for the joint check: (plus, minus, low, high), each
         #: side a list of (set of holes, slots)
         self._tallied: list[tuple[list, list, float, float]] = []
-        #: sums over big scopes, for the same check: (number, slots, low, high)
-        self._tallied_sums: list[
-            tuple[solver.Values, tuple[int, ...], float, float]
-        ] = []
         #: the range every rule so far holds one measure of one scope to, between them
         self._held: dict[tuple, tuple[float, float]] = {}
-        #: the tightest course-wide limit, as a sum's `groups`
-        self._apart: tuple[Sequence[int], int] | None = None
-        for _, rule in general:
-            if (
-                rule["rule"] == "limit"
-                and scopes(rule.get("scope", "course")) == scopes("course")
-                and rule["per"] == "family"
-            ):
-                self._apart = (self.groups("family")[0], rule.get("max", 1))
         self.propagators: list[solver.Propagator] = []
-        if not any(
-            rule["rule"] == "limit"
-            and rule["per"] in ("family", "id")
-            and scopes(rule.get("scope", "course")) == scopes("course")
-            for _, rule in general
-        ):
+        if not any(rule["rule"] == "limit" for _, rule in general):
             self._supply.append((self.groups("id")[1], 1))
-            self._apart = (self.groups("id")[0], 1)
             self.propagators.append(
                 solver.Limit(range(HOLES), *self.groups("id"), origin=_IMPLICIT)
             )
-        #: per-slot multipliers on a hole's chance of being picked, from `weight` rules
-        self.weights: list[list[float]] | None = None
         #: what the pool offers each rule that asks for something, for `explain`
         self.notes: dict[int, list[str]] = {}
         for origin, rule in general:
@@ -318,21 +231,6 @@ class Problem:
                 found = [at(0)] * HOLES
             self._masks[text] = found
         return found
-
-    def values(self, name: str, where: Mapping | None = None) -> solver.Values:
-        """A number of every hole of the pool. With `where`, a hole that does not match
-        counts for nothing, so a sum is over the holes that do."""
-        key = name if where is None else f"{name} {json.dumps(where, sort_keys=True)}"
-        if key not in self._values:
-            numbers = [candidate.number(name) for candidate in self.candidates]
-            if where is not None:
-                mask = self.masks(where)[0]
-                numbers = [
-                    number if mask >> value & 1 else 0
-                    for value, number in enumerate(numbers)
-                ]
-            self._values[key] = solver.Values(numbers)
-        return self._values[key]
 
     def groups(self, key: str) -> tuple[list[int], list[int]]:
         """Each hole's group under a key, and each group's holes."""
@@ -397,42 +295,12 @@ class Problem:
                 )
             )
 
-    def _extremes(
-        self, numbers: solver.Values, cell: int
-    ) -> tuple[list[float], list[float]]:
-        """The least and the most that n holes of a set can total, for n from 0 to 18,
-        when they must be of different families (or whatever keeps holes apart)."""
-        assert self._apart is not None
-        group_of, capacity = self._apart
-
-        def running(order: Sequence[int], beyond: float) -> list[float]:
-            used: dict[int, int] = {}
-            totals = [0.0]
-            for value in order:
-                if not cell >> value & 1 or used.get(group_of[value], 0) >= capacity:
-                    continue
-                used[group_of[value]] = used.get(group_of[value], 0) + 1
-                totals.append(totals[-1] + numbers.numbers[value])  # type: ignore[operator]
-                if len(totals) > HOLES:
-                    break
-            return totals + [beyond] * (HOLES + 1 - len(totals))
-
-        return (
-            running(numbers.ascending, solver.INFINITY),
-            running(numbers.ascending[::-1], -solver.INFINITY),
-        )
-
     def _add_tally(self) -> None:
-        if len(self._tallied) + len(self._tallied_sums) < 2:
+        if len(self._tallied) < 2:
             return
         sides = [side for plus, minus, _, _ in self._tallied for side in plus + minus]
         # the slots split by which scopes they are in, and the holes by which sets
-        scope_list = list(
-            dict.fromkeys(
-                [scope for _, scope in sides]
-                + [scope for _, scope, _, _ in self._tallied_sums]
-            )
-        )
+        scope_list = list(dict.fromkeys(scope for _, scope in sides))
         by_membership: dict[tuple[bool, ...], list[int]] = {}
         for slot in range(HOLES):
             by_membership.setdefault(
@@ -469,26 +337,7 @@ class Problem:
             for cell, cell_mask in enumerate(cells):
                 groups = sum(1 for mask in group_masks if mask & cell_mask)
                 caps[cell] = min(caps[cell], groups * capacity)
-        sums = []
-        for numbers, scope, low, high in self._tallied_sums:
-            tables = [self._extremes(numbers, cell) for cell in cells]
-            sums.append(
-                (
-                    [atom for atom, slots in enumerate(atoms) if slots[0] in scope],
-                    [least for least, _ in tables],
-                    [most for _, most in tables],
-                    low,
-                    high,
-                )
-            )
-        self.propagators.append(solver.Tally(atoms, cells, rows, caps, sums=sums))
-
-    def _group_labels(self, key: str) -> list[object]:
-        group_of, group_masks = self.groups(key)
-        labels: list[object] = [None] * len(group_masks)
-        for value, candidate in enumerate(self.candidates):
-            labels[group_of[value]] = candidate.key(key)
-        return labels
+        self.propagators.append(solver.Tally(atoms, cells, rows, caps))
 
     def _offer(self, where: Mapping, scope: Sequence[int], others: bool = False) -> str:
         """How many holes of the pool a selector matches in a scope, or does not."""
@@ -513,31 +362,18 @@ class Problem:
         self._counted.append(masks)
         return solver.Count(scope, masks, self._supply if supplied else ())
 
-    def _aggregate(self, measure: Mapping, scope: Sequence[int]) -> solver.Aggregate:
-        ((kind, what),) = measure.items()
-        if kind == "count":
-            return self._count(scope, self.masks(what), True)
-        return self._total(scope, what)
-
-    def _total(
-        self, scope: Sequence[int], name: str, where: Mapping | None = None
-    ) -> solver.Total:
-        """A sum that knows the slots hold different families, when the rules say so."""
-        return solver.Total(scope, self.values(name, where), self._apart)
-
-    def _whole(self, measure: Mapping, scope: frozenset[int]) -> tuple[float, float]:
-        """The range some rule holds a measure to over exactly these slots, if one does."""
-        ((kind, what),) = measure.items()
+    def _whole(self, where: Mapping, scope: frozenset[int]) -> tuple[float, float]:
+        """The range some count holds a selector to over exactly these slots, if one
+        does."""
         low, high = -solver.INFINITY, solver.INFINITY
         for _, rule in self._general:
-            if rule["rule"] == "count" and kind == "count":
-                same = rule["where"] == what
-            elif rule["rule"] == "sum" and kind == "sum":
-                same = rule["of"] == what
-            else:
-                continue
-            if same and any(
-                frozenset(part) == scope for part in scopes(rule.get("scope", "course"))
+            if (
+                rule["rule"] == "count"
+                and rule["where"] == where
+                and any(
+                    frozenset(part) == scope
+                    for part in scopes(rule.get("scope", "course"))
+                )
             ):
                 rule_low, rule_high = bounds(rule)
                 low, high = max(low, rule_low), min(high, rule_high)
@@ -599,104 +435,39 @@ class Problem:
                     self._offer(rule["where"], scope, others=True)
                 )
 
-    def _compile_sum(self, origin: int, rule: Mapping) -> None:
-        low, high = bounds(rule)
-        where = rule.get("where")
-        values = self.values(rule["of"], where)
-        parts = scopes(rule.get("scope", "course"))
-        for scope in parts:
-            self.propagators.append(
-                solver.Bound(self._total(scope, rule["of"], where), low, high, origin)
-            )
-            both = self._together(("sum", id(values), tuple(scope)), low, high)
-            if both is not None:
-                self.propagators.append(
-                    solver.Bound(self._total(scope, rule["of"], where), *both, origin)
-                )
-            if len(scope) >= TALLY_SCOPE:
-                self._tallied_sums.append((values, tuple(scope), low, high))
-        union = tuple(sorted({slot for part in parts for slot in part}))
-        if len(parts) > 1 and len(union) == sum(len(part) for part in parts):
-            # each nine under 3 is the course under 6, and the two nines draw on the
-            # same holes: held to as one sum, that is a far tighter bound than two
-            both = (low * len(parts), high * len(parts))
-            self.propagators.append(
-                solver.Bound(self._total(union, rule["of"], where), *both, origin)
-            )
-            self._tallied_sums.append((values, union, *both))
-        if values.known != self._everything:
-            missing = (self._everything & ~values.known).bit_count()
-            self.notes.setdefault(origin, []).append(
-                f"{missing} holes of the pool have no {rule['of']}"
-            )
-
     def _compile_compare(self, origin: int, rule: Mapping) -> None:
         low, high = bounds(rule)
-        left_scope, left_measure = compare_side(rule, "left")
-        right_scope, right_measure = compare_side(rule, "right")
-        left = self._aggregate(left_measure, left_scope)
-        right = self._aggregate(right_measure, right_scope)
+        where = rule["of"]["count"]
+        masks = self.masks(where)
+        left_scope = one_scope(rule["left"], "compare left")
+        right_scope = one_scope(rule["right"], "compare right")
         whole = (-solver.INFINITY, solver.INFINITY)
-        if left_measure == right_measure and not set(left_scope) & set(right_scope):
-            whole = self._whole(left_measure, frozenset(left_scope + right_scope))
-        integral = "count" in left_measure and "count" in right_measure
-        if integral:
-            self._tally(
+        if not set(left_scope) & set(right_scope):
+            whole = self._whole(where, frozenset(left_scope + right_scope))
+        self._tally(low, high, (masks, left_scope), (masks, right_scope))
+        self.propagators.append(
+            solver.Difference(
+                self._count(left_scope, masks, True),
+                self._count(right_scope, masks, True),
                 low,
                 high,
-                (self.masks(left_measure["count"]), left_scope),
-                (self.masks(right_measure["count"]), right_scope),
+                origin,
+                whole,
+                integral=True,
             )
-        self.propagators.append(
-            solver.Difference(left, right, low, high, origin, whole, integral)
         )
 
     def _compile_limit(self, origin: int, rule: Mapping) -> None:
         group_of, group_masks = self.groups(rule["per"])
-        labels = self._group_labels(rule["per"])
-        if scopes(rule.get("scope", "course")) == scopes("course"):
-            self.notes.setdefault(origin, []).append(
-                f"the pool's holes have {len(group_masks)} different values of "
-                f"{rule['per']}"
+        self.notes.setdefault(origin, []).append(
+            f"the pool's holes have {len(group_masks)} different values of "
+            f"{rule['per']}"
+        )
+        self.propagators.append(
+            solver.Limit(
+                range(HOLES), group_of, group_masks, rule.get("max", 1), origin
             )
-        if len(group_masks) <= SPREAD_GROUPS:
-            for mask in group_masks:
-                self._spread(origin, rule, [mask] * HOLES, rule.get("max", 1))
-        for scope in scopes(rule.get("scope", "course")):
-            self.propagators.append(
-                solver.Limit(scope, group_of, group_masks, rule.get("max", 1), origin)
-            )
-            if rule.get("min", 0) > 0:
-                for group, mask in enumerate(group_masks):
-                    if labels[group] is None:
-                        continue
-                    count = self._count(scope, [mask] * HOLES, False)
-                    self.propagators.append(
-                        solver.Bound(count, rule["min"], solver.INFINITY, origin)
-                    )
-                    self._tally(rule["min"], solver.INFINITY, ([mask] * HOLES, scope))
-
-    def _compile_step(self, origin: int, rule: Mapping) -> None:
-        low = rule.get("min", -solver.INFINITY)
-        high = rule.get("max", solver.INFINITY)
-        for scope in scopes(rule.get("scope", "course")):
-            self.propagators.append(
-                solver.Step(scope, self.values(rule["of"]), low, high, origin)
-            )
-
-    def _compile_gap(self, origin: int, rule: Mapping) -> None:
-        for scope in scopes(rule.get("scope", "course")):
-            self.propagators.append(
-                solver.Gap(scope, self.values(rule["of"]), rule["min"], origin)
-            )
-
-    def _compile_weight(self, origin: int, rule: Mapping) -> None:
-        if self.weights is None:
-            self.weights = [[1.0] * self.size for _ in range(HOLES)]
-        masks = self.masks(rule["where"])
-        for slot in range(HOLES):
-            for value in solver.bits(masks[slot]):
-                self.weights[slot][value] *= rule["factor"]
+        )
 
     # -- Drawing ------------------------------------------------------------------------------
 
@@ -706,18 +477,7 @@ class Problem:
         family_of = self.family_of
         for value in solver.bits(domain):
             by_family.setdefault(family_of[value], []).append(value)
-        families = list(by_family.values())
-        if self.weights is None:
-            return rng.choice(rng.choice(families))
-        weights = self.weights[slot]
-        members = rng.choices(
-            families,
-            [
-                sum(weights[value] for value in family) / len(family)
-                for family in families
-            ],
-        )[0]
-        return rng.choices(members, [weights[value] for value in members])[0]
+        return rng.choice(rng.choice(list(by_family.values())))
 
     def picks(self, rng: random.Random) -> list[int]:
         """A course as pool indexes, or GenerationError."""
@@ -757,11 +517,10 @@ class Problem:
         Every change is as likely to be tried as the change that undoes it, so with
         enough steps the course no longer depends on the one the search found: each
         course that keeps the rules is as likely as any other the changes can reach,
-        counting a hole with a twin for no more than a hole without one. A `weight`
-        rule makes a course likelier by the product of its holes' factors.
+        counting a hole with a twin for no more than a hole without one.
         """
         picks = list(picks)
-        propagators, reading, weights = self.propagators, self._reading, self.weights
+        propagators, reading = self.propagators, self._reading
         families = self._families
         for _ in range(steps):
             roll = rng.random()
@@ -777,12 +536,6 @@ class Problem:
             before = [picks[slot] for slot, _ in changed]
             if before == [value for _, value in changed]:
                 continue
-            if weights is not None:
-                odds = 1.0
-                for slot, value in changed:
-                    odds *= weights[slot][value] / weights[slot][picks[slot]]
-                if odds < 1 and rng.random() >= odds:
-                    continue
             for slot, value in changed:
                 picks[slot] = value
             if len(changed) == 1:
@@ -843,9 +596,7 @@ class Problem:
 
     def _feasible(self, origins: Sequence[int]) -> bool | None:
         """Whether some course keeps these rules: None when the search gave up."""
-        trial = Problem(
-            self.pool, [self.rules[origin] for origin in origins], self._scores
-        )
+        trial = Problem(self.pool, [self.rules[origin] for origin in origins])
         rng = random.Random(0)
         try:
             start = trial.solver.start()

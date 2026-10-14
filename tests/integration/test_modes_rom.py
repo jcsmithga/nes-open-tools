@@ -1,8 +1,8 @@
-"""Integration: seeds rolled from the checked-in presets build into ROMs.
+"""Integration: seeds of each course mode build into ROMs.
 
-The composed draw gives courses no seed had before: eighteen par 3s, a par 58, a
-vanilla course from end to end. This builds some of them on the real vanilla ROM and
-reads the course back out of the cartridge's tables.
+The modes give courses no seed had before: eighteen par 3s, a vanilla course from end
+to end. This builds them on the real vanilla ROM and reads the course back out of the
+cartridge's tables.
 """
 
 from pathlib import Path
@@ -18,7 +18,7 @@ from golf.randomizer.catalog import JP_ROM, US_ROM, Catalog, HoleStore
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate
 from golf.randomizer.manifest import required_roms
-from golf.randomizer.request import load_request, presets
+from golf.randomizer.request import settings_from_request
 
 ROOT = Path(__file__).resolve().parents[2]
 ROM_PATH = ROOT / "nes_open_us.nes"
@@ -27,14 +27,23 @@ pytestmark = pytest.mark.skipif(
     not ROM_PATH.exists(), reason=f"{ROM_PATH.name} not present"
 )
 
-#: preset -> the course par its seeds have
+
+def vanilla_course(course: str, rom: str) -> dict:
+    return {
+        "sources": [rom],
+        "constraints": [{"rule": "vanilla_course", "course": course}],
+    }
+
+
+#: mode -> its request, and the course par its seeds have
 BUILT = {
-    "par_3_course": 54,
-    "executive": 58,
-    "short_front": 63,
-    "tips": 72,
-    "vanilla_nes_us": 72,
-    "vanilla_jp_uk": 72,
+    "par_3": (
+        {"include": ["derived"], "constraints": [{"rule": "par_3"}]},
+        54,
+    ),
+    "standard": ({}, 72),
+    "vanilla_nes_us": (vanilla_course("nes_us", US_ROM), 72),
+    "vanilla_jp_uk": (vanilla_course("jp_uk", JP_ROM), 72),
 }
 
 
@@ -54,11 +63,12 @@ def store(vanilla_courses, vanilla_jp_courses) -> HoleStore:
 
 
 @pytest.mark.parametrize("name", sorted(BUILT))
-def test_a_preset_seed_builds_and_carries_its_course(name, vanilla, catalog, store):
-    settings = load_request(presets()[name], f"rom-{name}")
+def test_a_mode_seed_builds_and_carries_its_course(name, vanilla, catalog, store):
+    request, par = BUILT[name]
+    settings = settings_from_request(request, f"rom-{name}")
     manifest = generate(catalog, CurationSnapshot.load(), settings)
     course = manifest.course
-    assert course.par == BUILT[name]
+    assert course.par == par
 
     unfinished = build_unfinished(manifest, catalog, store, vanilla)
     options = PlayerOptions(VANILLA_NAME, frozenset(VANILLA_CLUBS))
@@ -79,14 +89,15 @@ def test_a_preset_seed_builds_and_carries_its_course(name, vanilla, catalog, sto
         assert rom.read_switched(cell, SCORECARD_BANK, 2) == digits
 
 
-def test_a_vanilla_preset_needs_only_its_own_rom(catalog):
+def test_a_vanilla_course_needs_only_its_own_rom(catalog):
     curation = CurationSnapshot.load()
-    for name, roms in (
-        ("vanilla_nes_us", (US_ROM,)),
-        ("vanilla_nes_japan", (US_ROM,)),
-        ("vanilla_jp_hawaii", (US_ROM, JP_ROM)),
+    for course, rom, roms in (
+        ("nes_us", US_ROM, (US_ROM,)),
+        ("nes_japan", US_ROM, (US_ROM,)),
+        ("jp_hawaii", JP_ROM, (US_ROM, JP_ROM)),
     ):
-        manifest = generate(catalog, curation, load_request(presets()[name], "roms"))
-        if name.startswith("vanilla_nes"):
+        settings = settings_from_request(vanilla_course(course, rom), "roms")
+        manifest = generate(catalog, curation, settings)
+        if rom == US_ROM:
             assert manifest.course.music.startswith("nes_")
         assert required_roms(manifest, catalog) == roms

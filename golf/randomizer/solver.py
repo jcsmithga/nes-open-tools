@@ -17,15 +17,13 @@ will.
 
 The pieces:
 
-- **Aggregates** measure a group of slots: `Count` (how many hold a value from a set) and
-  `Total` (the sum of a number each value carries). Each gives the bounds its measure
-  still has and can narrow domains to keep it inside a range.
-- **Propagators** hold aggregates to something: `Bound` (one aggregate in a range),
-  `Difference` (two aggregates' difference in a range), `Limit` (no more than so many
-  slots sharing a group), `Step` (how a number changes from one slot to the next) and
-  `Gap` (neighboring slots' numbers at least so far apart).
-- **`Tally`** checks several counts and sums together, where each alone would let a
-  state through that no assignment can come out of.
+- **`Count`** measures a group of slots: how many hold a value from a set. It gives the
+  bounds its measure still has and can narrow domains to keep it inside a range.
+- **Propagators** hold counts to something: `Bound` (one count in a range),
+  `Difference` (two counts' difference in a range) and `Limit` (no more than so many
+  slots sharing a group).
+- **`Tally`** checks several counts together, where each alone would let a state
+  through that no assignment can come out of.
 
 A search is bounded by its dead ends and by its work, both counts of steps and never
 time, so the same problem and random generator stop at the same place on any machine.
@@ -35,7 +33,6 @@ See docs/generation_rewrite.md.
 
 import math
 import random
-from bisect import bisect_left, bisect_right
 from collections import deque
 from collections.abc import Callable, Iterator, Sequence
 
@@ -156,190 +153,6 @@ class Count:
         return sum(self.masks[slot] >> picks[slot] & 1 for slot in self.slots)
 
 
-class Values:
-    """A number for each value, indexed so a domain's least and greatest are quick.
-
-    A value with no number (None) is in no range: `known` is the set of those that have
-    one.
-    """
-
-    def __init__(self, numbers: Sequence[float | None]):
-        self.numbers = numbers
-        self.levels = sorted({number for number in numbers if number is not None})
-        at = {level: 0 for level in self.levels}
-        self.known = 0
-        for value, number in enumerate(numbers):
-            if number is not None:
-                at[number] |= 1 << value
-                self.known |= 1 << value
-        #: the values that have a number, from least to greatest
-        self.ascending = sorted(
-            (value for value, number in enumerate(numbers) if number is not None),
-            key=lambda value: (numbers[value], value),
-        )
-        #: at_most[i]: the values numbered levels[i] or less; at_least[i]: or more
-        self.at_most, self.at_least = [], [0] * len(self.levels)
-        running = 0
-        for level in self.levels:
-            running |= at[level]
-            self.at_most.append(running)
-        running = 0
-        for index in range(len(self.levels) - 1, -1, -1):
-            running |= at[self.levels[index]]
-            self.at_least[index] = running
-
-    def of(self, picks: Sequence[int], slots: Sequence[int]) -> list[float] | None:
-        """The numbers of the values some slots were given, or None if one has none."""
-        numbers = [self.numbers[picks[slot]] for slot in slots]
-        if any(number is None for number in numbers):
-            return None
-        return [number for number in numbers if number is not None]
-
-    def least(self, domain: int) -> float:
-        """The smallest number among a domain's values. The domain must hold a known one."""
-        low, high = 0, len(self.levels) - 1
-        while low < high:
-            middle = (low + high) // 2
-            if domain & self.at_most[middle]:
-                high = middle
-            else:
-                low = middle + 1
-        return self.levels[low]
-
-    def greatest(self, domain: int) -> float:
-        low, high = 0, len(self.levels) - 1
-        while low < high:
-            middle = (low + high + 1) // 2
-            if domain & self.at_least[middle]:
-                low = middle
-            else:
-                high = middle - 1
-        return self.levels[low]
-
-    def between(self, low: float, high: float) -> int:
-        """The values numbered from `low` to `high`."""
-        first = bisect_left(self.levels, low - EPSILON)
-        last = bisect_right(self.levels, high + EPSILON) - 1
-        if first > last:
-            return 0
-        return self.at_least[first] & self.at_most[last]
-
-
-class Total:
-    """The sum over `slots` of the number each slot's value carries.
-
-    `groups`, as `(group_of, capacity)`, says the slots also hold values of different
-    groups (no more than `capacity` to a group). Slots that still have the same domain
-    then cannot all take its least value: between them they take at least its least few
-    from different groups, which is a far tighter bound on the sum, and the one that
-    lets a rule out in the tail of what the pool gives (the shortest course, the
-    easiest nine) narrow anything.
-    """
-
-    def __init__(
-        self,
-        slots: Sequence[int],
-        values: Values,
-        groups: tuple[Sequence[int], int] | None = None,
-    ):
-        self.slots = tuple(slots)
-        self.values = values
-        self.groups = groups
-
-    def _extremes(self, domain: int, count: int, order: Sequence[int]) -> list[float]:
-        """The first `count` numbers along `order` that a domain's values offer, taking
-        no more from a group than it may give."""
-        numbers = self.values.numbers
-        group_of, capacity = self.groups  # type: ignore[misc]
-        used: dict[int, int] = {}
-        found: list[float] = []
-        for value in order:
-            if not domain >> value & 1:
-                continue
-            group = group_of[value]
-            taken = used.get(group, 0)
-            if taken >= capacity:
-                continue
-            used[group] = taken + 1
-            found.append(numbers[value])  # type: ignore[arg-type]
-            if len(found) == count:
-                return found
-        raise ContradictionError
-
-    def _ranges(
-        self, domains: Sequence[int]
-    ) -> tuple[float, float, list[tuple[int, float, float]]]:
-        """The least and greatest the sum can be, and for each slot the part of each
-        that is its own: what it may exceed the one by, or fall short of the other by."""
-        values = self.values
-        if self.groups is None:
-            ranges = []
-            for slot in self.slots:
-                domain = domains[slot] & values.known
-                if not domain:
-                    raise ContradictionError
-                ranges.append((slot, values.least(domain), values.greatest(domain)))
-            return (
-                sum(low for _, low, _ in ranges),
-                sum(high for _, _, high in ranges),
-                ranges,
-            )
-        sharing: dict[int, list[int]] = {}
-        for slot in self.slots:
-            sharing.setdefault(domains[slot] & values.known, []).append(slot)
-        least = most = 0.0
-        ranges = []
-        for domain, slots in sharing.items():
-            if not domain:
-                raise ContradictionError
-            if len(slots) == 1 or not domain & (domain - 1):
-                low, high = values.least(domain), values.greatest(domain)
-                least += low * len(slots)
-                most += high * len(slots)
-            else:
-                lows = self._extremes(domain, len(slots), values.ascending)
-                highs = self._extremes(domain, len(slots), values.ascending[::-1])
-                least += sum(lows)
-                most += sum(highs)
-                low, high = lows[-1], highs[-1]
-            ranges.extend((slot, low, high) for slot in slots)
-        return least, most, ranges
-
-    def bounds(self, domains: Sequence[int]) -> tuple[float, float]:
-        least, most, _ = self._ranges(domains)
-        return least, most
-
-    def restrict(self, view: View, low: float, high: float) -> None:
-        values = self.values
-        for slot in self.slots:
-            view.narrow(slot, values.known)
-        least, most, ranges = self._ranges(view.domains)
-        if least > high + EPSILON or most < low - EPSILON:
-            raise ContradictionError
-        for slot, slot_low, slot_high in ranges:
-            ceiling = high - (least - slot_low)
-            floor = low - (most - slot_high)
-            domain = view.domains[slot]
-            if (
-                values.greatest(domain) > ceiling + EPSILON
-                or values.least(domain) < floor - EPSILON
-            ):
-                view.narrow(slot, values.between(floor, ceiling))
-
-    def measure(self, picks: Sequence[int]) -> float:
-        numbers = self.values.numbers
-        total = 0.0
-        for slot in self.slots:
-            number = numbers[picks[slot]]
-            if number is None:
-                return math.nan
-            total += number
-        return total
-
-
-Aggregate = Count | Total
-
-
 # -- Propagators ------------------------------------------------------------------------------
 
 
@@ -363,7 +176,7 @@ class Propagator:
 class Bound(Propagator):
     """`low <= aggregate <= high`."""
 
-    def __init__(self, aggregate: Aggregate, low: float, high: float, origin=None):
+    def __init__(self, aggregate: Count, low: float, high: float, origin=None):
         self.aggregate = aggregate
         self.low, self.high = low, high
         self.slots = aggregate.slots
@@ -391,8 +204,8 @@ class Difference(Propagator):
 
     def __init__(
         self,
-        left: Aggregate,
-        right: Aggregate,
+        left: Count,
+        right: Count,
         low: float,
         high: float,
         origin=None,
@@ -544,102 +357,6 @@ class Limit(Propagator):
         return all(count <= self.capacity for count in counts.values())
 
 
-class Step(Propagator):
-    """`low <= next - previous <= high` for each pair of neighbors along `slots`."""
-
-    def __init__(
-        self,
-        slots: Sequence[int],
-        values: Values,
-        low: float,
-        high: float,
-        origin=None,
-    ):
-        self.slots = tuple(slots)
-        self.values = values
-        self.low, self.high = low, high
-        self.origin = origin
-
-    def propagate(self, view: View) -> None:
-        values, domains = self.values, view.domains
-        for slot in self.slots:
-            view.narrow(slot, values.known)
-        pairs = list(zip(self.slots, self.slots[1:], strict=False))
-        for previous, following in pairs:
-            domain = domains[previous]
-            view.narrow(
-                following,
-                values.between(
-                    values.least(domain) + self.low, values.greatest(domain) + self.high
-                ),
-            )
-        for previous, following in reversed(pairs):
-            domain = domains[following]
-            view.narrow(
-                previous,
-                values.between(
-                    values.least(domain) - self.high, values.greatest(domain) - self.low
-                ),
-            )
-
-    def holds(self, picks: Sequence[int]) -> bool:
-        numbers = self.values.of(picks, self.slots)
-        if numbers is None:
-            return False
-        return all(
-            self.low - EPSILON <= after - before <= self.high + EPSILON
-            for before, after in zip(numbers, numbers[1:], strict=False)
-        )
-
-
-class Gap(Propagator):
-    """Neighbors along `slots` carry numbers at least `least` apart.
-
-    The values allowed beside a value are no range, so this keeps a table of them and
-    only consults it once a neighbor is down to a few values.
-    """
-
-    #: a domain larger than this narrows its neighbors too little to be worth the work
-    SMALL = 12
-
-    def __init__(self, slots: Sequence[int], values: Values, least: float, origin=None):
-        self.slots = tuple(slots)
-        self.values = values
-        self.least = least
-        self.origin = origin
-        numbers = values.numbers
-        self.beside = [
-            0
-            if number is None
-            else values.between(-INFINITY, number - least)
-            | values.between(number + least, INFINITY)
-            for number in numbers
-        ]
-
-    def propagate(self, view: View) -> None:
-        domains = view.domains
-        for slot in self.slots:
-            view.narrow(slot, self.values.known)
-        for one, other in zip(self.slots, self.slots[1:], strict=False):
-            for source, target in ((one, other), (other, one)):
-                domain = domains[source]
-                if domain.bit_count() > self.SMALL:
-                    continue
-                allowed = 0
-                for value in bits(domain):
-                    allowed |= self.beside[value]
-                view.narrow(target, allowed)
-
-    def holds(self, picks: Sequence[int]) -> bool:
-        numbers = self.values.of(picks, self.slots)
-        if numbers is None:
-            return False
-        return all(
-            abs(after - before) >= self.least - EPSILON
-            for before, after in zip(numbers, numbers[1:], strict=False)
-        )
-
-
 class Tally(Propagator):
     """Several counts, checked together.
 
@@ -655,11 +372,6 @@ class Tally(Propagator):
     another sum of them, is in a range: `(plus, minus, low, high)`, each side a list of
     `(cell, atom)`. Every atom's tallies add up to its size, and `caps[cell]` is the
     most slots the whole course can give a cell.
-
-    `sums` brings totals into it: `(atoms, least, most, low, high)` holds a total over
-    those atoms to a range, where `least[cell][n]` and `most[cell][n]` are the least and
-    most that n slots holding the cell's values can add up to. So a course that must be
-    longer than its mix of pars can be is refused before a hole is picked.
 
     The tallies are found by a small search of their own, bounded by `node_limit`
     steps (`root_limit` before any choice is made, when refusing the state proves there
@@ -679,17 +391,7 @@ class Tally(Propagator):
         origin=None,
         node_limit: int = 150,
         root_limit: int = 5000,
-        sums: Sequence[
-            tuple[
-                Sequence[int],
-                Sequence[Sequence[float]],
-                Sequence[Sequence[float]],
-                float,
-                float,
-            ]
-        ] = (),
     ):
-        self.sums = list(sums)
         self.atoms = [tuple(atom) for atom in atoms]
         self.cells = list(cells)
         self.slots = tuple(slot for atom in self.atoms for slot in atom)
@@ -811,30 +513,6 @@ class Tally(Propagator):
                         pending.append(row)
         return True
 
-    def _sums_reachable(self, lows: list[int], highs: list[int]) -> bool:
-        width = len(self.atoms)
-        for atoms, least, most, low, high in self.sums:
-            smallest = largest = 0.0
-            for cell in range(len(self.cells)):
-                # a cell's slots across the atoms draw on the same values, so it is
-                # their number together that the tables are read at
-                fewest = sum(lows[cell * width + atom] for atom in atoms)
-                span = range(
-                    fewest,
-                    min(
-                        sum(highs[cell * width + atom] for atom in atoms),
-                        len(least[cell]) - 1,
-                    )
-                    + 1,
-                )
-                if not span:
-                    return False
-                smallest += min(least[cell][n] for n in span)
-                largest += max(most[cell][n] for n in span)
-            if smallest > high + EPSILON or largest < low - EPSILON:
-                return False
-        return True
-
     #: what one step of the tally search costs, in propagator runs
     STEP_COST = 10
 
@@ -854,9 +532,7 @@ class Tally(Propagator):
             if budget < 0:
                 sure = False
                 return True  # out of patience: let the state through
-            if not self._tighten(lows, highs, dirty) or not self._sums_reachable(
-                lows, highs
-            ):
+            if not self._tighten(lows, highs, dirty):
                 return False
             widest = [i for i in range(len(lows)) if highs[i] > lows[i]]
             if not widest:
