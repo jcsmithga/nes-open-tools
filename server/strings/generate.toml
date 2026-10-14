@@ -185,6 +185,10 @@ text = "Randomize"
 note = "no source ROM checked; check at least one"
 text = "You have to choose at least one source of holes for the randomized course."
 
+[generate.error.mode_needs_sources]
+note = "a par 3 or executive course with NES Open as its only source, whose holes can't fill one (temporary); check Mario Open too"
+text = "Short courses need more sources than just NES Open to generate.  Check Mario Open as well, or choose a different mode."
+
 [generate.error.required_bag_over_max]
 note = "required bag larger than the max; {count} clubs with the putter, {max} the max"
 text = """
@@ -203,10 +207,10 @@ Received an error on form submission.  A refresh might fix it.  If not, ask for 
 mention: <code>generate.error.invalid {field}</code>"""
 
 [generate.error.pool]
-note = "the chosen sources can't fill a course of this mode (e.g. a par 3 course from NES Open alone, or a vanilla course with its ROM unchecked); try more sources or allowing repeats"
+note = "the chosen sources can't fill a course of this mode; try more sources or allowing repeats"
 text = """
-Unable to fill out the course with these sources and this Total Par.  Add more sources or
-allow multiple holes in the same family."""
+Unable to fill out the course with these sources and this Mode.  Add more sources or
+change the requested mode."""
 
 [generate.error.rate_limited]
 note = "too many seeds from this address in a short time; wait a minute and try again"

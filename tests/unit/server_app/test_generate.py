@@ -142,6 +142,19 @@ def test_a_refused_form_comes_back_with_its_values_and_a_notice(unwritten_client
     assert seed_count(unwritten_client) == 0
 
 
+@pytest.mark.parametrize("mode", ["par_3", "executive"])
+def test_a_mode_nes_open_alone_cannot_fill_is_refused(unwritten_client, mode):
+    form = FormState.default()
+    form.mode = mode
+    form.sources = {"nes_open_us"}
+    response = post_generate(unwritten_client, form)
+    assert response.status_code == 400
+    page = response.text
+    assert 'role="alert"' in page and "generate.error.mode_needs_sources" in page
+    assert re.search(rf'<option value="{mode}"\s+selected', page)
+    assert seed_count(unwritten_client) == 0
+
+
 def test_a_club_rule_refusal_names_its_values(unwritten_client):
     form = FormState.default()
     form.clubs_max = "2"

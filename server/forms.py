@@ -40,6 +40,7 @@ from golf.core.patches.sram_defaults import (
     parse_club,
 )
 from golf.randomizer.build import FINISH_ABI_VERSION, BuildError, PlayerOptions
+from golf.randomizer.catalog import US_ROM
 from golf.randomizer.manifest import (
     SOURCES,
     ClubRules,
@@ -71,9 +72,13 @@ DRAW_RULE_CHOICES: dict[str, int | None] = {
     "experts_2": 2,
     "uniform": None,
 }
+#: modes NES Open's holes alone can't fill, with its 12 par 3s; temporary, until the
+#: pool grows
+MODES_NOT_FROM_US_ALONE = frozenset({"par_3", "executive"})
 
 #: FormError reasons, each shown by its own strings key in generate.html
 NO_SOURCES = "no_sources"
+MODE_NEEDS_SOURCES = "mode_needs_sources"
 REQUIRED_BAG_OVER_MAX = "required_bag_over_max"
 REQUIRED_BAG_BANNED = "required_bag_banned"
 INVALID = "invalid"
@@ -223,6 +228,8 @@ def request_from_state(state: FormState) -> dict:
         raise FormError(NO_SOURCES)
     if not state.sources <= set(SOURCES):
         raise FormError(INVALID, field="sources")
+    if state.mode in MODES_NOT_FROM_US_ALONE and state.sources == {US_ROM}:
+        raise FormError(MODE_NEEDS_SOURCES)
     if state.draw_rule not in DRAW_RULE_CHOICES:
         raise FormError(INVALID, field="draw_rule")
     for name in ("mirror_chance", "hazard_chance"):

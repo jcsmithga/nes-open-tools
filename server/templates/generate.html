@@ -10,6 +10,7 @@
   {% if error %}
     <article class="form-error" role="alert">
       {% if error == "no_sources" %}{{ t("generate.error.no_sources") }}
+      {% elif error == "mode_needs_sources" %}{{ t("generate.error.mode_needs_sources") }}
       {% elif error == "required_bag_over_max" %}{{ t("generate.error.required_bag_over_max", count=error_values.count, max=error_values.max) }}
       {% elif error == "required_bag_banned" %}{{ t("generate.error.required_bag_banned", clubs=error_values.clubs) }}
       {% elif error == "pool" %}{{ t("generate.error.pool") }}
