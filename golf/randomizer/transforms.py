@@ -7,8 +7,8 @@ operations in `golf/algorithms/`; this module names them.
 A golden test hashes every transform's output for the vanilla holes, as a regression
 test: output that changes on purpose updates its digest, and needs a new transform
 version only if what the transform means changed (ADR 0024, `docs/hole_transforms.md`).
-A version stays in `TRANSFORMS` after a newer one ships, because the site still loads the
-manifests that name it.
+A version can leave `TRANSFORMS` once nothing generates it: a stored seed's manifest is
+read without checking its transform names.
 """
 
 from collections.abc import Callable, Iterable

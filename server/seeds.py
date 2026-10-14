@@ -8,8 +8,8 @@ Every slot has its hole, as built, stored in `hole_data` under its content hash,
 `seed_holes` row keeps what the seed's pages would otherwise ask the catalog: the hole's
 distance, author and source. The seed row keeps the ROMs a download needs. A seed is what
 was stored when it was made (ADR 0024), so nothing a page shows depends on a later
-release's transforms or catalog (ADR 0021). `backfill` fills these in for seeds stored
-before they were kept.
+release's transforms or catalog (ADR 0021). A stored manifest is read as a
+`StoredManifest`, whatever schema it was issued in.
 """
 
 import hashlib
@@ -27,12 +27,11 @@ from golf.formats.hole_data import HoleData
 from golf.randomizer.catalog import (
     Catalog,
     CatalogEntry,
-    HoleStore,
     RomSource,
     canonical_dict,
     canonical_json,
 )
-from golf.randomizer.manifest import Manifest, ManifestError, required_roms
+from golf.randomizer.manifest import Manifest, StoredManifest, required_roms
 
 from . import audit
 from .db import Database
@@ -102,29 +101,18 @@ class MissingHolesError(ValueError):
     """A seed was stored without the 18 holes its build made."""
 
 
-class BackfillError(RuntimeError):
-    """A stored seed that cannot be filled in: a manifest this release does not load, or
-    a transformed hole that was never stored."""
-
-
 @dataclass(frozen=True)
 class StoredHole:
     """What a seed keeps of one slot's hole beyond its manifest: the hole as built, and
     the catalog's facts about it."""
 
     content_hash: str
-    #: the zlib-compressed canonical JSON, None when the row is already in `hole_data`
-    data: bytes | None
+    #: the zlib-compressed canonical JSON
+    data: bytes
     distance: int
     author: str
     #: where a vanilla hole comes from; None for any other kind
     source: RomSource | None
-
-
-def _facts(entry: CatalogEntry) -> tuple[str, RomSource | None]:
-    """The author and source a seed keeps from a hole's catalog entry."""
-    source = entry.source if isinstance(entry.source, RomSource) else None
-    return entry.author, source
 
 
 def stored_hole(entry: CatalogEntry, hole: HoleData) -> StoredHole:
@@ -134,19 +122,13 @@ def stored_hole(entry: CatalogEntry, hole: HoleData) -> StoredHole:
         hashlib.sha256(text).hexdigest(),
         zlib.compress(text, 9),
         canonical_dict(hole)["distance"],
-        *_facts(entry),
+        entry.author,
+        entry.source if isinstance(entry.source, RomSource) else None,
     )
 
 
-def _already_stored(
-    entry: CatalogEntry, content_hash: str, data: dict[str, Any]
-) -> StoredHole:
-    """A slot's hole that `hole_data` already holds, as `data`."""
-    return StoredHole(content_hash, None, data["distance"], *_facts(entry))
-
-
 def stored_holes(
-    manifest: Manifest, holes: Sequence[HoleData], catalog: Catalog
+    manifest: StoredManifest, holes: Sequence[HoleData], catalog: Catalog
 ) -> list[StoredHole]:
     """Each slot's hole as built, with its catalog facts.
 
@@ -165,7 +147,7 @@ def stored_holes(
 
 
 def hole_rows(
-    seed_id: str, manifest: Manifest, holes: Sequence[StoredHole]
+    seed_id: str, manifest: StoredManifest, holes: Sequence[StoredHole]
 ) -> list[tuple]:
     """The seed's `seed_holes` rows, in `SEED_HOLE_COLUMNS` order: each slot with the pin
     its wind seed gives, its wind anchors and its stored hole."""
@@ -221,7 +203,7 @@ _INSERT_SEED_HOLE = (
 
 
 def _hole_data_rows(holes: Sequence[StoredHole]) -> list[tuple[str, bytes]]:
-    return [(hole.content_hash, hole.data) for hole in holes if hole.data is not None]
+    return [(hole.content_hash, hole.data) for hole in holes]
 
 
 def _is_id_collision(problem: sqlite3.IntegrityError) -> bool:
@@ -247,8 +229,35 @@ def insert_seed(
     built from, which gives each hole's author and source and the seed's required ROMs. A
     drawn id that is already taken is drawn again, up to INSERT_ATTEMPTS times.
     """
+    return insert_issued_seed(
+        db,
+        manifest_text(manifest),
+        unfinished_ips,
+        holes,
+        catalog,
+        creator_id=creator_id,
+        now=now,
+        draw=draw,
+    )
+
+
+def insert_issued_seed(
+    db: Database,
+    text: str,
+    unfinished_ips: bytes,
+    holes: Sequence[HoleData],
+    catalog: Catalog,
+    creator_id: int | None = None,
+    now: str | None = None,
+    draw: Callable[[], int] = new_qr_seed_id,
+) -> str:
+    """`insert_seed` for a manifest's text as issued, in any schema.
+
+    The seed's rows are read from the text as `load_seed` reads it back, so a test can
+    store a seed as an older release made it.
+    """
     created_at = now if now is not None else utc_now()
-    text = manifest_text(manifest)
+    manifest = StoredManifest.from_json(json.loads(text))
     stored = stored_holes(manifest, holes, catalog)
     roms = json.dumps(list(required_roms(manifest, catalog)))
     for _ in range(INSERT_ATTEMPTS):
@@ -299,7 +308,8 @@ class SeedRow:
     qr_seed_id: int
     #: the manifest exactly as stored
     manifest_json: str
-    manifest: Manifest
+    #: the manifest as read for showing and finishing the seed, whatever its schema
+    manifest: StoredManifest
     build_version: int
     finish_abi_version: int
     #: the vanilla ROMs a download needs, as they were when the seed was made
@@ -330,7 +340,7 @@ def load_seed(db: Database, seed_id: str) -> SeedRow | None:
         ).fetchone()
     if row is None:
         return None
-    manifest = Manifest.from_json(json.loads(row["manifest"]))
+    manifest = StoredManifest.from_json(json.loads(row["manifest"]))
     if row["build_version"] != manifest.build_version:
         raise RuntimeError(
             f"seed {row['id']} stores build version {row['build_version']} but its "
@@ -425,20 +435,12 @@ def load_unfinished_ips(db: Database, seed_id: str) -> bytes | None:
     return None if row is None else bytes(row["unfinished_ips"])
 
 
-# -- Backfilling -----------------------------------------------------------------------------
+# -- Seeds stored before migration 7 ----------------------------------------------------------
 
 #: what a seed stored before its holes were kept lacks, and how to fill it in
-NOT_BACKFILLED = "predates stored holes; run golf-site-backfill"
-
-
-#: the `seed_holes` columns a backfill fills in
-_BACKFILLED_COLUMNS = (
-    "data_hash",
-    "distance",
-    "author",
-    "source_rom",
-    "source_course",
-    "source_hole",
+NOT_BACKFILLED = (
+    "predates stored holes; fill it in with golf-site-backfill from server-v4.1.3 "
+    "(docs/deployment.md)"
 )
 
 
@@ -455,93 +457,6 @@ def unfilled_seeds(db: Database) -> list[str]:
             """
         ).fetchall()
     return [row[0] for row in rows]
-
-
-def _backfilled_holes(
-    db: Database, seed_id: str, manifest: Manifest, catalog: Catalog, store: HoleStore
-) -> list[StoredHole]:
-    with db.transaction() as conn:
-        hashes = [
-            row["data_hash"]
-            for row in conn.execute(
-                "SELECT data_hash FROM seed_holes WHERE seed_id = ? ORDER BY position",
-                (seed_id,),
-            )
-        ]
-    holes = []
-    for position, (slot, data_hash) in enumerate(
-        zip(manifest.course.holes, hashes, strict=True), start=1
-    ):
-        entry = catalog[slot.id]
-        if data_hash is not None:
-            holes.append(
-                _already_stored(entry, data_hash, load_hole_data(db, data_hash))
-            )
-        elif slot.transforms:
-            # this release's transforms may not give the hole the seed was built with
-            raise BackfillError(
-                f"seed {seed_id} hole {position} ({slot.id}) has transforms and no "
-                "stored hole"
-            )
-        else:
-            # untransformed, the hole as built is the catalog's: content hashes hold it
-            holes.append(stored_hole(entry, store.load(entry, even_withdrawn=True)))
-    return holes
-
-
-def backfill(
-    db: Database, catalog: Catalog, store: HoleStore, write: bool = True
-) -> list[str]:
-    """Fill in every unfilled seed's holes, catalog facts and required ROMs, and return the
-    seeds filled.
-
-    Everything is worked out before anything is written, and written in one transaction,
-    so a seed whose holes the store lacks (CatalogError), or whose manifest or holes this
-    release cannot read (BackfillError), leaves the database as it was. `write=False`
-    only works it out.
-    """
-    filled: list[tuple[str, Manifest, list[StoredHole], str]] = []
-    for seed_id in unfilled_seeds(db):
-        with db.transaction() as conn:
-            text = conn.execute(
-                "SELECT manifest FROM seeds WHERE id = ?", (seed_id,)
-            ).fetchone()["manifest"]
-        try:
-            manifest = Manifest.from_json(json.loads(text))
-        except ManifestError as problem:
-            raise BackfillError(
-                f"seed {seed_id}: its manifest does not load: {problem}"
-            ) from None
-        holes = _backfilled_holes(db, seed_id, manifest, catalog, store)
-        roms = json.dumps(list(required_roms(manifest, catalog)))
-        filled.append((seed_id, manifest, holes, roms))
-    if write and filled:
-        with db.transaction() as conn:
-            for seed_id, manifest, holes, roms in filled:
-                conn.execute(
-                    "UPDATE seeds SET required_roms = ? WHERE id = ?", (roms, seed_id)
-                )
-                conn.executemany(
-                    "INSERT OR IGNORE INTO hole_data VALUES (?, ?)",
-                    _hole_data_rows(holes),
-                )
-                conn.executemany(
-                    """
-                    UPDATE seed_holes
-                    SET data_hash = ?, distance = ?, author = ?,
-                        source_rom = ?, source_course = ?, source_hole = ?
-                    WHERE seed_id = ? AND position = ?
-                    """,  # the SET columns are _BACKFILLED_COLUMNS
-                    [
-                        tuple(row[name] for name in _BACKFILLED_COLUMNS)
-                        + (seed_id, row["position"])
-                        for row in (
-                            dict(zip(SEED_HOLE_COLUMNS, values, strict=True))
-                            for values in hole_rows(seed_id, manifest, holes)
-                        )
-                    ],
-                )
-    return [seed_id for seed_id, *_ in filled]
 
 
 def _note(text: str | None) -> str | None:

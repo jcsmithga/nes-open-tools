@@ -9,7 +9,7 @@ from pathlib import Path
 from golf.core.palettes import GREENS_WIDTH, TERRAIN_WIDTH
 from golf.formats.hole_data import HoleData
 from golf.randomizer.catalog import Catalog
-from golf.randomizer.manifest import Manifest
+from golf.randomizer.manifest import Manifest, StoredManifest
 
 
 def synthetic_hole(number: int = 1) -> HoleData:
@@ -41,7 +41,9 @@ def synthetic_hole(number: int = 1) -> HoleData:
     return hole
 
 
-def built_holes(manifest: Manifest, catalog: Catalog) -> tuple[HoleData, ...]:
+def built_holes(
+    manifest: Manifest | StoredManifest, catalog: Catalog
+) -> tuple[HoleData, ...]:
     """Made-up holes standing in for a manifest's 18 as built: each with its slot's par
     and its catalog entry's distance, which the seed page shows from the stored hole."""
     holes = []

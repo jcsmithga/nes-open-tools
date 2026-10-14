@@ -46,6 +46,7 @@ from golf.randomizer.manifest import (
     Manifest,
     ManifestError,
     Settings,
+    StoredManifest,
     required_roms,
 )
 from golf.randomizer.music import RANDOM, TRACKS
@@ -151,7 +152,9 @@ def describe_clubs(rules: ClubRules) -> str:
 
 
 def summary(
-    manifest: Manifest, catalog: Catalog, curation: CurationSnapshot | None
+    manifest: Manifest | StoredManifest,
+    catalog: Catalog,
+    curation: CurationSnapshot | None,
 ) -> list[str]:
     course = manifest.course
     lines = [
@@ -185,6 +188,11 @@ def summary(
 
 def load_manifest(path: Path) -> Manifest:
     return Manifest.from_json(json.loads(path.read_text()))
+
+
+def load_stored_manifest(path: Path) -> StoredManifest:
+    """A manifest file in any schema, such as a stored seed's from `/h/<id>.json`, to show."""
+    return StoredManifest.from_json(json.loads(path.read_text()))
 
 
 def curation_or_none(path: Path) -> CurationSnapshot | None:
@@ -267,7 +275,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def cmd_show(args: argparse.Namespace) -> int:
-    manifest = load_manifest(args.manifest)
+    manifest = load_stored_manifest(args.manifest)
     catalog = Catalog.load(args.catalog)
     for line in summary(manifest, catalog, curation_or_none(args.curation)):
         print(line)
@@ -439,7 +447,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build.set_defaults(func=cmd_build)
 
-    show = commands.add_parser("show", help="print a manifest's course")
+    show = commands.add_parser(
+        "show", help="print a manifest's course, in any schema a seed was stored in"
+    )
     show.add_argument("manifest", type=Path, help="manifest file")
     show.add_argument(
         "--catalog", type=Path, default=DEFAULT_INDEX, help="catalog index"

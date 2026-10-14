@@ -23,8 +23,6 @@ from golf.randomizer.manifest import (
     DEFAULT_DRAW_RULE,
     LEGACY_BUILD_VERSION,
     LEGACY_FINISH_ABI_VERSION,
-    LEGACY_SCHEMA,
-    LEGACY_SCHEMAS,
     SCHEMA,
     ClubRules,
     Course,
@@ -33,6 +31,7 @@ from golf.randomizer.manifest import (
     ManifestError,
     Settings,
     Slot,
+    StoredManifest,
     required_roms,
 )
 from tests.legacy_manifest import as_schema
@@ -231,13 +230,25 @@ def test_rejects_bad_slots():
         Slot(HoleId("nes_us/01"), 4, 0, ("mirror",))
     with pytest.raises(ManifestError, match="transform must be a string"):
         Slot.from_json(
-            {"id": "nes_us/01", "par": 4, "transforms": [1], "wind_seed": 0},
-            legacy=True,
+            {
+                "id": "nes_us/01",
+                "par": 4,
+                "transforms": [1],
+                "wind_seed": 0,
+                "wind_direction": 0,
+                "wind_speed": 0,
+            }
         )
     with pytest.raises(ManifestError, match="not canonical"):
         Slot.from_json(
-            {"id": "nes_us/01@1", "par": 4, "transforms": [], "wind_seed": 0},
-            legacy=True,
+            {
+                "id": "nes_us/01@1",
+                "par": 4,
+                "transforms": [],
+                "wind_seed": 0,
+                "wind_direction": 0,
+                "wind_speed": 0,
+            }
         )
 
 
@@ -302,93 +313,6 @@ def test_rejects_missing_and_unknown_fields():
         Manifest.from_json(data)
 
 
-UNIFORM_SETTINGS = Settings(prng_seed="abc", draw_rule=DrawRule())
-
-
-def test_schema_one_loads_with_its_implicit_versions_and_keeps_its_shape():
-    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), LEGACY_SCHEMA)
-    loaded = Manifest.from_json(data)
-    assert loaded.build_version == LEGACY_BUILD_VERSION
-    assert loaded.finish_abi_version == LEGACY_FINISH_ABI_VERSION
-    assert loaded.settings.draw_rule == DrawRule()
-    assert loaded.to_json() == data
-
-
-def test_schema_one_cannot_claim_another_build_version():
-    with pytest.raises(ManifestError, match="implies build_version 1"):
-        manifest(schema=LEGACY_SCHEMA, build_version=2, settings=UNIFORM_SETTINGS)
-
-
-def test_schema_one_cannot_claim_another_finish_abi():
-    with pytest.raises(ManifestError, match="implies finish_abi_version 1"):
-        manifest(
-            schema=LEGACY_SCHEMA,
-            build_version=LEGACY_BUILD_VERSION,
-            finish_abi_version=2,
-            settings=UNIFORM_SETTINGS,
-        )
-
-
-def test_schema_two_loads_as_a_uniform_draw_and_keeps_its_shape():
-    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), 2)
-    loaded = Manifest.from_json(data)
-    assert loaded.settings.draw_rule == DrawRule()
-    assert loaded.to_json() == data
-
-
-@pytest.mark.parametrize("schema", LEGACY_SCHEMAS)
-def test_a_legacy_schema_loads_with_the_wind_its_seeds_deal(schema):
-    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), schema)
-    assert "wind_direction" not in data["course"]["holes"][0]
-    loaded = Manifest.from_json(data)
-    assert loaded.settings.wind_speed_profile == "vanilla"
-    assert loaded.settings.wind_direction_profile == "vanilla"
-    for slot in loaded.course.holes:
-        forecast = predict_hole(slot.wind_seed, swings=0)
-        assert slot.wind == (forecast.direction_anchor, forecast.speed_anchor)
-    assert loaded.to_json() == data
-
-
-@pytest.mark.parametrize("schema", LEGACY_SCHEMAS)
-def test_a_legacy_schema_refuses_wind_profiles_and_anchors(schema):
-    legacy = dict(
-        schema=schema,
-        build_version=LEGACY_BUILD_VERSION,
-        finish_abi_version=LEGACY_FINISH_ABI_VERSION,
-    )
-    with pytest.raises(ManifestError, match="no wind profiles or anchors"):
-        manifest(
-            **legacy, settings=replace(UNIFORM_SETTINGS, wind_speed_profile="strong")
-        )
-    holes = slots()
-    dealt_direction, _ = holes[0].dealt_wind
-    moved = replace(holes[0], wind_direction=dealt_direction ^ 0x80)
-    with pytest.raises(ManifestError, match="no wind profiles or anchors"):
-        manifest(
-            **legacy,
-            settings=UNIFORM_SETTINGS,
-            course=course(holes=(moved, *holes[1:])),
-        )
-    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), schema)
-    data["course"]["holes"][0]["wind_speed"] = 3
-    with pytest.raises(ManifestError, match="unknown \\['wind_speed'\\]"):
-        Manifest.from_json(data)
-
-
-@pytest.mark.parametrize("schema", LEGACY_SCHEMAS)
-def test_a_legacy_schema_refuses_a_draw_rule(schema):
-    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), schema)
-    data["settings"]["draw_rule"] = {"rule": "uniform"}
-    with pytest.raises(ManifestError, match="unknown \\['draw_rule'\\]"):
-        Manifest.from_json(data)
-    with pytest.raises(ManifestError, match="drawn uniformly"):
-        manifest(
-            schema=schema,
-            build_version=LEGACY_BUILD_VERSION,
-            finish_abi_version=LEGACY_FINISH_ABI_VERSION,
-        )
-
-
 def test_the_current_schema_requires_a_draw_rule():
     data = manifest().to_json()
     del data["settings"]["draw_rule"]
@@ -436,14 +360,14 @@ def test_settings_refuse_a_draw_rule_that_is_not_one():
 
 
 @pytest.mark.parametrize("value", [None, 0, -1, True, "2"])
-def test_schema_two_requires_a_positive_integer_build_version(value):
+def test_a_manifest_requires_a_positive_integer_build_version(value):
     data = manifest().to_json()
     data["build_version"] = value
     with pytest.raises(ManifestError, match="build_version"):
         Manifest.from_json(data)
 
 
-def test_schema_two_requires_the_build_version_field():
+def test_a_manifest_requires_the_build_version_field():
     data = manifest().to_json()
     del data["build_version"]
     with pytest.raises(ManifestError, match="missing fields.*build_version"):
@@ -451,24 +375,27 @@ def test_schema_two_requires_the_build_version_field():
 
 
 @pytest.mark.parametrize("value", [None, 0, -1, True, "1"])
-def test_schema_two_requires_a_positive_integer_finish_abi_version(value):
+def test_a_manifest_requires_a_positive_integer_finish_abi_version(value):
     data = manifest().to_json()
     data["finish_abi_version"] = value
     with pytest.raises(ManifestError, match="finish_abi_version"):
         Manifest.from_json(data)
 
 
-def test_schema_two_requires_the_finish_abi_version_field():
+def test_a_manifest_requires_the_finish_abi_version_field():
     data = manifest().to_json()
     del data["finish_abi_version"]
     with pytest.raises(ManifestError, match="missing fields.*finish_abi_version"):
         Manifest.from_json(data)
 
 
-def test_rejects_other_schemas_before_reading_fields():
-    data = manifest().to_json() | {"schema": SCHEMA + 1, "something_new": 1}
-    with pytest.raises(ManifestError, match=f"schema {SCHEMA + 1}"):
+@pytest.mark.parametrize("schema", [1, 2, 3, SCHEMA + 1])
+def test_the_strict_loader_reads_only_this_releases_schema(schema):
+    data = manifest().to_json() | {"schema": schema, "something_new": 1}
+    with pytest.raises(ManifestError, match=f"schema {schema} .*StoredManifest"):
         Manifest.from_json(data)
+    with pytest.raises(ManifestError, match="StoredManifest"):
+        manifest(schema=schema)
 
 
 def test_a_manifest_records_its_prng_seed():
@@ -495,29 +422,6 @@ def test_the_current_schema_requires_include():
     data = manifest().to_json()
     del data["settings"]["include"]
     with pytest.raises(ManifestError, match="include"):
-        Manifest.from_json(data)
-
-
-def test_schema_three_loads_with_a_vanilla_pool_and_keeps_its_shape():
-    data = as_schema(manifest().to_json(), 3)
-    assert "include" not in data["settings"]
-    loaded = Manifest.from_json(data)
-    assert loaded.schema == 3
-    assert loaded.settings.include == frozenset()
-    assert loaded.settings.draw_rule == manifest().settings.draw_rule
-    assert loaded.to_json() == data
-
-
-@pytest.mark.parametrize("schema", [1, 2, 3])
-def test_a_schema_before_include_refuses_one(schema):
-    settings = Settings(
-        prng_seed="abc", draw_rule=DrawRule(), include=frozenset({"derived"})
-    )
-    with pytest.raises(ManifestError, match="has no include"):
-        manifest(schema=schema, build_version=1, settings=settings)
-    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), schema)
-    data["settings"]["include"] = []
-    with pytest.raises(ManifestError, match="unknown"):
         Manifest.from_json(data)
 
 
@@ -571,3 +475,150 @@ def test_required_roms_count_holes_and_music():
         US_ROM,
         JP_ROM,
     )
+
+
+# -- Stored manifests -----------------------------------------------------------------------
+
+UNIFORM_SETTINGS = Settings(prng_seed="abc", draw_rule=DrawRule())
+
+
+def issued(schema: int, **overrides) -> dict:
+    """A manifest's JSON as a release of `schema` issued it, its seed made as that
+    release's were: a uniform draw, and the wind its seeds deal."""
+    value = manifest(**({"settings": UNIFORM_SETTINGS} | overrides))
+    return value.to_json() if schema == SCHEMA else as_schema(value.to_json(), schema)
+
+
+@pytest.mark.parametrize("schema", [1, 2, 3, SCHEMA])
+def test_a_stored_manifest_of_any_schema_reads_as_its_seed_was_made(schema):
+    stored = StoredManifest.from_json(issued(schema))
+    made = manifest(settings=UNIFORM_SETTINGS)
+    assert stored.schema == schema
+    if schema == 1:
+        assert (stored.build_version, stored.finish_abi_version) == (
+            LEGACY_BUILD_VERSION,
+            LEGACY_FINISH_ABI_VERSION,
+        )
+    else:
+        assert (stored.build_version, stored.finish_abi_version) == (
+            made.build_version,
+            made.finish_abi_version,
+        )
+    settings = stored.settings
+    assert (settings.prng_seed, settings.par) == ("abc", made.settings.par)
+    assert settings.sources == made.settings.sources
+    assert settings.include == frozenset()
+    assert settings.draw_rule == DrawRule()
+    assert (settings.wind_speed_profile, settings.wind_direction_profile) == (
+        "vanilla",
+        "vanilla",
+    )
+    course = stored.course
+    assert (course.music, course.mercy_point, course.clubs) == (
+        made.course.music,
+        made.course.mercy_point,
+        made.course.clubs,
+    )
+    assert (course.magic_words, course.sram_magic) == (
+        made.course.magic_words,
+        made.course.sram_magic,
+    )
+    assert (course.par, course.layout) == (made.course.par, made.course.layout)
+    for slot, made_slot in zip(course.holes, made.course.holes, strict=True):
+        assert (slot.id, slot.par, slot.wind_seed) == (
+            made_slot.id,
+            made_slot.par,
+            made_slot.wind_seed,
+        )
+        assert slot.wind == made_slot.dealt_wind == made_slot.wind
+
+
+def test_a_stored_manifest_reads_every_field_the_current_schema_has():
+    settings = Settings(
+        prng_seed="abc",
+        include=frozenset({"derived"}),
+        exclude_tags=frozenset({"short"}),
+        allow_family_repeats=True,
+        draw_rule=DrawRule.expert_cap(0),
+        wind_speed_profile="strong",
+        wind_direction_profile="out_and_back",
+    )
+    holes = slots()
+    moved = replace(
+        holes[0], wind_direction=0x80, wind_speed=10, transforms=("mirror@1",)
+    )
+    value = manifest(settings=settings, course=course(holes=(moved, *holes[1:])))
+    stored = StoredManifest.from_json(value.to_json())
+    assert stored.settings.include == frozenset({"derived"})
+    assert stored.settings.exclude_tags == frozenset({"short"})
+    assert stored.settings.allow_family_repeats
+    assert stored.settings.draw_rule == DrawRule.expert_cap(0)
+    assert stored.settings.wind_speed_profile == "strong"
+    assert stored.settings.wind_direction_profile == "out_and_back"
+    assert stored.course.holes[0].wind == (0x80, 10)
+    assert stored.course.holes[0].transforms == ("mirror@1",)
+
+
+def test_a_stored_manifest_ignores_fields_this_release_does_not_read():
+    data = issued(SCHEMA)
+    data["request"] = {"sets": []}
+    data["settings"]["practice_swing"] = True
+    data["course"]["holes"][0]["lie"] = "fairway"
+    data["course"]["theme"] = {"palette": 3}
+    assert StoredManifest.from_json(data).course.par == manifest().course.par
+
+
+def test_a_stored_manifest_keeps_transform_names_the_registry_lacks():
+    data = issued(SCHEMA)
+    data["course"]["holes"][0]["transforms"] = ["spin@9:1", "mirror@1"]
+    stored = StoredManifest.from_json(data)
+    assert stored.course.holes[0].transforms == ("spin@9:1", "mirror@1")
+    with pytest.raises(ManifestError, match="unknown transform 'spin@9:1'"):
+        Manifest.from_json(data)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("schema",),
+        ("generator_version",),
+        ("settings", "par"),
+        ("settings", "sources"),
+        ("course", "sram_magic"),
+        ("course", "clubs"),
+        ("course", "magic_words"),
+    ],
+)
+def test_a_stored_manifest_needs_the_fields_every_schema_has(path):
+    data = issued(1)
+    target = data
+    for key in path[:-1]:
+        target = target[key]
+    del target[path[-1]]
+    with pytest.raises(ManifestError, match=f"missing field '{path[-1]}'"):
+        StoredManifest.from_json(data)
+
+
+@pytest.mark.parametrize(
+    "change, message",
+    [
+        (lambda data: data.update(finish_abi_version=0), "finish_abi_version"),
+        (lambda data: data.update(build_version="6"), "build_version"),
+        (lambda data: data["course"].update(sram_magic=0x00FF), "sram"),
+        (lambda data: data["course"].update(sram_magic=True), "sram_magic"),
+        (lambda data: data["course"]["clubs"].update(max=0), "clubs max"),
+        (lambda data: data["course"]["clubs"].update(banned=["PT"]), "putter"),
+        (
+            lambda data: data["settings"].update(draw_rule={"rule": "ceiling"}),
+            "draw rule",
+        ),
+        (lambda data: data["course"]["holes"][0].update(wind_speed=11), "wind_speed"),
+        (lambda data: data["course"]["holes"][0].update(par=6), "par"),
+        (lambda data: data["course"]["holes"][0].update(id="Not An Id"), "hole"),
+    ],
+)
+def test_a_stored_manifest_refuses_values_no_release_issued(change, message):
+    data = issued(SCHEMA)
+    change(data)
+    with pytest.raises(ManifestError, match=message):
+        StoredManifest.from_json(data)

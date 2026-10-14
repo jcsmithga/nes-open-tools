@@ -19,7 +19,7 @@ import sqlite3
 from dataclasses import dataclass
 
 from golf.qr import payload
-from golf.randomizer.manifest import Manifest
+from golf.randomizer.manifest import StoredManifest
 
 from . import audit
 from .db import Database
@@ -399,7 +399,7 @@ def rounds_for_user(db: Database, user_id: int) -> list[UserRound]:
         ).fetchall()
     listings = []
     for row in rows:
-        course = Manifest.from_json(json.loads(row["manifest"])).course
+        course = StoredManifest.from_json(json.loads(row["manifest"])).course
         listings.append(
             UserRound(
                 public_id=row["public_id"],

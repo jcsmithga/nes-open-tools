@@ -1,11 +1,13 @@
 """Storing a seed without building it, for tests of what the site does with stored seeds."""
 
+import json
 from functools import cache
 
 from golf.randomizer.catalog import Catalog
-from golf.randomizer.manifest import Manifest
+from golf.randomizer.manifest import Manifest, StoredManifest
 from server.db import Database
-from server.seeds import insert_seed
+from server.seeds import insert_issued_seed, insert_seed
+from tests.legacy_manifest import as_schema
 from tests.synthetic_holes import built_holes
 
 
@@ -19,15 +21,38 @@ def store_seed(
     manifest: Manifest,
     ips: bytes = b"PATCHEOF",
     catalog: Catalog | None = None,
+    schema: int | None = None,
     **kwargs,
 ) -> str:
     """Insert `manifest` as a seed whose build made synthetic holes (`built_holes`).
 
-    The catalog defaults to the checked-in one; `kwargs` go to `insert_seed`.
+    With `schema`, the manifest is stored as a release of that schema issued it
+    (`as_schema`). The catalog defaults to the checked-in one; `kwargs` go to
+    `insert_seed`.
     """
     catalog = catalog if catalog is not None else checked_in_catalog()
+    if schema is not None:
+        issued = as_schema(manifest.to_json(), schema)
+        return store_issued(db, issued, ips, catalog, **kwargs)
     return insert_seed(
         db, manifest, ips, built_holes(manifest, catalog), catalog, **kwargs
+    )
+
+
+def store_issued(
+    db: Database,
+    issued: dict,
+    ips: bytes = b"PATCHEOF",
+    catalog: Catalog | None = None,
+    **kwargs,
+) -> str:
+    """Insert a manifest's JSON as issued, in any schema, as a seed whose build made
+    synthetic holes. `kwargs` go to `insert_issued_seed`."""
+    catalog = catalog if catalog is not None else checked_in_catalog()
+    stored = StoredManifest.from_json(issued)
+    text = json.dumps(issued, indent=2) + "\n"
+    return insert_issued_seed(
+        db, text, ips, built_holes(stored, catalog), catalog, **kwargs
     )
 
 

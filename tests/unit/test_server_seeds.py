@@ -8,35 +8,29 @@ from dataclasses import replace
 import pytest
 
 from golf.core.rng import predict_hole
-from golf.formats.hole_data import HoleData
 from golf.randomizer.catalog import (
     Catalog,
     CatalogEntry,
-    CatalogError,
     DerivedSource,
     HoleId,
-    HoleStore,
     RomSource,
     canonical_json,
     content_hash,
-    sync_vanilla,
 )
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate
-from golf.randomizer.manifest import Manifest, Settings, required_roms
+from golf.randomizer.manifest import Manifest, Settings, StoredManifest, required_roms
 from server.db import Database
 from server.seeds import (
     ID_LENGTH,
     INSERT_ATTEMPTS,
     MAX_QR_SEED_ID,
-    BackfillError,
     MissingHolesError,
     SeedAlreadyWithdrawnError,
     SeedIdError,
     SeedIdExhaustedError,
     SeedNotWithdrawnError,
     SeedRow,
-    backfill,
     decode_seed_id,
     encode_seed_id,
     insert_seed,
@@ -52,7 +46,7 @@ from server.seeds import (
 )
 from server.users import sign_in
 from tests.stored_seeds import store_seed, unfill
-from tests.synthetic_holes import synthetic_hole, write_courses
+from tests.synthetic_holes import synthetic_hole
 
 IPS = b"PATCH\x00\x00\x10\x00\x01\xeaEOF"
 
@@ -209,7 +203,7 @@ def test_load_seed_returns_the_stored_manifest(db, manifest):
     row = seed_row(db, seed_id)
     assert row.id == seed_id
     assert row.qr_seed_id == 99
-    assert row.manifest == manifest
+    assert row.manifest == StoredManifest.from_json(manifest.to_json())
     assert row.manifest_json == manifest_text(manifest)
     assert row.build_version == manifest.build_version
     assert row.finish_abi_version == manifest.finish_abi_version
@@ -406,115 +400,14 @@ def test_a_seed_that_does_not_exist_has_no_holes(db):
     assert load_seed_holes(db, "0000000001") == []
 
 
-# -- Backfilling ------------------------------------------------------------------------------
+# -- Seeds stored before migration 7 ----------------------------------------------------------
 
 
-@pytest.fixture
-def store(tmp_path) -> HoleStore:
-    """The 18 synthetic holes, where the store looks for the US course `us`."""
-    return HoleStore(write_courses(tmp_path / "holes", "us"))
-
-
-@pytest.fixture
-def store_catalog(store) -> Catalog:
-    """A catalog of the store's holes, `nes_us/01` to `nes_us/18`."""
-    return sync_vanilla(Catalog(1), store).catalog
-
-
-def on_store_holes(manifest: Manifest, transforms=None) -> Manifest:
-    """`manifest` with its slots moved onto the store's holes, keeping their order."""
-    slots = tuple(
-        replace(
-            slot,
-            id=HoleId(f"nes_us/{number:02d}"),
-            par=HOLES[number - 1].metadata["par"],
-            transforms=(transforms or {}).get(number - 1, ()),
-        )
-        for number, slot in enumerate(manifest.course.holes, start=1)
-    )
-    return replace(manifest, course=replace(manifest.course, holes=slots))
-
-
-def seed_state(db: Database, seed_id: str):
-    return seed_row(db, seed_id).required_roms, load_seed_holes(db, seed_id)
-
-
-def test_a_backfill_fills_in_what_the_seed_would_have_stored(
-    db, manifest, store, store_catalog
-):
-    plain = on_store_holes(manifest)
-    seed_id = insert_seed(db, plain, IPS, HOLES, store_catalog)
-    stored = seed_state(db, seed_id)
+def test_a_seed_stored_before_its_holes_were_is_found_and_not_shown(db, manifest):
+    filled = store_seed(db, manifest, IPS)
+    seed_id = store_seed(db, manifest, IPS)
     unfill(db, seed_id)
     assert unfilled_seeds(db) == [seed_id]
-    with pytest.raises(RuntimeError, match="golf-site-backfill"):
+    with pytest.raises(RuntimeError, match="golf-site-backfill from server-v4.1.3"):
         load_seed(db, seed_id)
-
-    assert backfill(db, store_catalog, store) == [seed_id]
-    assert seed_state(db, seed_id) == stored
-    assert unfilled_seeds(db) == []
-    assert backfill(db, store_catalog, store) == []
-
-
-def test_a_backfill_keeps_a_transformed_hole_as_it_was_stored(
-    db, manifest, store, store_catalog
-):
-    built = [replace_terrain(HOLES[0]), *HOLES[1:]]
-    changed = on_store_holes(manifest, {0: ("mirror@1",)})
-    seed_id = insert_seed(db, changed, IPS, built, store_catalog)
-    stored = seed_state(db, seed_id)
-    unfill(db, seed_id, keep=(1,))
-    backfill(db, store_catalog, store)
-    assert seed_state(db, seed_id) == stored
-    assert stored[1][0].data_hash == content_hash(built[0])
-
-
-def replace_terrain(hole):
-    """A copy of `hole` with one tile changed, standing in for a transform's output."""
-    changed = HoleData.from_dict(hole.to_dict())
-    changed.terrain[1][1] = 0xB0
-    return changed
-
-
-def test_a_backfill_that_cannot_fill_every_seed_writes_nothing(
-    db, manifest, store, store_catalog, tmp_path
-):
-    plain = on_store_holes(manifest)
-    seed_ids = [insert_seed(db, plain, IPS, HOLES, store_catalog) for _ in range(2)]
-    for seed_id in seed_ids:
-        unfill(db, seed_id)
-    with pytest.raises(CatalogError, match="not found"):
-        backfill(db, store_catalog, HoleStore(tmp_path / "empty"))
-    assert unfilled_seeds(db) == sorted(seed_ids)
-
-    changed = on_store_holes(manifest, {3: ("mirror@1",)})
-    lost = insert_seed(db, changed, IPS, HOLES, store_catalog)
-    unfill(db, lost)
-    with pytest.raises(
-        BackfillError, match="hole 4 .* has transforms and no stored hole"
-    ):
-        backfill(db, store_catalog, store)
-    assert unfilled_seeds(db) == sorted([*seed_ids, lost])
-
-
-def test_a_backfill_names_a_seed_whose_manifest_does_not_load(
-    db, manifest, store, store_catalog
-):
-    seed_id = insert_seed(db, on_store_holes(manifest), IPS, HOLES, store_catalog)
-    unfill(db, seed_id)
-    with db.transaction() as conn:
-        conn.execute(
-            "UPDATE seeds SET manifest = '{\"schema\": 99}' WHERE id = ?", (seed_id,)
-        )
-    with pytest.raises(
-        BackfillError, match=f"seed {seed_id}: its manifest does not load"
-    ):
-        backfill(db, store_catalog, store)
-    assert unfilled_seeds(db) == [seed_id]
-
-
-def test_a_dry_run_writes_nothing(db, manifest, store, store_catalog):
-    seed_id = insert_seed(db, on_store_holes(manifest), IPS, HOLES, store_catalog)
-    unfill(db, seed_id)
-    assert backfill(db, store_catalog, store, write=False) == [seed_id]
-    assert unfilled_seeds(db) == [seed_id]
+    assert seed_row(db, filled).id == filled

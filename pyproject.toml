@@ -58,7 +58,6 @@ golf-randomize = "tools.randomize:main"
 
 # Randomizer site
 golf-site = "tools.site:main"
-golf-site-backfill = "tools.site_backfill:main"
 golf-site-screenshot = "tools.site_screenshot:main"
 golf-site-strings = "tools.site_strings:main"
 golf-site-new-page = "tools.new_page:main"

@@ -110,9 +110,11 @@ in this package.
   the build made and the catalog it built from, stores every hole in `hole_data`,
   compressed, under its content hash, and keeps on the seed what its pages show from the
   catalog: each hole's distance, author and source, and the required ROMs (ADR 0021,
-  ADR 0024). Pages read these, never the catalog, for a stored seed. A seed stored before
-  migration 7 has them NULL until `backfill` (`golf-site-backfill`) fills them in, and
-  the app refuses to start while any seed is unfilled. It owns withdrawal and restoration: each changes
+  ADR 0024). Pages read these, never the catalog, for a stored seed, and read its manifest
+  as a `StoredManifest`, whatever schema it was issued in (`docs/manifest.md`, **Reading
+  stored manifests**). A seed stored before migration 7 has them NULL, and the app
+  refuses to start while any seed is (`unfilled_seeds`); `golf-site-backfill` from
+  `server-v4.1.3` fills them in (`docs/deployment.md`). It owns withdrawal and restoration: each changes
   only `withdrawn_at` and records an audit action in the same transaction. The seed's
   manifest and unfinished IPS are never changed. The row repeats the manifest's build and
   finish-ABI versions for operations, and loading verifies that the copies agree.

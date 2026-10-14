@@ -24,7 +24,7 @@ from golf.randomizer.catalog import DEFAULT_INDEX, US_ROM, Catalog, HoleStore
 from golf.randomizer.curation import DEFAULT_CURATION, CurationSnapshot
 from golf.randomizer.generate import generate
 from golf.randomizer.layout import COUNTS, layouts
-from golf.randomizer.manifest import Manifest, Settings
+from golf.randomizer.manifest import Manifest, Settings, StoredManifest
 from golf.randomizer.roms import vanilla_rom
 
 from .config import Config
@@ -118,7 +118,7 @@ class SeedBuilder:
 
     def finish(
         self,
-        manifest: Manifest,
+        manifest: Manifest | StoredManifest,
         unfinished_ips: bytes,
         options: PlayerOptions,
         credentials: QrCredentials | None = None,

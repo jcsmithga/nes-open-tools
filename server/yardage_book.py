@@ -12,7 +12,7 @@ the manifest too, but a book that showed it would decide the tee shot.
 from typing import Any
 
 from golf.core.rng import predict_hole
-from golf.randomizer.manifest import Slot
+from golf.randomizer.manifest import Slot, StoredSlot
 from golf.randomizer.wind import compass
 from golf.rendering.hole_renders import HoleRenders
 from golf.rendering.rangefinder import RENDER_VERSION
@@ -25,7 +25,7 @@ from .static_files import VERSION_PARAM
 COURSE = "seed"
 
 
-def tee_wind(slot: Slot) -> tuple[int, int]:
+def tee_wind(slot: Slot | StoredSlot) -> tuple[int, int]:
     """The (direction, speed) the game shows for the hole's first swing.
 
     The wind slot advances one step a swing from the hole's wind seed

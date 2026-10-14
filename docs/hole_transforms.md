@@ -34,8 +34,8 @@ updates the digests; the transform's own version is bumped only if what it means
 changed, for example a hazard style's probabilities. Neither bumps `BUILD_VERSION`: a
 seed's holes are stored with it, as built, when it is built (ADR 0021), so a later
 release transforming a hole differently changes no existing seed (ADR 0024). A version
-stays in the registry after a newer one ships, because the site still loads manifests
-naming it.
+can leave the registry once nothing generates it: a stored seed's manifest is read
+without checking its transform names.
 
 Order matters: `mirror@1` then `hazards@1:N` is a different hole from the reverse,
 because the hazard rolls follow reading order. The manifest records the order, so builds
@@ -112,8 +112,8 @@ what the styles share; a style is a `Draw` function in `golf/algorithms/hazards.
 - **A new style:** write its `Draw` beside `uniform` and `weighted`, register it in
   `TRANSFORMS` as `name@1`, and add its golden digests.
 - **A new version of a transform:** register `name@2` beside `name@1` and add digests
-  for it. `name@1` keeps its own code only while that
-  is cheap; it must keep parsing, since stored manifests name it.
+  for it. `name@1` can be removed once generation no longer draws it; stored manifests
+  that name it still load.
 - **Any change to shared code** (the forest fill, feature detection, the mirror table)
   that moves a digest: check the new output is what was meant, and update the digests.
 

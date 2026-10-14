@@ -18,12 +18,12 @@ from golf.qr.payload import RoundPayload, base64url_decode
 from golf.qr.port.sim import Machine
 from golf.randomizer.catalog import US_ROM, Catalog, HoleStore
 from golf.randomizer.curation import CurationSnapshot
-from golf.randomizer.manifest import Manifest
+from golf.randomizer.manifest import StoredManifest
 from server.app import create_app
 from server.builder import SeedBuilder
 from server.config import Config
 from tests.app_state import app_state
-from tests.stored_seeds import store_seed
+from tests.stored_seeds import store_issued
 
 ROOT = Path(__file__).resolve().parents[2]
 ROM_PATH = ROOT / "nes_open_us.nes"
@@ -46,7 +46,7 @@ def frozen():
     patch = (FIXTURE / "unfinished.ips").read_bytes()
     assert hashlib.sha256(patch).hexdigest() == metadata["unfinished_ips_sha256"]
     assert hashlib.sha1(ROM_PATH.read_bytes()).hexdigest() == metadata["base_rom_sha1"]
-    manifest = Manifest.from_json(metadata["manifest"])
+    manifest = StoredManifest.from_json(metadata["manifest"])
     assert (manifest.build_version, manifest.finish_abi_version) == (4, 2)
     assert manifest.course.layout == (4,) * 18
     catalog = Catalog.from_json(metadata["catalog"])
@@ -68,7 +68,9 @@ def stored_seed(frozen, tmp_path):
     with TestClient(
         create_app(Config(database=":memory:", dev_login=True), builder=builder)
     ) as client:
-        seed_id = store_seed(app_state(client).db, manifest, patch, catalog)
+        seed_id = store_issued(
+            app_state(client).db, metadata["manifest"], patch, catalog
+        )
         yield client, seed_id, metadata
 
 

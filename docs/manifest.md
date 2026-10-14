@@ -62,16 +62,17 @@ and nothing in `course` needs interpreting: hole ids rather than filters, a musi
 rather than "random", wind seeds rather than the string they were derived from. A slot's
 `transforms` are the exception. They name code whose output may change from one release
 to the next (ADR 0024), so the site stores every hole as built beside the seed
-(ADR 0021) rather than working it out again. Loading
-is strict: a missing or unknown field is an error. `golf/randomizer/build.py` turns
+(ADR 0021) rather than working it out again. A manifest about to be built is loaded
+strictly, and a stored seed's is read tolerantly (**Reading stored manifests**, below).
+`golf/randomizer/build.py` turns
 `course` into the seed's unfinished ROM, and finishes that ROM per player
 (`docs/randomizer_devplan.md`).
 
 **Versions.**
 
 - `schema` fixes the manifest's JSON shape and the meaning of its fields. It changes when
-  either of those changes. A loader may read historical schemas even when the release no
-  longer implements their unfinished buildchain.
+  either of those changes. Generation writes only the current schema, and a stored seed's
+  manifest is read whatever its schema.
 - `generator_version` records which generator made the manifest. It is bumped when a
   change to generation is worth telling seeds apart by, such as a change to how holes
   are drawn; nothing regenerates a stored manifest, so it is provenance only (ADR 0024).
@@ -93,29 +94,42 @@ is strict: a missing or unknown field is an error. `golf/randomizer/build.py` tu
 
 ### Schema history
 
-| Schema | Build version | Finish ABI | Change and support |
+| Schema | Build version | Finish ABI | Change |
 |---|---:|---:|---|
-| 1 | 1 (implicit) | 1 (implicit) | The randomizer 1.0 manifest. Current code reads it for display and finishes its stored artifact through ABI 1, but does not rebuild it. |
-| 2 | 2 | 1 | Adds the required `build_version` and `finish_abi_version` fields. Current code reads it and finishes its stored artifact through ABI 1, but does not rebuild it. |
-| 2 | 3 | 1 | `wram_expansion` moves the terrain attribute buffer into WRAM, replacing `attr_streaming`, and the unfinished stack adds `green_shortcut`. Current code finishes its stored artifact through ABI 1, but does not rebuild it. |
-| 2 | 4 | 2 | The unfinished stack adds `extended_sram_defaults`, a table the finisher fills with the BGM, swing, putt and spin defaults, and a seed with club rules leaves CHOOSE CLUBS out of the club house. Current code finishes its stored artifact through ABI 2, but does not rebuild it. |
-| 2 | 5 | 2 | The unfinished stack adds `round_stats`, which counts fairways hit and penalty strokes, and its scorecard QR sends them in payload protocol version 2. Current code finishes its stored artifact through ABI 2, but does not rebuild it. |
+| 1 | 1 (implicit) | 1 (implicit) | The randomizer 1.0 manifest. |
+| 2 | 2 | 1 | Adds the required `build_version` and `finish_abi_version` fields. |
+| 2 | 3 | 1 | `wram_expansion` moves the terrain attribute buffer into WRAM, replacing `attr_streaming`, and the unfinished stack adds `green_shortcut`. |
+| 2 | 4 | 2 | The unfinished stack adds `extended_sram_defaults`, a table the finisher fills with the BGM, swing, putt and spin defaults, and a seed with club rules leaves CHOOSE CLUBS out of the club house. |
+| 2 | 5 | 2 | The unfinished stack adds `round_stats`, which counts fairways hit and penalty strokes, and its scorecard QR sends them in payload protocol version 2. |
 | 2 | 6 | 2 | The unfinished stack adds `wind_fix`, which makes the wind push the ball the way its arrow points on all 16 directions (`docs/wind.md`, **The crosswind bug**). Schema 2 is the last without a draw rule: its seeds were drawn uniformly. |
 | 3 | 6 | 2 | `settings` gains `draw_rule`, `wind_speed_profile` and `wind_direction_profile`, and each hole gains `wind_direction` and `wind_speed`, which the unfinished stack's `wind_anchors` patch writes into the ROM (ADR 0017). Schema 3 is the last without `include`: its pools held vanilla holes only. |
 | 4 | 6 | 2 | `settings` gains `include`, the kinds of hole added to the pool beside the vanilla ones (ADR 0023). The unfinished buildchain is unchanged. This is the current schema and unfinished buildchain. |
 
-Loading schema 1 supplies `build_version = 1` and `finish_abi_version = 1` in memory and
-serializes it back in its original shape without adding either field. Loading schema 1
-or 2 supplies the `uniform` draw rule the same way: their `settings` have no `draw_rule`,
-refuse one, and serialize back without it. The same goes for the wind: their settings
-have no wind profiles and their holes no anchors, so both profiles load as `vanilla` and
-each hole with the anchors its wind seed deals, which is the wind those ROMs play. Loading
-schema 1, 2 or 3 supplies an empty `include`, which they refuse and serialize back
-without. The website stores
-and serves the original JSON text as well as the unfinished IPS, so neither artifact of an
-existing seed is rewritten by a schema update. Reading an old manifest and rebuilding it
-are deliberately separate: the site needs the former to keep seed and round pages
-working, while its stored IPS makes the latter unnecessary.
+Every stored seed of these schemas is read as described below, and finishes through the
+ABI its row names. None is rebuilt.
+
+### Reading stored manifests
+
+A manifest is read two ways (`golf/randomizer/manifest.py`). `Manifest.from_json` is
+strict, for a manifest generation made or `golf-randomize build` reads: it takes only the
+current schema, and a missing or unknown field is an error. A stored seed's manifest, in
+whatever schema the release that made the seed issued it, is read as a `StoredManifest`,
+for what the seed's pages and its finisher need (ADR 0024):
+
+- A field this release does not read is ignored, whatever schema added it.
+- A field some schema lacked takes the value that schema's seeds had. No `build_version`
+  or `finish_abi_version` is 1, as in schema 1. No `draw_rule` is `uniform` and no wind
+  profile is `vanilla`, as in schemas 1 and 2, whose holes take the anchors their wind
+  seeds deal: the wind those ROMs play. No `include` is none, as in schemas 1 to 3.
+- A field every schema has must be present, and a value that is present must be legal.
+  The finish inputs, `finish_abi_version`, `sram_magic` and the club rules, are checked
+  as strictly as `Manifest` checks them.
+- Transform names are not checked against the registry, since the seed's holes are
+  stored as built.
+
+A new schema therefore costs a row in the table above and no loader branch. The website
+stores and serves each seed's original JSON text as well as its unfinished IPS, so neither
+artifact of an existing seed is rewritten by a schema update.
 
 ### Settings
 
@@ -185,7 +199,7 @@ A slot is a catalog hole `id`, its `par` (a copy of the catalog's, for readabili
 0 to 10 (`docs/wind.md`). `transforms` names hole transforms, such as `mirror@1`
 or `hazards@1:<seed>`, applied to the hole in order when the course is built
 (`docs/hole_transforms.md`). A name this release does not know, or a malformed seed,
-fails when the manifest loads. Generation adds no transforms yet. The wind seed is the 16-bit state the ROM's own RNG starts the hole from
+fails when the manifest loads strictly; a stored seed's names are not checked. Generation adds no transforms yet. The wind seed is the 16-bit state the ROM's own RNG starts the hole from
 (`docs/seeded_wind.md`), not a seed for generation. No hole id appears twice.
 
 The SRAM magic is what the ROM's save initialization compares a save against at boot
@@ -321,4 +335,5 @@ golf-randomize show demo.json
 - `--catalog`, `--curation` and `--holes` point at a catalog index, curation file or hole
   store other than the checked-in ones.
 - `show` prints a manifest's holes with distances and wind anchors, totals, draw rule, wind profiles, music, mercy point, club rules,
-  magic words and required ROMs.
+  magic words and required ROMs. It reads the manifest as a stored one, so it shows a
+  seed's `/h/<id>.json` in any schema; `build` takes only the current schema.

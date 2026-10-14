@@ -1,4 +1,5 @@
-"""Manifest JSON as the schemas before the current one stored it, for tests of the legacy loaders."""
+"""Manifest JSON as the schemas before the current one stored it, for tests of reading
+stored seeds (`StoredManifest`)."""
 
 import copy
 
@@ -13,9 +14,9 @@ SCHEMA_4_SETTINGS = ("include",)
 def as_schema(data: dict, schema: int) -> dict:
     """A current manifest's JSON reshaped as schema 1, 2 or 3: the fields it lacks removed.
 
-    The manifest must have been generated as that schema's seeds were, or the result will
-    not load: with no `include` for any of them, and with a uniform draw and vanilla wind
-    for schema 1 or 2.
+    The manifest should have been generated as that schema's seeds were, or what a stored
+    reader supplies for the missing fields is not what it was made with: no `include` for
+    any of them, and a uniform draw and vanilla wind for schema 1 or 2.
     """
     data = copy.deepcopy(data)
     data["schema"] = schema

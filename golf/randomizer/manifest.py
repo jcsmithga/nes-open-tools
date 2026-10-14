@@ -11,13 +11,17 @@ Three parts:
   Hole ids, never filters; a music slug, never "random".
 
 The patches every seed gets are implied by `build_version`; the interface their unfinished
-artifact exposes to personalization is `finish_abi_version`. Loading is strict: a missing
-or unknown field is an error. See docs/manifest.md and docs/patch_stack.md.
+artifact exposes to personalization is `finish_abi_version`.
+
+Two readers. `Manifest` is strict, for a manifest generation makes or a build reads: it is
+this release's schema, and a missing or unknown field is an error. `StoredManifest` reads
+a stored seed's manifest, issued by whichever release made the seed, for what showing and
+finishing the seed need (ADR 0024). See docs/manifest.md and docs/patch_stack.md.
 """
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TypeGuard
+from typing import Any, TypeGuard
 
 from golf.core.patches.sram_defaults import BAG_SIZE, Club, magic_bytes, parse_club
 from golf.core.patches.wind_anchors import DIRECTIONS as WIND_DIRECTIONS
@@ -40,14 +44,8 @@ from .wind import DIRECTION_PROFILES, SPEED_PROFILES, VANILLA
 from .words import MagicWordsError, check_magic_words
 
 SCHEMA = 4
-#: schemas this code still reads whose settings have no `draw_rule` or wind profiles,
-#: and whose holes have no wind anchors
-LEGACY_SCHEMAS = (1, 2)
-#: schemas this code still reads whose settings have no `include`: their pools held
-#: vanilla holes only
-VANILLA_ONLY_SCHEMAS = (*LEGACY_SCHEMAS, 3)
-READABLE_SCHEMAS = (*VANILLA_ONLY_SCHEMAS, SCHEMA)
-LEGACY_SCHEMA = 1
+#: what a stored manifest without `build_version` or `finish_abi_version`, as schema 1's
+#: are, was built with and exposes
 LEGACY_BUILD_VERSION = 1
 LEGACY_FINISH_ABI_VERSION = 1
 HOLE_COUNT = 18
@@ -111,6 +109,64 @@ def check_sram_magic(sram_magic: object) -> None:
         magic_bytes(sram_magic)
     except ValueError as problem:
         raise ManifestError(str(problem)) from None
+
+
+def dealt_wind(wind_seed: int) -> tuple[int, int]:
+    """The (direction, speed) anchors a hole's wind seed deals with no table."""
+    forecast = predict_hole(wind_seed, swings=0)
+    return forecast.direction_anchor, forecast.speed_anchor
+
+
+def _check_wind(slot: "Slot | StoredSlot") -> None:
+    """Check a slot's wind seed, and fill in its missing anchors with the ones the seed
+    deals and check them."""
+    if not _is_int(slot.wind_seed) or slot.wind_seed not in WIND_SEEDS:
+        raise ManifestError(
+            f"{slot.id}: wind_seed must be 0-65535, got {slot.wind_seed!r}"
+        )
+    dealt = dealt_wind(slot.wind_seed)
+    if slot.wind_direction is None:
+        object.__setattr__(slot, "wind_direction", dealt[0])
+    if slot.wind_speed is None:
+        object.__setattr__(slot, "wind_speed", dealt[1])
+    if not _is_int(slot.wind_direction) or slot.wind_direction not in WIND_DIRECTIONS:
+        raise ManifestError(
+            f"{slot.id}: wind_direction must be a multiple of 16 from 0 to 240, "
+            f"got {slot.wind_direction!r}"
+        )
+    if not _is_int(slot.wind_speed) or slot.wind_speed not in WIND_SPEEDS:
+        raise ManifestError(
+            f"{slot.id}: wind_speed must be 0-10, got {slot.wind_speed!r}"
+        )
+
+
+def _hole_id(text: object) -> HoleId:
+    if not isinstance(text, str):
+        raise ManifestError(f"hole id must be a string, got {text!r}")
+    try:
+        hole_id = HoleId.parse(text)
+    except CatalogError as problem:
+        raise ManifestError(str(problem)) from None
+    if str(hole_id) != text:
+        raise ManifestError(f"hole id {text!r} is not canonical; write it as {hole_id}")
+    return hole_id
+
+
+def _transform_names(
+    hole_id: HoleId, transforms: object, registered: bool = True
+) -> tuple[str, ...]:
+    """A slot's transform names: strings, and with `registered` ones the registry knows."""
+    if not isinstance(transforms, list):
+        raise ManifestError(f"{hole_id}: transforms must be a list, got {transforms!r}")
+    for name in transforms:
+        if not isinstance(name, str):
+            raise ManifestError(f"{hole_id}: transform must be a string, got {name!r}")
+        if registered:
+            try:
+                parse_transform(name)
+            except TransformError as problem:
+                raise ManifestError(f"{hole_id}: {problem}") from None
+    return tuple(transforms)
 
 
 def _clubs_from_labels(labels: object, what: str) -> frozenset[Club]:
@@ -222,17 +278,6 @@ class DrawRule:
 DEFAULT_DRAW_RULE = DrawRule.expert_cap(1)
 
 _SLOT_KEYS = ("id", "par", "transforms", "wind_seed", "wind_direction", "wind_speed")
-_LEGACY_SLOT_KEYS = ("id", "par", "transforms", "wind_seed")
-_LEGACY_SETTINGS_KEYS = (
-    "prng_seed",
-    "par",
-    "sources",
-    "exclude_tags",
-    "allow_family_repeats",
-    "music",
-    "mercy_point",
-    "clubs",
-)
 _SETTINGS_KEYS = (
     "prng_seed",
     "par",
@@ -246,15 +291,6 @@ _SETTINGS_KEYS = (
     "music",
     "mercy_point",
     "clubs",
-)
-#: the settings a schema 4 manifest added
-_SCHEMA_4_SETTINGS = ("include",)
-_SCHEMA_3_SETTINGS_KEYS = tuple(
-    key for key in _SETTINGS_KEYS if key not in _SCHEMA_4_SETTINGS
-)
-#: the settings a schema 1 or 2 manifest doesn't have
-_SCHEMA_3_SETTINGS = tuple(
-    key for key in _SETTINGS_KEYS if key not in _LEGACY_SETTINGS_KEYS
 )
 
 
@@ -345,36 +381,18 @@ class Settings:
         }
 
     @classmethod
-    def from_json(cls, data: object, schema: int = SCHEMA) -> "Settings":
-        """Settings from a manifest of this schema.
-
-        A schema 1 or 2 manifest's have no `draw_rule` or wind profiles: every seed then
-        was drawn uniformly, with the wind its seeds dealt. A schema 3 manifest's or older
-        have no `include`: every pool then held vanilla holes only."""
-        legacy = schema in LEGACY_SCHEMAS
-        vanilla_only = schema in VANILLA_ONLY_SCHEMAS
-        keys = (
-            _LEGACY_SETTINGS_KEYS
-            if legacy
-            else _SCHEMA_3_SETTINGS_KEYS
-            if vanilla_only
-            else _SETTINGS_KEYS
-        )
-        data = _fields(data, keys, "settings")
+    def from_json(cls, data: object) -> "Settings":
+        data = _fields(data, _SETTINGS_KEYS, "settings")
         return cls(
             prng_seed=data["prng_seed"],
             par=data["par"],
             sources=frozenset(_strings(data["sources"], "sources")),
-            include=frozenset()
-            if vanilla_only
-            else frozenset(_strings(data["include"], "include")),
+            include=frozenset(_strings(data["include"], "include")),
             exclude_tags=frozenset(_strings(data["exclude_tags"], "exclude_tags")),
             allow_family_repeats=data["allow_family_repeats"],
-            draw_rule=DrawRule() if legacy else DrawRule.from_json(data["draw_rule"]),
-            wind_speed_profile=VANILLA if legacy else data["wind_speed_profile"],
-            wind_direction_profile=VANILLA
-            if legacy
-            else data["wind_direction_profile"],
+            draw_rule=DrawRule.from_json(data["draw_rule"]),
+            wind_speed_profile=data["wind_speed_profile"],
+            wind_direction_profile=data["wind_direction_profile"],
             music=data["music"],
             mercy_point=data["mercy_point"],
             clubs=ClubRules.from_json(data["clubs"]),
@@ -390,8 +408,7 @@ class Slot:
     transforms (`golf/randomizer/transforms.py`), applied to the hole in order.
 
     `wind_direction` and `wind_speed` are the hole's wind anchors (docs/wind.md). Left
-    as None, each becomes the anchor `wind_seed` deals, which is the vanilla wind and
-    what every hole of a schema 1 or 2 manifest has.
+    as None, each becomes the anchor `wind_seed` deals, which is the vanilla wind.
     """
 
     id: HoleId
@@ -408,27 +425,7 @@ class Slot:
             raise ManifestError(
                 f"{self.id}: par must be one of {list(HOLE_PARS)}, got {self.par!r}"
             )
-        if not _is_int(self.wind_seed) or self.wind_seed not in WIND_SEEDS:
-            raise ManifestError(
-                f"{self.id}: wind_seed must be 0-65535, got {self.wind_seed!r}"
-            )
-        dealt = self.dealt_wind
-        if self.wind_direction is None:
-            object.__setattr__(self, "wind_direction", dealt[0])
-        if self.wind_speed is None:
-            object.__setattr__(self, "wind_speed", dealt[1])
-        if (
-            not _is_int(self.wind_direction)
-            or self.wind_direction not in WIND_DIRECTIONS
-        ):
-            raise ManifestError(
-                f"{self.id}: wind_direction must be a multiple of 16 from 0 to 240, "
-                f"got {self.wind_direction!r}"
-            )
-        if not _is_int(self.wind_speed) or self.wind_speed not in WIND_SPEEDS:
-            raise ManifestError(
-                f"{self.id}: wind_speed must be 0-10, got {self.wind_speed!r}"
-            )
+        _check_wind(self)
         object.__setattr__(self, "transforms", tuple(self.transforms))
         for name in self.transforms:
             if not isinstance(name, str):
@@ -443,8 +440,7 @@ class Slot:
     @property
     def dealt_wind(self) -> tuple[int, int]:
         """The (direction, speed) anchors the hole's wind seed deals with no table."""
-        forecast = predict_hole(self.wind_seed, swings=0)
-        return forecast.direction_anchor, forecast.speed_anchor
+        return dealt_wind(self.wind_seed)
 
     @property
     def wind(self) -> tuple[int, int]:
@@ -463,31 +459,17 @@ class Slot:
         }
 
     @classmethod
-    def from_json(cls, data: object, legacy: bool = False) -> "Slot":
-        """A hole from a manifest. `legacy` reads a schema 1 or 2 manifest's, which has
-        no wind anchors: its holes played the wind their seeds dealt."""
-        data = _fields(data, _LEGACY_SLOT_KEYS if legacy else _SLOT_KEYS, "hole")
-        text = data["id"]
-        try:
-            hole_id = HoleId.parse(text)
-        except CatalogError as problem:
-            raise ManifestError(str(problem)) from None
-        if str(hole_id) != text:
-            raise ManifestError(
-                f"hole id {text!r} is not canonical; write it as {hole_id}"
-            )
-        transforms = data["transforms"]
-        if not isinstance(transforms, list):
-            raise ManifestError(
-                f"{hole_id}: transforms must be a list, got {transforms!r}"
-            )
+    def from_json(cls, data: object) -> "Slot":
+        data = _fields(data, _SLOT_KEYS, "hole")
+        hole_id = _hole_id(data["id"])
         return cls(
             hole_id,
             data["par"],
             data["wind_seed"],
-            tuple(transforms),
-            None if legacy else data["wind_direction"],
-            None if legacy else data["wind_speed"],
+            # the registry check is the constructor's
+            _transform_names(hole_id, data["transforms"], registered=False),
+            data["wind_direction"],
+            data["wind_speed"],
         )
 
 
@@ -554,7 +536,7 @@ class Course:
         }
 
     @classmethod
-    def from_json(cls, data: object, legacy: bool = False) -> "Course":
+    def from_json(cls, data: object) -> "Course":
         data = _fields(
             data,
             ("holes", "music", "mercy_point", "clubs", "magic_words", "sram_magic"),
@@ -567,7 +549,7 @@ class Course:
                 f"magic_words must be a list, got {data['magic_words']!r}"
             )
         return cls(
-            holes=tuple(Slot.from_json(slot, legacy) for slot in data["holes"]),
+            holes=tuple(Slot.from_json(slot) for slot in data["holes"]),
             music=data["music"],
             mercy_point=data["mercy_point"],
             clubs=ClubRules.from_json(data["clubs"]),
@@ -576,16 +558,7 @@ class Course:
         )
 
 
-_READABLE = ", ".join(map(str, READABLE_SCHEMAS))
-_MANIFEST_KEYS_V1 = (
-    "schema",
-    "generator_version",
-    "catalog_version",
-    "curation_stamp",
-    "settings",
-    "course",
-)
-_MANIFEST_KEYS_V2 = (
+_MANIFEST_KEYS = (
     "schema",
     "generator_version",
     "build_version",
@@ -595,10 +568,27 @@ _MANIFEST_KEYS_V2 = (
     "settings",
     "course",
 )
+_VERSION_FIELDS = (
+    "generator_version",
+    "build_version",
+    "finish_abi_version",
+    "catalog_version",
+)
+
+
+def _check_versions(manifest: "Manifest | StoredManifest") -> None:
+    for name in _VERSION_FIELDS:
+        value = getattr(manifest, name)
+        if not _is_int(value) or value < 1:
+            raise ManifestError(f"{name} must be a positive integer, got {value!r}")
+    if not isinstance(manifest.curation_stamp, str) or not manifest.curation_stamp:
+        raise ManifestError("curation_stamp must be a non-empty string")
 
 
 @dataclass(frozen=True)
 class Manifest:
+    """A manifest of this release's schema, as generation makes it and a build reads it."""
+
     schema: int
     generator_version: int
     #: the unfinished-ROM recipe this manifest requires
@@ -611,119 +601,253 @@ class Manifest:
     course: Course
 
     def __post_init__(self):
-        if self.schema not in READABLE_SCHEMAS:
+        if self.schema != SCHEMA:
             raise ManifestError(
-                f"unsupported manifest schema {self.schema!r}; this code reads schemas "
-                f"{_READABLE}"
+                f"manifest schema {self.schema!r} is not this release's, {SCHEMA}; a "
+                "stored seed's manifest is read as a StoredManifest"
             )
-        if self.schema in VANILLA_ONLY_SCHEMAS and self.settings.include:
-            raise ManifestError(
-                f"manifest schema {self.schema} has no include; its pool held vanilla "
-                f"holes only, got {sorted(self.settings.include)}"
-            )
-        if self.schema in LEGACY_SCHEMAS:
-            if self.settings.draw_rule != DrawRule():
-                raise ManifestError(
-                    f"manifest schema {self.schema} has no draw_rule; its seeds were "
-                    f"drawn uniformly, got {self.settings.draw_rule.to_json()}"
-                )
-            profiles = (
-                self.settings.wind_speed_profile,
-                self.settings.wind_direction_profile,
-            )
-            if profiles != (VANILLA, VANILLA) or any(
-                slot.wind != slot.dealt_wind for slot in self.course.holes
-            ):
-                raise ManifestError(
-                    f"manifest schema {self.schema} has no wind profiles or anchors; its "
-                    f"holes play the wind their seeds deal"
-                )
-        for name in (
-            "generator_version",
-            "build_version",
-            "finish_abi_version",
-            "catalog_version",
-        ):
-            value = getattr(self, name)
-            if not _is_int(value) or value < 1:
-                raise ManifestError(f"{name} must be a positive integer, got {value!r}")
-        if self.schema == LEGACY_SCHEMA and self.build_version != LEGACY_BUILD_VERSION:
-            raise ManifestError(
-                f"manifest schema {LEGACY_SCHEMA} implies build_version "
-                f"{LEGACY_BUILD_VERSION}, got {self.build_version!r}"
-            )
-        if (
-            self.schema == LEGACY_SCHEMA
-            and self.finish_abi_version != LEGACY_FINISH_ABI_VERSION
-        ):
-            raise ManifestError(
-                f"manifest schema {LEGACY_SCHEMA} implies finish_abi_version "
-                f"{LEGACY_FINISH_ABI_VERSION}, got {self.finish_abi_version!r}"
-            )
-        if not isinstance(self.curation_stamp, str) or not self.curation_stamp:
-            raise ManifestError("curation_stamp must be a non-empty string")
+        _check_versions(self)
         if self.settings.prng_seed is None:
             raise ManifestError(
                 "a manifest's settings record the prng_seed generation used"
             )
 
     def to_json(self) -> dict:
-        data = {
+        return {
             "schema": self.schema,
             "generator_version": self.generator_version,
-        }
-        if self.schema != LEGACY_SCHEMA:
-            data["build_version"] = self.build_version
-            data["finish_abi_version"] = self.finish_abi_version
-        settings = self.settings.to_json()
-        course = self.course.to_json()
-        if self.schema in VANILLA_ONLY_SCHEMAS:
-            for key in _SCHEMA_4_SETTINGS:
-                del settings[key]
-        if self.schema in LEGACY_SCHEMAS:
-            for key in _SCHEMA_3_SETTINGS:
-                if key in settings:
-                    del settings[key]
-            for hole in course["holes"]:
-                del hole["wind_direction"], hole["wind_speed"]
-        return data | {
+            "build_version": self.build_version,
+            "finish_abi_version": self.finish_abi_version,
             "catalog_version": self.catalog_version,
             "curation_stamp": self.curation_stamp,
-            "settings": settings,
-            "course": course,
+            "settings": self.settings.to_json(),
+            "course": self.course.to_json(),
         }
 
     @classmethod
     def from_json(cls, data: object) -> "Manifest":
         schema = data.get("schema") if isinstance(data, dict) else None
-        if schema not in READABLE_SCHEMAS:
+        if schema != SCHEMA:
             raise ManifestError(
-                f"unsupported manifest schema {schema!r}; this code reads schemas "
-                f"{_READABLE}"
+                f"manifest schema {schema!r} is not this release's, {SCHEMA}; a "
+                "stored seed's manifest is read as a StoredManifest"
             )
-        keys = _MANIFEST_KEYS_V1 if schema == LEGACY_SCHEMA else _MANIFEST_KEYS_V2
-        data = _fields(data, keys, "manifest")
+        data = _fields(data, _MANIFEST_KEYS, "manifest")
         return cls(
             schema=data["schema"],
             generator_version=data["generator_version"],
-            build_version=(
-                LEGACY_BUILD_VERSION
-                if schema == LEGACY_SCHEMA
-                else data["build_version"]
-            ),
-            finish_abi_version=(
-                LEGACY_FINISH_ABI_VERSION
-                if schema == LEGACY_SCHEMA
-                else data["finish_abi_version"]
-            ),
+            build_version=data["build_version"],
+            finish_abi_version=data["finish_abi_version"],
             catalog_version=data["catalog_version"],
             curation_stamp=data["curation_stamp"],
-            settings=Settings.from_json(data["settings"], schema),
-            course=Course.from_json(data["course"], legacy=schema in LEGACY_SCHEMAS),
+            settings=Settings.from_json(data["settings"]),
+            course=Course.from_json(data["course"]),
         )
 
 
-def required_roms(manifest: Manifest, catalog: Catalog) -> tuple[str, ...]:
+# -- Stored manifests -----------------------------------------------------------------------
+#
+# A stored seed's manifest was issued by the release that made the seed, in that release's
+# schema, and is never built again (ADR 0024). It is read for what showing and finishing
+# the seed need, tolerant of its shape:
+#
+# - a field this release does not read is ignored, whatever schema added it;
+# - a field some schema lacked takes the value that schema's seeds had: no `build_version`
+#   or `finish_abi_version` is 1, no `draw_rule` is a uniform draw, no wind profile is
+#   `vanilla`, no `include` is none, and a hole without wind anchors has the ones its wind
+#   seed deals;
+# - a field every schema has must be present;
+# - a value that is present must be legal, and the finish inputs (`finish_abi_version`,
+#   `sram_magic` and the club rules) are checked as strictly as `Manifest` checks them.
+#
+# Transform names are not checked against the registry: a stored seed's holes are stored
+# as built, so a transform version can leave `TRANSFORMS` once nothing generates it.
+
+
+def _field(data: dict, key: str, what: str) -> Any:
+    if key not in data:
+        raise ManifestError(f"{what}: missing field {key!r}")
+    return data[key]
+
+
+def _object(data: object, what: str) -> dict:
+    if not isinstance(data, dict):
+        raise ManifestError(f"{what} must be an object, got {data!r}")
+    return data
+
+
+@dataclass(frozen=True)
+class StoredSettings:
+    """What a stored seed's page shows of the settings it was generated from."""
+
+    prng_seed: str | None
+    par: int
+    sources: frozenset[str]
+    include: frozenset[str] = frozenset()
+    exclude_tags: frozenset[str] = frozenset()
+    allow_family_repeats: bool = False
+    draw_rule: DrawRule = DrawRule()
+    wind_speed_profile: str = VANILLA
+    wind_direction_profile: str = VANILLA
+
+    @classmethod
+    def from_json(cls, data: object) -> "StoredSettings":
+        data = _object(data, "settings")
+        prng_seed = _field(data, "prng_seed", "settings")
+        if prng_seed is not None and not isinstance(prng_seed, str):
+            raise ManifestError(f"prng_seed must be a string, got {prng_seed!r}")
+        par = _field(data, "par", "settings")
+        if not _is_int(par):
+            raise ManifestError(f"par must be an integer, got {par!r}")
+        allow = data.get("allow_family_repeats", False)
+        if not isinstance(allow, bool):
+            raise ManifestError("allow_family_repeats must be true or false")
+        speed = data.get("wind_speed_profile", VANILLA)
+        direction = data.get("wind_direction_profile", VANILLA)
+        for name, value in (("speed", speed), ("direction", direction)):
+            if not isinstance(value, str):
+                raise ManifestError(
+                    f"wind_{name}_profile must be a string, got {value!r}"
+                )
+        return cls(
+            prng_seed=prng_seed,
+            par=par,
+            sources=frozenset(_strings(_field(data, "sources", "settings"), "sources")),
+            include=frozenset(_strings(data.get("include", []), "include")),
+            exclude_tags=frozenset(
+                _strings(data.get("exclude_tags", []), "exclude_tags")
+            ),
+            allow_family_repeats=allow,
+            draw_rule=DrawRule.from_json(data["draw_rule"])
+            if "draw_rule" in data
+            else DrawRule(),
+            wind_speed_profile=speed,
+            wind_direction_profile=direction,
+        )
+
+
+@dataclass(frozen=True)
+class StoredSlot:
+    """One hole of a stored seed's course."""
+
+    id: HoleId
+    par: int
+    wind_seed: int
+    transforms: tuple[str, ...]
+    #: the hole's wind anchors; a schema without them gets the ones its wind seed deals
+    wind_direction: int | None
+    wind_speed: int | None
+
+    @property
+    def wind(self) -> tuple[int, int]:
+        """The hole's (direction, speed) anchors."""
+        assert self.wind_direction is not None and self.wind_speed is not None
+        return self.wind_direction, self.wind_speed
+
+    @classmethod
+    def from_json(cls, data: object) -> "StoredSlot":
+        data = _object(data, "hole")
+        hole_id = _hole_id(_field(data, "id", "hole"))
+        par = _field(data, "par", "hole")
+        if not _is_int(par) or par not in HOLE_PARS:
+            raise ManifestError(
+                f"{hole_id}: par must be one of {list(HOLE_PARS)}, got {par!r}"
+            )
+        slot = cls(
+            hole_id,
+            par,
+            _field(data, "wind_seed", "hole"),
+            _transform_names(hole_id, data.get("transforms", []), registered=False),
+            data.get("wind_direction"),
+            data.get("wind_speed"),
+        )
+        _check_wind(slot)
+        return slot
+
+
+@dataclass(frozen=True)
+class StoredCourse:
+    """A stored seed's concrete course, as its pages and its finisher read it."""
+
+    holes: tuple[StoredSlot, ...]
+    music: str
+    mercy_point: int | None
+    clubs: ClubRules
+    magic_words: tuple[str, ...]
+    sram_magic: int
+
+    @property
+    def layout(self) -> tuple[int, ...]:
+        return tuple(slot.par for slot in self.holes)
+
+    @property
+    def par(self) -> int:
+        return sum(self.layout)
+
+    @classmethod
+    def from_json(cls, data: object) -> "StoredCourse":
+        data = _object(data, "course")
+        holes = _field(data, "holes", "course")
+        if not isinstance(holes, list):
+            raise ManifestError(f"course holes must be a list, got {holes!r}")
+        music = _field(data, "music", "course")
+        if not isinstance(music, str):
+            raise ManifestError(f"course music must be a string, got {music!r}")
+        mercy_point = _field(data, "mercy_point", "course")
+        _check_mercy(mercy_point)
+        words = _field(data, "magic_words", "course")
+        if not isinstance(words, list) or not all(isinstance(w, str) for w in words):
+            raise ManifestError(f"magic_words must be a list of strings, got {words!r}")
+        sram_magic = _field(data, "sram_magic", "course")
+        check_sram_magic(sram_magic)
+        return cls(
+            holes=tuple(StoredSlot.from_json(slot) for slot in holes),
+            music=music,
+            mercy_point=mercy_point,
+            clubs=ClubRules.from_json(_field(data, "clubs", "course")),
+            magic_words=tuple(words),
+            sram_magic=sram_magic,
+        )
+
+
+@dataclass(frozen=True)
+class StoredManifest:
+    """A stored seed's manifest, whatever schema it was issued in."""
+
+    schema: int
+    generator_version: int
+    build_version: int
+    finish_abi_version: int
+    catalog_version: int
+    curation_stamp: str
+    settings: StoredSettings
+    course: StoredCourse
+
+    @classmethod
+    def from_json(cls, data: object) -> "StoredManifest":
+        data = _object(data, "manifest")
+        schema = _field(data, "schema", "manifest")
+        if not _is_int(schema):
+            raise ManifestError(f"schema must be an integer, got {schema!r}")
+        manifest = cls(
+            schema=schema,
+            generator_version=_field(data, "generator_version", "manifest"),
+            build_version=data.get("build_version", LEGACY_BUILD_VERSION),
+            finish_abi_version=data.get(
+                "finish_abi_version", LEGACY_FINISH_ABI_VERSION
+            ),
+            catalog_version=_field(data, "catalog_version", "manifest"),
+            curation_stamp=_field(data, "curation_stamp", "manifest"),
+            settings=StoredSettings.from_json(_field(data, "settings", "manifest")),
+            course=StoredCourse.from_json(_field(data, "course", "manifest")),
+        )
+        _check_versions(manifest)
+        return manifest
+
+
+def required_roms(
+    manifest: Manifest | StoredManifest, catalog: Catalog
+) -> tuple[str, ...]:
     """The vanilla ROMs a seed's ROM is built from: the US ROM, plus any its holes or music come from."""
     needed: set[str | None] = {US_ROM, track(manifest.course.music).rom}
     for slot in manifest.course.holes:

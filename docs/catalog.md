@@ -75,8 +75,7 @@ Guarantees, enforced by `tests/meta/test_catalog_ids.py` and the loader:
 3. **Withdrawal retires an entry for a takedown.** `"withdrawn": true` is never taken
    back. Its id stays reserved, and seeds that used it remain downloadable from their
    stored unfinished IPS. `HoleStore.load` refuses a withdrawn entry unless asked with
-   `even_withdrawn`, which is for reading a hole a seed already holds, as
-   `golf-site-backfill` does. A lineage whose highest version is withdrawn has nothing
+   `even_withdrawn`, which is for reading a hole a seed already holds. A lineage whose highest version is withdrawn has nothing
    drawable, and nor has a hole derived from a withdrawn base.
 
 ## The content hash

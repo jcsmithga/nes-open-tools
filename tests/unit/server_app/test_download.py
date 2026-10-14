@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import Club
 from golf.randomizer.catalog import JP_ROM, US_ROM, HoleStore
+from golf.randomizer.manifest import StoredManifest
 from golf.randomizer.roms import vanilla_rom
 from server.builder import BuiltSeed, SeedBuilder
 from tests.app_state import app_state
@@ -42,7 +43,8 @@ def test_downloading_finishes_the_stored_seed_as_a_guest(client, fake_builder):
         == f'attachment; filename="notgr_par{par}_{seed_id}.ips"'
     )
     manifest, unfinished_ips, options = fake_builder.finished
-    assert manifest == fake_builder.built
+    # finished from the stored manifest, read back as it is for any stored seed
+    assert manifest == StoredManifest.from_json(fake_builder.built.to_json())
     assert unfinished_ips == IPS
     assert options.player_name == "LUIGI"
     assert options.clubs == {Club.W1, Club.PW, Club.PT}

@@ -75,7 +75,7 @@ from golf.formats.hole_data import HoleData
 from golf.qr import payload
 
 from .catalog import JP_ROM, REPO_ROOT, US_ROM, Catalog, HoleStore
-from .manifest import ClubRules, Manifest
+from .manifest import ClubRules, Manifest, StoredManifest
 from .music import MUSIC_DUMPS, track
 from .transforms import apply_transforms
 from .words import scorecard_title
@@ -371,7 +371,7 @@ class FinishedBuild:
 
 def _finish_through(
     abi: int,
-    manifest: Manifest,
+    manifest: Manifest | StoredManifest,
     vanilla: bytes,
     unfinished_ips: bytes,
     options: PlayerOptions,
@@ -388,7 +388,7 @@ def _finish_through(
 
 
 def _finish_abi_1(
-    manifest: Manifest,
+    manifest: Manifest | StoredManifest,
     vanilla: bytes,
     unfinished_ips: bytes,
     options: PlayerOptions,
@@ -399,7 +399,7 @@ def _finish_abi_1(
 
 
 def _finish_abi_2(
-    manifest: Manifest,
+    manifest: Manifest | StoredManifest,
     vanilla: bytes,
     unfinished_ips: bytes,
     options: PlayerOptions,
@@ -413,13 +413,16 @@ _FINISHERS = {1: _finish_abi_1, 2: _finish_abi_2}
 
 
 def finish(
-    manifest: Manifest,
+    manifest: Manifest | StoredManifest,
     vanilla: bytes,
     unfinished_ips: bytes,
     options: PlayerOptions,
     credentials: QrCredentials | None = None,
 ) -> FinishedBuild:
     """Finish a stored artifact through the ABI it declares.
+
+    `manifest` is a stored seed's, or a manifest just built: finishing reads only its
+    finish ABI, SRAM magic and club rules.
 
     No credentials finishes a guest ROM. Compatible implementation changes do not bump
     the ABI; a change to the locations, preimages or meanings the finisher consumes does.
