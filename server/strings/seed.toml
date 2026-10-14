@@ -19,6 +19,7 @@ text = "Seed: {words}"
 [seed.card.description]
 note = "plain: body of the seed page's link preview card; what following the link gets a player; {par} the course's par, {yards} its length in yards, {mode} the course mode's name (a seed.card.mode_* string; empty for a seed from before course modes, which named a Total Par instead)"
 text = """
+Mode: {mode}
 Par: {par}
 Distance: {yards}
 """
