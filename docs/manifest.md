@@ -54,14 +54,14 @@ With the hole list trimmed to one of its 18 slots:
 | Part | Holds | Read by |
 |---|---|---|
 | Version fields | `schema`, `generator_version`, `build_version`, `finish_abi_version`, `catalog_version`, `curation_stamp` | Loading, building, finishing and auditing |
-| `settings` | Every input to generation, the PRNG seed included | The seed page, regeneration |
+| `settings` | Every input to generation, the PRNG seed included | The seed page |
 | `course` | Concrete values | The build |
 
 After checking the build and finish-ABI versions, an unfinished build reads only `course`,
 and nothing in `course` needs interpreting: hole ids rather than filters, a music slug
 rather than "random", wind seeds rather than the string they were derived from. A slot's
-`transforms` are the exception. They name code whose output is fixed only within one
-build version (ADR 0015), so the site stores each transformed hole beside the seed
+`transforms` are the exception. They name code whose output may change from one release
+to the next (ADR 0024), so the site stores each transformed hole beside the seed
 (ADR 0021) rather than working it out again. Loading
 is strict: a missing or unknown field is an error. `golf/randomizer/build.py` turns
 `course` into the seed's unfinished ROM, and finishes that ROM per player
@@ -72,18 +72,22 @@ is strict: a missing or unknown field is an error. `golf/randomizer/build.py` tu
 - `schema` fixes the manifest's JSON shape and the meaning of its fields. It changes when
   either of those changes. A loader may read historical schemas even when the release no
   longer implements their unfinished buildchain.
-- `generator_version` is bumped whenever the same catalog, curation and settings would
-  generate a different manifest.
+- `generator_version` records which generator made the manifest. It is bumped when a
+  change to generation is worth telling seeds apart by, such as a change to how holes
+  are drawn; nothing regenerates a stored manifest, so it is provenance only (ADR 0024).
 - `build_version` identifies the recipe that turns the concrete manifest, catalog hole
-  data and vanilla US ROM into the unfinished ROM. It is bumped whenever that operation
-  could produce different bytes: a base patch, patch order, course writer, compressor or
-  imported build resource changing all count. `golf-randomize build` refuses a build
-  version the installed release does not implement rather than silently reinterpreting it.
+  data and vanilla US ROM into the unfinished ROM, as a label for what players get. It is
+  bumped when a change to that recipe makes seeds play or look different enough to tell
+  apart, such as a new patch or a fix like `wind_fix`, and always when the change touches
+  anything the finisher or the scan route reads from a stored artifact
+  (`tests/fixtures/build4/README.md`). A change that only moves bytes, such as better
+  compression, need not bump it (ADR 0024). `golf-randomize build` refuses a build version
+  other than the installed release's rather than silently reinterpreting it.
 - `finish_abi_version` identifies the locations, preimages and meanings the stored
   unfinished artifact exposes to per-download finishing. Multiple build versions may
   share an ABI. Finishing dispatches on this version and promises safe personalization,
   not byte-identical output across releases. See `docs/patch_stack.md`.
-- `catalog_version` and `curation_stamp` record what generation read, for auditing.
+- `catalog_version` and `curation_stamp` record what generation read, as provenance.
   Hole ids resolve through the frozen catalog forever (`docs/catalog.md`), so neither is
   needed to build.
 
@@ -271,9 +275,10 @@ The layout, holes, wind directions, wind speeds, music, magic words and SRAM mag
 `random.Random(f"{purpose}\0{prng_seed}")`, and the wind seeds from their own hash, so a
 change to one draw leaves the others as they were.
 
-The same catalog, curation and settings give the same manifest under one generator
-version, and the tests hold generation to that. It is not a promise across generator
-versions: the stored manifest, not its inputs, is what a seed is.
+Within one release, the same catalog, curation and settings give the same manifest; the
+tests hold generation to that, and `--seed` relies on it. It is not a promise across
+releases: nothing regenerates a stored seed, and a seed is what the site stored, not its
+inputs (ADR 0024).
 
 ### The word bank
 

@@ -5,9 +5,8 @@ Three parts:
 
 - The version fields: the manifest `schema`, generator, unfinished-build and finish-ABI
   versions, catalog version and the curation stamp that produced it.
-- `settings`: every input to generation, the PRNG seed and the draw rule included, so
-  the same catalog, curation and settings reproduce the manifest under one generator
-  version.
+- `settings`: every input to generation, the PRNG seed and the draw rule included, as a
+  record of what the seed was made from. Nothing regenerates a stored seed (ADR 0024).
 - `course`: concrete values, and the only part the recipe reads after version checks.
   Hole ids, never filters; a music slug, never "random".
 

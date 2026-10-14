@@ -6,7 +6,7 @@ docs/randomizer_devplan.md, "Generating seed ids".
 
 A slot with transforms has its hole, as built, stored in `hole_data` under its content
 hash (ADR 0021): a later release's transforms may not give the same hole
-(ADR 0015), and the yardage book has to show the one in the ROM.
+(ADR 0024), and the yardage book has to show the one in the ROM.
 """
 
 import hashlib

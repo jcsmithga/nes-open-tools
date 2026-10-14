@@ -53,7 +53,8 @@ Generation gains a step in front of it:
 
 resolve and generation take the PRNG seed as an argument, drawn fresh when none is
 given; the CLI sets one with `--seed`. The seed used is recorded in the manifest's
-resolved `settings`, so a manifest still reproduces its seed. A request names
+resolved `settings`, so the roll is on record, and within one release the same request
+and seed resolve to it again. A request names
 preferences that are rolled again and again, while a PRNG seed belongs to one roll, so
 a request is a document a player can keep and reuse unchanged.
 
@@ -115,8 +116,9 @@ The parsing rules:
   platforms.
 - resolve picks the set first (a settings request is one set), then each weighted field
   in `Settings` field order, so the same request and seed always resolve the same way
-  under one `generator_version`. A change to resolve bumps it, as any other change to
-  generation does.
+  within one release. That is not a promise across releases, since nothing regenerates
+  a stored seed (ADR 0024); a change to resolve bumps `generator_version` only when it
+  is worth telling seeds apart by, as with any other change to generation.
 
 ### Which randomness belongs where
 

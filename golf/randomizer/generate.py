@@ -10,10 +10,11 @@ the others where they were.
 The settings' draw rule picks the hole draw: `draw_holes` for `uniform`, and
 `draw_holes_capped` for `expert_cap`.
 
-The same catalog, curation, settings and seed give the same manifest under one
-`GENERATOR_VERSION`. That is a property the tests hold generation to, not a promise across
-versions: a stored manifest, not its inputs, is what a seed is. Bump the version whenever
-the same inputs would give a different manifest. See docs/manifest.md.
+Within one release, the same catalog, curation, settings and seed give the same
+manifest. That is a property the tests hold generation to, not a promise across releases:
+nothing regenerates a stored seed, which is what the site stored rather than its inputs
+(ADR 0024). `GENERATOR_VERSION` is provenance, bumped when a change to generation is worth
+telling seeds apart by. See docs/manifest.md.
 """
 
 import random

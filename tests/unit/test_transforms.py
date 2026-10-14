@@ -4,7 +4,6 @@ import hashlib
 
 import pytest
 
-from golf.randomizer.build import BUILD_VERSION
 from golf.randomizer.catalog import HoleId, content_hash
 from golf.randomizer.manifest import Slot
 from golf.randomizer.transforms import (
@@ -80,15 +79,14 @@ def test_every_transform_has_golden_output():
 
 
 @pytest.mark.parametrize("text", GOLDEN)
-def test_transform_output_is_frozen(vanilla_courses, vanilla_jp_courses, text):
-    """A failure here means a transform's output changed, and with it the course seeds
-    naming it build. Bump `BUILD_VERSION`, bump the transform's version too if what it
-    means changed, and update these hashes (ADR 0015, `docs/hole_transforms.md`)."""
+def test_transform_output_is_unchanged(vanilla_courses, vanilla_jp_courses, text):
+    """A failure here means a transform's output changed. If that was meant, update the
+    hash, and bump the transform's version too if what it means changed (ADR 0024,
+    `docs/hole_transforms.md`). Stored seeds keep the holes they were built with."""
     holes = list(vanilla_holes())
     lines = (
         f"{hole_id} {content_hash(apply_transforms(hole, [text]))}\n"
         for hole_id, hole in holes
     )
     actual = hashlib.sha256("".join(lines).encode()).hexdigest()
-    assert BUILD_VERSION == 6
     assert actual == GOLDEN[text]

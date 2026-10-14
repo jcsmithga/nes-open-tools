@@ -184,7 +184,7 @@ families of mixed par should be weighted is open (`docs/thoughts_on_par_6.md`).
   derived hole as it does any other.
 - **Difficulty.** `data/difficulty/holes.json` has no row for a derived hole, and the
   solver is paused (ADR 0012).
-- **The transforms' golden hashes** pin the vanilla holes only (ADR 0015).
+- **The transforms' golden hashes** cover the vanilla holes only.
 
 ## Tests
 

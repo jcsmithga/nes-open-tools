@@ -77,7 +77,7 @@ supported ABI; see `docs/patch_stack.md`.
 
 The one thing upstream of the IPS the site keeps beside it is each transformed hole, as
 built, in `hole_data` (ADR 0021): a later release's transforms may give another hole
-(ADR 0015), and the seed's yardage book shows the one in the ROM (`docs/yardage_book.md`).
+(ADR 0024), and the seed's yardage book shows the one in the ROM (`docs/yardage_book.md`).
 
 ### ROM gating
 

@@ -28,13 +28,14 @@ inspection and for the editor.
 A name is `name@version`, with `:<seed>` after it for a seeded transform. A seed is a
 decimal integer from 0 to 2^32 - 1 without leading zeros, so each seed has one spelling.
 
-Each transform's output for every vanilla hole is pinned by a golden test
-(`tests/unit/test_transforms.py`). When a change alters it, `BUILD_VERSION` is bumped
-and the digests updated; the transform's own version is bumped only if what it means
-changed, for example a hazard style's probabilities. A version stays in the registry
-after a newer one ships, because the site still loads manifests naming it. ADR 0015 has
-the reasoning. Since a later release may transform a hole differently, the site stores
-each transformed hole with its seed when the seed is built (ADR 0021).
+A golden test (`tests/unit/test_transforms.py`) hashes each transform's output for
+every vanilla hole, so a change that alters it is noticed. A change made on purpose
+updates the digests; the transform's own version is bumped only if what it means
+changed, for example a hazard style's probabilities. Neither bumps `BUILD_VERSION`: a
+seed's transformed holes are stored with it when it is built (ADR 0021), so a later
+release transforming a hole differently changes no existing seed (ADR 0024). A version
+stays in the registry after a newer one ships, because the site still loads manifests
+naming it.
 
 Order matters: `mirror@1` then `hazards@1:N` is a different hole from the reverse,
 because the hazard rolls follow reading order. The manifest records the order, so builds
@@ -110,11 +111,11 @@ what the styles share; a style is a `Draw` function in `golf/algorithms/hazards.
 
 - **A new style:** write its `Draw` beside `uniform` and `weighted`, register it in
   `TRANSFORMS` as `name@1`, and add its golden digests.
-- **A new version of a transform:** register `name@2` beside `name@1`, bump
-  `BUILD_VERSION`, and add digests for it. `name@1` keeps its own code only while that
+- **A new version of a transform:** register `name@2` beside `name@1` and add digests
+  for it. `name@1` keeps its own code only while that
   is cheap; it must keep parsing, since stored manifests name it.
 - **Any change to shared code** (the forest fill, feature detection, the mirror table)
-  that moves a digest: bump `BUILD_VERSION` and update the digests.
+  that moves a digest: check the new output is what was meant, and update the digests.
 
 ## Inspecting
 
