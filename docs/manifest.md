@@ -251,6 +251,40 @@ data is already in the ROM, and imports a Mario Open theme from its dump (`music
   ROM always, and the Mario Open ROM when any hole, the base of any derived hole or the
   theme comes from it. The site stores them on the seed row when the seed is made.
 
+## What a stored seed depends on
+
+A seed is what the site stored when it was made: the manifest text as issued, the
+unfinished IPS, its `seed_holes` rows and its built holes in `hole_data` (ADR 0024).
+Nothing rebuilds it, so the guarantees are the ones its stored rows and the ROMs already
+downloaded need. A change that would break one of these breaks existing seeds.
+
+| Guarantee | Owed to | Stated in | Enforced by |
+|---|---|---|---|
+| Scorecard QR protocols 1 and 2 decode for good | Downloaded ROMs | `docs/scorecard_qr.md`; ADR 0004, ADR 0010 | `tests/unit/test_qr_payload.py`, `tests/integration/test_build4_submission_rom.py` |
+| Finish ABIs 1 and 2 stay finishable, at their pinned locations | Stored IPSes | `docs/patch_stack.md`; ADR 0007, ADR 0009 | The ABI goldens in `tests/unit/test_build.py`, `tests/unit/test_qr_patch.py`, the build 4 fixture |
+| A seed's SRAM magic, seed id, player ids and MAC keys never change | Downloaded ROMs | **Course**, above; `server/CLAUDE.md` | `server/seeds.py`, `server/entries.py` |
+| A seed's manifest text and IPS are never rewritten, and seeds are never deleted | Stored seeds | `server/CLAUDE.md` | `test_withdraw_and_restore_change_only_lifecycle_state_and_log_each_action` |
+| Migrations only append | The database | `server/migrations.py`, `server/CLAUDE.md` | Review only; the migration tests in `tests/unit/test_server_db.py` check that each keeps existing rows |
+| A stored manifest of any schema reads, finish inputs checked strictly | Stored seeds | **Reading stored manifests**, above | The stored manifest tests in `tests/unit/test_manifest.py` |
+| Every hole a seed was built with, and what its pages show of each, is stored with it | Stored seeds | `docs/yardage_book.md`, `docs/randomizer_devplan.md` | `tests/unit/test_server_seeds.py`; the site refuses to start while a seed lacks them |
+| A catalog id is never removed or given another hole | Stats across seeds | `docs/catalog.md` | `tests/meta/test_catalog_ids.py` |
+
+**Permanent names.** A stored seed is finished or joined by these, so none may change
+meaning or stop being read:
+
+- ROM ids (`nes_open_us`, `mario_open_jp`): its required ROMs and its `sources`;
+- club labels (`1W` to `PT`): its club rules, which finishing checks a bag against;
+- hole id syntax (`owner/slug@N`), which its slots and `seed_holes.hole_id` hold.
+
+A name a stored seed only shows can be retired: a draw rule, a wind profile, a music slug
+or a transform version. Its seeds then show it by name rather than by its translated
+label, which the site's strings catalog no longer has.
+
+**Not promised.** That a later release regenerates the same manifest from the same
+settings; that two releases build byte-identical unfinished ROMs (`build_version` labels
+what players get); that a transform gives the same hole in a later release; that a catalog
+entry's hash, par, distance or author, or a delta, stays as it was.
+
 ## Generation
 
 `generate(catalog, curation, settings)`:

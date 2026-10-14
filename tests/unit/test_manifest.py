@@ -31,6 +31,7 @@ from golf.randomizer.manifest import (
     ManifestError,
     Settings,
     Slot,
+    StoredDrawRule,
     StoredManifest,
     required_roms,
 )
@@ -508,7 +509,7 @@ def test_a_stored_manifest_of_any_schema_reads_as_its_seed_was_made(schema):
     assert (settings.prng_seed, settings.par) == ("abc", made.settings.par)
     assert settings.sources == made.settings.sources
     assert settings.include == frozenset()
-    assert settings.draw_rule == DrawRule()
+    assert settings.draw_rule == StoredDrawRule("uniform")
     assert (settings.wind_speed_profile, settings.wind_direction_profile) == (
         "vanilla",
         "vanilla",
@@ -552,7 +553,7 @@ def test_a_stored_manifest_reads_every_field_the_current_schema_has():
     assert stored.settings.include == frozenset({"derived"})
     assert stored.settings.exclude_tags == frozenset({"short"})
     assert stored.settings.allow_family_repeats
-    assert stored.settings.draw_rule == DrawRule.expert_cap(0)
+    assert stored.settings.draw_rule == StoredDrawRule("expert_cap", 0)
     assert stored.settings.wind_speed_profile == "strong"
     assert stored.settings.wind_direction_profile == "out_and_back"
     assert stored.course.holes[0].wind == (0x80, 10)
@@ -566,6 +567,22 @@ def test_a_stored_manifest_ignores_fields_this_release_does_not_read():
     data["course"]["holes"][0]["lie"] = "fairway"
     data["course"]["theme"] = {"palette": 3}
     assert StoredManifest.from_json(data).course.par == manifest().course.par
+
+
+def test_a_stored_manifest_keeps_names_this_release_no_longer_has():
+    data = issued(SCHEMA)
+    data["settings"]["draw_rule"] = {"rule": "ceiling", "per_nine": 2}
+    data["settings"]["wind_speed_profile"] = "hurricane"
+    data["settings"]["wind_direction_profile"] = "swirling"
+    data["course"]["music"] = "jp_mars"
+    stored = StoredManifest.from_json(data)
+    assert stored.settings.draw_rule == StoredDrawRule("ceiling", 2)
+    assert stored.settings.draw_rule.to_json() == {"rule": "ceiling", "per_nine": 2}
+    assert (
+        stored.settings.wind_speed_profile,
+        stored.settings.wind_direction_profile,
+    ) == ("hurricane", "swirling")
+    assert stored.course.music == "jp_mars"
 
 
 def test_a_stored_manifest_keeps_transform_names_the_registry_lacks():
@@ -608,10 +625,8 @@ def test_a_stored_manifest_needs_the_fields_every_schema_has(path):
         (lambda data: data["course"].update(sram_magic=True), "sram_magic"),
         (lambda data: data["course"]["clubs"].update(max=0), "clubs max"),
         (lambda data: data["course"]["clubs"].update(banned=["PT"]), "putter"),
-        (
-            lambda data: data["settings"].update(draw_rule={"rule": "ceiling"}),
-            "draw rule",
-        ),
+        (lambda data: data["settings"].update(draw_rule={"rule": 3}), "draw rule"),
+        (lambda data: data["settings"].update(draw_rule="uniform"), "draw_rule"),
         (lambda data: data["course"]["holes"][0].update(wind_speed=11), "wind_speed"),
         (lambda data: data["course"]["holes"][0].update(par=6), "par"),
         (lambda data: data["course"]["holes"][0].update(id="Not An Id"), "hole"),

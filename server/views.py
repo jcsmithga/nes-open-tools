@@ -53,8 +53,9 @@ def track_course(track: Track) -> str:
 @dataclass(frozen=True)
 class MusicOption:
     slug: str
-    rom_title: str
-    course: str
+    #: both None for a stored seed's theme this release no longer has, shown by slug
+    rom_title: str | None
+    course: str | None
 
 
 @dataclass(frozen=True)
@@ -260,7 +261,7 @@ def seed_view(
     course = manifest.course
     settings = manifest.settings
     holes = tuple(_hole_view(hole, curation) for hole in seed_holes)
-    theme = TRACKS[course.music]
+    theme = TRACKS.get(course.music)
     rules = course.clubs
     required = tuple(vanilla_rom(rom) for rom in row.required_roms)
     required_bag = (
@@ -294,9 +295,9 @@ def seed_view(
         holes=holes,
         total_par=course.par,
         total_distance=sum(hole.distance for hole in holes),
-        music=MusicOption(
-            theme.slug, vanilla_rom(theme.rom).title, track_course(theme)
-        ),
+        music=MusicOption(course.music, None, None)
+        if theme is None
+        else MusicOption(theme.slug, vanilla_rom(theme.rom).title, track_course(theme)),
         par_target=settings.par,
         sources=tuple(
             vanilla_rom(source) for source in SOURCES if source in settings.sources

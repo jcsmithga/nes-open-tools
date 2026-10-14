@@ -1,5 +1,6 @@
 """`server/routes/seed_pages.py`: the seed page and its manifest."""
 
+import json
 import re
 
 import pytest
@@ -134,6 +135,32 @@ def test_a_seed_stored_before_draw_rules_shows_a_uniform_draw(
     assert "draw_rule" not in stored["settings"]
     assert "wind_speed_profile" not in stored["settings"]
     assert "wind_speed" not in stored["course"]["holes"][0]
+
+
+def test_a_seed_shows_names_a_later_release_retired_by_name(client):
+    seed_id = generate_seed(client)
+    db = app_state(client).db
+    with db.transaction() as conn:
+        data = json.loads(
+            conn.execute(
+                "SELECT manifest FROM seeds WHERE id = ?", (seed_id,)
+            ).fetchone()[0]
+        )
+        data["settings"]["draw_rule"] = {"rule": "ceiling", "per_nine": 2}
+        data["settings"]["wind_speed_profile"] = "hurricane"
+        data["settings"]["wind_direction_profile"] = "swirling"
+        data["course"]["music"] = "jp_mars"
+        conn.execute(
+            "UPDATE seeds SET manifest = ? WHERE id = ?", (json.dumps(data), seed_id)
+        )
+    response = client.get(f"/h/{seed_id}")
+    assert response.status_code == 200
+    page = response.text
+    assert re.search(r'data-draw-rule="ceiling"[^>]*>\s*ceiling\s*<', page)
+    assert 'data-wind-speed="hurricane">hurricane<' in page
+    assert 'data-wind-direction="swirling">swirling<' in page
+    assert 'data-music="jp_mars">jp_mars<' in page
+    assert client.get(f"/h/{seed_id}/book.json").status_code == 200
 
 
 def test_the_manifest_json_is_the_stored_manifest(client, fake_builder):

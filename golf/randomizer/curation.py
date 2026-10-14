@@ -1,5 +1,5 @@
 """
-Curation: the editable judgments that steer generation, kept apart from the frozen catalog.
+Curation: the editable judgments that steer generation, kept apart from the catalog.
 
 A record is keyed by lineage (`nes_uk/01`, never `nes_uk/01@2`), so it carries forward when
 a new version is published. Generation reads a `CurationSnapshot`, a point-in-time view the

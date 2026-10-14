@@ -660,8 +660,12 @@ class Manifest:
 # - a value that is present must be legal, and the finish inputs (`finish_abi_version`,
 #   `sram_magic` and the club rules) are checked as strictly as `Manifest` checks them.
 #
-# Transform names are not checked against the registry: a stored seed's holes are stored
-# as built, so a transform version can leave `TRANSFORMS` once nothing generates it.
+# Names only shown are not checked against what this release knows: a draw rule, a wind
+# profile, a music slug or a transform name can be retired, and its stored seeds show it
+# by name. A transform version can leave `TRANSFORMS` once nothing generates it, since a
+# stored seed's holes are stored as built. The names a seed is finished or joined by are
+# permanent: ROM ids, club labels and hole ids (docs/manifest.md, **What a stored seed
+# depends on**).
 
 
 def _field(data: dict, key: str, what: str) -> Any:
@@ -677,6 +681,33 @@ def _object(data: object, what: str) -> dict:
 
 
 @dataclass(frozen=True)
+class StoredDrawRule:
+    """A stored seed's draw rule by name, which this release may no longer implement."""
+
+    rule: str = UNIFORM
+    #: the most expert holes on a nine under `expert_cap`; None under any other rule
+    per_nine: int | None = None
+
+    def to_json(self) -> dict:
+        if self.per_nine is None:
+            return {"rule": self.rule}
+        return {"rule": self.rule, "per_nine": self.per_nine}
+
+    @classmethod
+    def from_json(cls, data: object) -> "StoredDrawRule":
+        data = _object(data, "draw_rule")
+        rule = _field(data, "rule", "draw_rule")
+        if not isinstance(rule, str) or not rule:
+            raise ManifestError(f"draw rule must be a non-empty string, got {rule!r}")
+        per_nine = data.get("per_nine")
+        if per_nine is not None and not _is_int(per_nine):
+            raise ManifestError(
+                f"draw rule per_nine must be an integer, got {per_nine!r}"
+            )
+        return cls(rule, per_nine)
+
+
+@dataclass(frozen=True)
 class StoredSettings:
     """What a stored seed's page shows of the settings it was generated from."""
 
@@ -686,7 +717,7 @@ class StoredSettings:
     include: frozenset[str] = frozenset()
     exclude_tags: frozenset[str] = frozenset()
     allow_family_repeats: bool = False
-    draw_rule: DrawRule = DrawRule()
+    draw_rule: StoredDrawRule = StoredDrawRule()
     wind_speed_profile: str = VANILLA
     wind_direction_profile: str = VANILLA
 
@@ -718,9 +749,9 @@ class StoredSettings:
                 _strings(data.get("exclude_tags", []), "exclude_tags")
             ),
             allow_family_repeats=allow,
-            draw_rule=DrawRule.from_json(data["draw_rule"])
+            draw_rule=StoredDrawRule.from_json(data["draw_rule"])
             if "draw_rule" in data
-            else DrawRule(),
+            else StoredDrawRule(),
             wind_speed_profile=speed,
             wind_direction_profile=direction,
         )

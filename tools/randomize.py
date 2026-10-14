@@ -46,6 +46,7 @@ from golf.randomizer.manifest import (
     Manifest,
     ManifestError,
     Settings,
+    StoredDrawRule,
     StoredManifest,
     required_roms,
 )
@@ -99,7 +100,7 @@ def draw_rule_from_args(args: argparse.Namespace) -> DrawRule:
     return default if default.rule == EXPERT_CAP else DrawRule.expert_cap(1)
 
 
-def describe_draw_rule(rule: DrawRule) -> str:
+def describe_draw_rule(rule: DrawRule | StoredDrawRule) -> str:
     if rule.rule != EXPERT_CAP:
         return rule.rule
     if rule.per_nine == 0:
@@ -181,9 +182,16 @@ def summary(
         f"mercy tap-in: {mercy}",
         f"clubs: {describe_clubs(course.clubs)}",
         f"magic words: {' '.join(course.magic_words)}",
-        f"requires: {', '.join(required_roms(manifest, catalog))}",
+        f"requires: {requires(manifest, catalog)}",
     ]
     return lines
+
+
+def requires(manifest: Manifest | StoredManifest, catalog: Catalog) -> str:
+    """The ROMs a seed needs, or why a stored seed's cannot be told."""
+    if manifest.course.music not in TRACKS:
+        return f"unknown: music {manifest.course.music!r} is not in this release"
+    return ", ".join(required_roms(manifest, catalog))
 
 
 def load_manifest(path: Path) -> Manifest:

@@ -227,7 +227,7 @@
             <tbody>
               <tr>
                 <th scope="row">{{ t("seed.details.music") }}</th>
-                <td>{{ t("seed.details.music_value", course=seed.music.course, rom=seed.music.rom_title) }}</td>
+                <td data-music="{{ seed.music.slug }}">{% if seed.music.course is none %}{{ seed.music.slug }}{% else %}{{ t("seed.details.music_value", course=seed.music.course, rom=seed.music.rom_title) }}{% endif %}</td>
               </tr>
               <tr>
                 <th scope="row">{{ t("seed.details.par_target") }}</th>
@@ -246,6 +246,7 @@
                 <td data-draw-rule="{{ seed.draw_rule }}"
                     {% if seed.experts_per_nine is not none %}data-experts-per-nine="{{ seed.experts_per_nine }}"{% endif %}>
                   {% if seed.draw_rule == "uniform" %}{{ t("seed.details.draw_rule_uniform") }}
+                  {% elif seed.draw_rule != "expert_cap" %}{{ seed.draw_rule }}
                   {% elif seed.experts_per_nine == 0 %}{{ t("seed.details.draw_rule_no_experts") }}
 {% else %}{{ t("seed.details.draw_rule_expert_cap", count=seed.experts_per_nine) }}{% endif %}
   </td>
