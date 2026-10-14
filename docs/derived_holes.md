@@ -24,16 +24,18 @@ Decisions: ADR 0022 (the entry and its delta) and ADR 0023 (how a seed asks for 
 }
 ```
 
-- **`base`** is a hole id, so it names one version of the base forever. A corrected
+- **`base`** is a hole id, so it names one version of the base. A corrected
   `nes_us/12@2` leaves every hole derived from `nes_us/12` as it was. The base is a
   vanilla hole: a derived hole cannot be the base of another.
-- **`delta`** is the delta file, relative to the directory the index is in. A delta is
-  written once and never edited; a changed hole is a new version with a new delta,
-  `nes_us_12_forward3@2.json`.
+- **`delta`** is the delta file, relative to the directory the index is in. A change to
+  the hole that matters to play is a new version with a new delta,
+  `nes_us_12_forward3@2.json`. A delta may be corrected in place otherwise, with the
+  entry's hash updated to match, since seeds keep the holes they were built with
+  (ADR 0024).
 - **`content_hash`** is the hash of the hole the base and the delta build, the same hash
   every other entry has ([catalog.md](catalog.md)). `HoleStore.load` checks the base
-  against its own hash, applies the delta and checks the result, so an edited delta or a
-  changed base is refused.
+  against its own hash, applies the delta and checks the result, so a delta or base that
+  disagrees with the entry is refused.
 - **The lineage** is `<owner>/<slug>`: the owner is `community` or one author's name, and
   the entry's `author` holds the credit either way. A vanilla course's owner (`nes_us`,
   `jp_uk`) is refused. By convention the slug is the base's lineage, what moved and the
@@ -137,7 +139,7 @@ live there. `golf-derive new` then:
    a version is undone ([catalog.md](catalog.md)); a withdrawn version's cannot.
 5. Runs every transform over the hole (`mirror@1`, and each seeded one with three seeds)
    and refuses the hole if one raises. A transform's output is not checked or pinned:
-   a seed stores its transformed holes as built (ADR 0021).
+   a seed stores its holes as built (ADR 0021, ADR 0024).
 6. Writes the delta under `derived/<owner>/` beside the index, adds the entry, bumps the
    index version, and writes the curation record.
 
@@ -184,7 +186,7 @@ families of mixed par should be weighted is open (`docs/thoughts_on_par_6.md`).
   derived hole as it does any other.
 - **Difficulty.** `data/difficulty/holes.json` has no row for a derived hole, and the
   solver is paused (ADR 0012).
-- **The transforms' golden hashes** pin the vanilla holes only (ADR 0015).
+- **The transforms' golden hashes** cover the vanilla holes only.
 
 ## Tests
 

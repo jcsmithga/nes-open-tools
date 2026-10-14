@@ -12,8 +12,8 @@ from golf.randomizer.generate import generate
 from golf.randomizer.manifest import Settings
 from server.db import Database
 from server.entries import Entry, entries_for_user, load_entry, upsert_entry
-from server.seeds import insert_seed
 from server.users import sign_in
+from tests.stored_seeds import store_seed
 
 
 @pytest.fixture(scope="module")
@@ -46,7 +46,7 @@ TOAD = PlayerOptions("TOAD", frozenset({Club.W3, Club.SW}))
 
 
 def test_a_first_download_creates_the_entry_with_drawn_keys(db, manifest):
-    seed_id = insert_seed(db, manifest, b"PATCHEOF")
+    seed_id = store_seed(db, manifest)
     alice = user(db, "alice")
     entry = upsert_entry(
         db, seed_id, alice, LUIGI, now="2026-09-16T00:00:00Z", draw_key=keys()
@@ -65,7 +65,7 @@ def test_a_first_download_creates_the_entry_with_drawn_keys(db, manifest):
 
 
 def test_downloading_again_updates_the_choices_and_keeps_the_keys(db, manifest):
-    seed_id = insert_seed(db, manifest, b"PATCHEOF")
+    seed_id = store_seed(db, manifest)
     alice = user(db, "alice")
     first = upsert_entry(db, seed_id, alice, LUIGI, now="2026-09-16T00:00:00Z")
     second = upsert_entry(db, seed_id, alice, TOAD, now="2026-09-17T00:00:00Z")
@@ -79,7 +79,7 @@ def test_downloading_again_updates_the_choices_and_keeps_the_keys(db, manifest):
 
 
 def test_each_player_gets_their_own_entry_and_keys(db, manifest):
-    seed_id = insert_seed(db, manifest, b"PATCHEOF")
+    seed_id = store_seed(db, manifest)
     alice = upsert_entry(db, seed_id, user(db, "alice"), LUIGI)
     bob = upsert_entry(db, seed_id, user(db, "bob"), LUIGI)
     assert alice.id != bob.id
@@ -87,12 +87,12 @@ def test_each_player_gets_their_own_entry_and_keys(db, manifest):
 
 
 def test_no_entry_loads_as_none(db, manifest):
-    seed_id = insert_seed(db, manifest, b"PATCHEOF")
+    seed_id = store_seed(db, manifest)
     assert load_entry(db, seed_id, user(db, "alice")) is None
 
 
 def test_keys_stay_out_of_repr(db, manifest):
-    seed_id = insert_seed(db, manifest, b"PATCHEOF")
+    seed_id = store_seed(db, manifest)
     entry = upsert_entry(
         db, seed_id, user(db, "alice"), LUIGI, draw_key=lambda: b"\xab" * 8
     )
@@ -101,8 +101,8 @@ def test_keys_stay_out_of_repr(db, manifest):
 
 
 def test_a_players_entries_list_newest_first_with_their_seeds(db, manifest):
-    first = insert_seed(db, manifest, b"PATCHEOF")
-    second = insert_seed(db, manifest, b"PATCHEOF")
+    first = store_seed(db, manifest)
+    second = store_seed(db, manifest)
     alice, bob = user(db, "alice"), user(db, "bob")
     upsert_entry(db, first, alice, LUIGI, now="2026-09-16T00:00:00Z")
     upsert_entry(db, second, alice, TOAD, now="2026-09-17T00:00:00Z")

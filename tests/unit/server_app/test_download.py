@@ -8,9 +8,11 @@ from fastapi.testclient import TestClient
 from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import Club
 from golf.randomizer.catalog import JP_ROM, US_ROM, HoleStore
+from golf.randomizer.manifest import StoredManifest
 from golf.randomizer.roms import vanilla_rom
 from server.builder import BuiltSeed, SeedBuilder
 from tests.app_state import app_state
+from tests.synthetic_holes import built_holes
 from tests.unit.server_app.helpers import (
     FINISHED,
     IPS,
@@ -41,7 +43,8 @@ def test_downloading_finishes_the_stored_seed_as_a_guest(client, fake_builder):
         == f'attachment; filename="notgr_par{par}_{seed_id}.ips"'
     )
     manifest, unfinished_ips, options = fake_builder.finished
-    assert manifest == fake_builder.built
+    # finished from the stored manifest, read back as it is for any stored seed
+    assert manifest == StoredManifest.from_json(fake_builder.built.to_json())
     assert unfinished_ips == IPS
     assert options.player_name == "LUIGI"
     assert options.clubs == {Club.W1, Club.PW, Club.PT}
@@ -109,7 +112,7 @@ def test_downloading_without_the_servers_rom_is_unavailable(
 ):
     class NoRom(SeedBuilder):
         def build(self, manifest, sample=None):
-            return BuiltSeed(IPS, ())
+            return BuiltSeed(IPS, built_holes(manifest, self.catalog))
 
     with app_client(
         builder=NoRom(catalog, curation, HoleStore(), tmp_path / "missing.nes")
@@ -222,7 +225,7 @@ def test_a_missing_server_rom_is_logged_when_a_download_finishes(
 ):
     class NoRom(SeedBuilder):
         def build(self, manifest, sample=None):
-            return BuiltSeed(IPS, ())
+            return BuiltSeed(IPS, built_holes(manifest, self.catalog))
 
     builder = NoRom(catalog, curation, HoleStore(), tmp_path / "missing.nes")
     with app_client(strings=UNWRITTEN, builder=builder) as test_client:

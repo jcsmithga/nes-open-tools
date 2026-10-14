@@ -56,69 +56,86 @@ With the hole list trimmed to one of its 18 slots:
 | Part | Holds | Read by |
 |---|---|---|
 | Version fields | `schema`, `generator_version`, `build_version`, `finish_abi_version`, `catalog_version`, `curation_stamp` | Loading, building, finishing and auditing |
-| `settings` | Every input to generation, the PRNG seed included | The seed page, regeneration |
+| `settings` | Every input to generation, the PRNG seed included | The seed page |
 | `course` | Concrete values | The build |
 
 After checking the build and finish-ABI versions, an unfinished build reads only `course`,
 and nothing in `course` needs interpreting: hole ids rather than filters, a music slug
 rather than "random", wind seeds rather than the string they were derived from. A slot's
-`transforms` are the exception. They name code whose output is fixed only within one
-build version (ADR 0015), so the site stores each transformed hole beside the seed
-(ADR 0021) rather than working it out again. Loading
-is strict: a missing or unknown field is an error. `golf/randomizer/build.py` turns
+`transforms` are the exception. They name code whose output may change from one release
+to the next (ADR 0024), so the site stores every hole as built beside the seed
+(ADR 0021) rather than working it out again. A manifest about to be built is loaded
+strictly, and a stored seed's is read tolerantly (**Reading stored manifests**, below).
+`golf/randomizer/build.py` turns
 `course` into the seed's unfinished ROM, and finishes that ROM per player
 (`docs/randomizer_devplan.md`).
 
 **Versions.**
 
 - `schema` fixes the manifest's JSON shape and the meaning of its fields. It changes when
-  either of those changes. A loader may read historical schemas even when the release no
-  longer implements their unfinished buildchain.
-- `generator_version` is bumped whenever the same catalog, curation and settings would
-  generate a different manifest.
+  either of those changes. Generation writes only the current schema, and a stored seed's
+  manifest is read whatever its schema.
+- `generator_version` records which generator made the manifest. It is bumped when a
+  change to generation is worth telling seeds apart by, such as a change to how holes
+  are drawn; nothing regenerates a stored manifest, so it is provenance only (ADR 0024).
 - `build_version` identifies the recipe that turns the concrete manifest, catalog hole
-  data and vanilla US ROM into the unfinished ROM. It is bumped whenever that operation
-  could produce different bytes: a base patch, patch order, course writer, compressor or
-  imported build resource changing all count. `golf-randomize build` refuses a build
-  version the installed release does not implement rather than silently reinterpreting it.
+  data and vanilla US ROM into the unfinished ROM, as a label for what players get. It is
+  bumped when a change to that recipe makes seeds play or look different enough to tell
+  apart, such as a new patch or a fix like `wind_fix`, and always when the change touches
+  anything the finisher or the scan route reads from a stored artifact
+  (`tests/fixtures/build4/README.md`). A change that only moves bytes, such as better
+  compression, need not bump it (ADR 0024). `golf-randomize build` refuses a build version
+  other than the installed release's rather than silently reinterpreting it.
 - `finish_abi_version` identifies the locations, preimages and meanings the stored
   unfinished artifact exposes to per-download finishing. Multiple build versions may
   share an ABI. Finishing dispatches on this version and promises safe personalization,
   not byte-identical output across releases. See `docs/patch_stack.md`.
-- `catalog_version` and `curation_stamp` record what generation read, for auditing.
-  Hole ids resolve through the frozen catalog forever (`docs/catalog.md`), so neither is
-  needed to build.
+- `catalog_version` and `curation_stamp` record what generation read, as provenance.
+  Neither is needed to build, and nothing upstream of a stored seed is read again to show
+  it (ADR 0024).
 
 ### Schema history
 
-| Schema | Build version | Finish ABI | Change and support |
+| Schema | Build version | Finish ABI | Change |
 |---|---:|---:|---|
-| 1 | 1 (implicit) | 1 (implicit) | The randomizer 1.0 manifest. Current code reads it for display and finishes its stored artifact through ABI 1, but does not rebuild it. |
-| 2 | 2 | 1 | Adds the required `build_version` and `finish_abi_version` fields. Current code reads it and finishes its stored artifact through ABI 1, but does not rebuild it. |
-| 2 | 3 | 1 | `wram_expansion` moves the terrain attribute buffer into WRAM, replacing `attr_streaming`, and the unfinished stack adds `green_shortcut`. Current code finishes its stored artifact through ABI 1, but does not rebuild it. |
-| 2 | 4 | 2 | The unfinished stack adds `extended_sram_defaults`, a table the finisher fills with the BGM, swing, putt and spin defaults, and a seed with club rules leaves CHOOSE CLUBS out of the club house. Current code finishes its stored artifact through ABI 2, but does not rebuild it. |
-| 2 | 5 | 2 | The unfinished stack adds `round_stats`, which counts fairways hit and penalty strokes, and its scorecard QR sends them in payload protocol version 2. Current code finishes its stored artifact through ABI 2, but does not rebuild it. |
+| 1 | 1 (implicit) | 1 (implicit) | The randomizer 1.0 manifest. |
+| 2 | 2 | 1 | Adds the required `build_version` and `finish_abi_version` fields. |
+| 2 | 3 | 1 | `wram_expansion` moves the terrain attribute buffer into WRAM, replacing `attr_streaming`, and the unfinished stack adds `green_shortcut`. |
+| 2 | 4 | 2 | The unfinished stack adds `extended_sram_defaults`, a table the finisher fills with the BGM, swing, putt and spin defaults, and a seed with club rules leaves CHOOSE CLUBS out of the club house. |
+| 2 | 5 | 2 | The unfinished stack adds `round_stats`, which counts fairways hit and penalty strokes, and its scorecard QR sends them in payload protocol version 2. |
 | 2 | 6 | 2 | The unfinished stack adds `wind_fix`, which makes the wind push the ball the way its arrow points on all 16 directions (`docs/wind.md`, **The crosswind bug**). Schema 2 is the last without a draw rule: its seeds were drawn uniformly. |
 | 3 | 6 | 2 | `settings` gains `draw_rule`, `wind_speed_profile` and `wind_direction_profile`, and each hole gains `wind_direction` and `wind_speed`, which the unfinished stack's `wind_anchors` patch writes into the ROM (ADR 0017). Schema 3 is the last without `include`: its pools held vanilla holes only. |
 | 4 | 6 | 2 | `settings` gains `include`, the kinds of hole added to the pool beside the vanilla ones (ADR 0023). The unfinished buildchain is unchanged. Schema 4 is the last without `constraints` and the last with `draw_rule`: its courses were standard ones of the settings' par. |
 | 5 | 6 | 2 | `settings` gains `constraints`, the course's rules, and loses `draw_rule`, whose expert cap is one of them. The unfinished buildchain is unchanged. This is the current schema and unfinished buildchain. |
 
-Loading schema 1 supplies `build_version = 1` and `finish_abi_version = 1` in memory and
-serializes it back in its original shape without adding either field. Loading schema 1
-or 2 supplies a standard course with no cap on expert holes the same way: their
-`settings` have no `draw_rule`, refuse one, and serialize back without it. The same goes for the wind: their settings
-have no wind profiles and their holes no anchors, so both profiles load as `vanilla` and
-each hole with the anchors its wind seed deals, which is the wind those ROMs play. Loading
-schema 1, 2 or 3 supplies an empty `include`, which they refuse and serialize back
-without. Schemas 3 and 4 hold a `draw_rule` where schema 5 holds `constraints`:
-`{"rule": "uniform"}` for a standard course with no cap on expert holes, or
-`{"rule": "expert_cap", "per_nine": N}` for one capped at N. Loading either supplies the
-`constraints` that say the same, `null` for a cap of 1, and serializes the `draw_rule`
-back. The website stores
-and serves the original JSON text as well as the unfinished IPS, so neither artifact of an
-existing seed is rewritten by a schema update. Reading an old manifest and rebuilding it
-are deliberately separate: the site needs the former to keep seed and round pages
-working, while its stored IPS makes the latter unnecessary.
+Every stored seed of these schemas is read as described below, and finishes through the
+ABI its row names. None is rebuilt.
+
+### Reading stored manifests
+
+A manifest is read two ways (`golf/randomizer/manifest.py`). `Manifest.from_json` is
+strict, for a manifest generation made or `golf-randomize build` reads: it takes only the
+current schema, and a missing or unknown field is an error. A stored seed's manifest, in
+whatever schema the release that made the seed issued it, is read as a `StoredManifest`,
+for what the seed's pages and its finisher need (ADR 0024):
+
+- A field this release does not read is ignored, whatever schema added it.
+- A field some schema lacked takes the value that schema's seeds had. No `build_version`
+  or `finish_abi_version` is 1, as in schema 1. No `draw_rule` is `uniform` and no wind
+  profile is `vanilla`, as in schemas 1 and 2, whose holes take the anchors their wind
+  seeds deal: the wind those ROMs play. No `include` is none, as in schemas 1 to 3.
+- Schema 5's `constraints` stand in for the `draw_rule` of schemas 3 and 4, and are kept
+  as issued. The draw rule a seed's page shows is the lowest `expert_cap` among them,
+  `expert_cap` with a cap of 1 when they are `null`, or `uniform` without one.
+- A field every schema has must be present, and a value that is present must be legal.
+  The finish inputs, `finish_abi_version`, `sram_magic` and the club rules, are checked
+  as strictly as `Manifest` checks them.
+- Transform names are not checked against the registry, since the seed's holes are
+  stored as built.
+
+A new schema therefore costs a row in the table above and no loader branch. The website
+stores and serves each seed's original JSON text as well as its unfinished IPS, so neither
+artifact of an existing seed is rewritten by a schema update.
 
 ### Settings
 
@@ -213,7 +230,7 @@ A slot is a catalog hole `id`, its `par` (a copy of the catalog's, for readabili
 0 to 10 (`docs/wind.md`). `transforms` names hole transforms, such as `mirror@1`
 or `hazards@1:<seed>`, applied to the hole in order when the course is built
 (`docs/hole_transforms.md`). A name this release does not know, or a malformed seed,
-fails when the manifest loads. Generation adds no transforms yet. The wind seed is the 16-bit state the ROM's own RNG starts the hole from
+fails when the manifest loads strictly; a stored seed's names are not checked. Generation adds no transforms yet. The wind seed is the 16-bit state the ROM's own RNG starts the hole from
 (`docs/seeded_wind.md`), not a seed for generation. No hole id appears twice.
 
 The SRAM magic is what the ROM's save initialization compares a save against at boot
@@ -263,7 +280,41 @@ data is already in the ROM, and imports a Mario Open theme from its dump (`music
   player's entry and the finishing stage.
 - **Required ROMs.** `required_roms` computes them from the holes and the music: the US
   ROM always, and the Mario Open ROM when any hole, the base of any derived hole or the
-  theme comes from it.
+  theme comes from it. The site stores them on the seed row when the seed is made.
+
+## What a stored seed depends on
+
+A seed is what the site stored when it was made: the manifest text as issued, the
+unfinished IPS, its `seed_holes` rows and its built holes in `hole_data` (ADR 0024).
+Nothing rebuilds it, so the guarantees are the ones its stored rows and the ROMs already
+downloaded need. A change that would break one of these breaks existing seeds.
+
+| Guarantee | Owed to | Stated in | Enforced by |
+|---|---|---|---|
+| Scorecard QR protocols 1 and 2 decode for good | Downloaded ROMs | `docs/scorecard_qr.md`; ADR 0004, ADR 0010 | `tests/unit/test_qr_payload.py`, `tests/integration/test_build4_submission_rom.py` |
+| Finish ABIs 1 and 2 stay finishable, at their pinned locations | Stored IPSes | `docs/patch_stack.md`; ADR 0007, ADR 0009 | The ABI goldens in `tests/unit/test_build.py`, `tests/unit/test_qr_patch.py`, the build 4 fixture |
+| A seed's SRAM magic, seed id, player ids and MAC keys never change | Downloaded ROMs | **Course**, above; `server/CLAUDE.md` | `server/seeds.py`, `server/entries.py` |
+| A seed's manifest text and IPS are never rewritten, and seeds are never deleted | Stored seeds | `server/CLAUDE.md` | `test_withdraw_and_restore_change_only_lifecycle_state_and_log_each_action` |
+| Migrations only append | The database | `server/migrations.py`, `server/CLAUDE.md` | Review only; the migration tests in `tests/unit/test_server_db.py` check that each keeps existing rows |
+| A stored manifest of any schema reads, finish inputs checked strictly | Stored seeds | **Reading stored manifests**, above | The stored manifest tests in `tests/unit/test_manifest.py` |
+| Every hole a seed was built with, and what its pages show of each, is stored with it | Stored seeds | `docs/yardage_book.md`, `docs/randomizer_devplan.md` | `tests/unit/test_server_seeds.py`; the site refuses to start while a seed lacks them |
+| A catalog id is never removed or given another hole | Stats across seeds | `docs/catalog.md` | `tests/meta/test_catalog_ids.py` |
+
+**Permanent names.** A stored seed is finished or joined by these, so none may change
+meaning or stop being read:
+
+- ROM ids (`nes_open_us`, `mario_open_jp`): its required ROMs and its `sources`;
+- club labels (`1W` to `PT`): its club rules, which finishing checks a bag against;
+- hole id syntax (`owner/slug@N`), which its slots and `seed_holes.hole_id` hold.
+
+A name a stored seed only shows can be retired: a draw rule, a wind profile, a music slug
+or a transform version. Its seeds then show it by name rather than by its translated
+label, which the site's strings catalog no longer has.
+
+**Not promised.** That a later release regenerates the same manifest from the same
+settings; that two releases build byte-identical unfinished ROMs (`build_version` labels
+what players get); that a transform gives the same hole in a later release; that a catalog
+entry's hash, par, distance or author, or a delta, stays as it was.
 
 ## Generation
 
@@ -301,9 +352,10 @@ The holes, wind directions, wind speeds, music, magic words and SRAM magic each 
 `random.Random(f"{purpose}\0{prng_seed}")`, and the wind seeds from their own hash, so a
 change to one draw leaves the others as they were.
 
-The same catalog, curation and settings give the same manifest under one generator
-version, and the tests hold generation to that. It is not a promise across generator
-versions: the stored manifest, not its inputs, is what a seed is.
+Within one release, the same catalog, curation and settings give the same manifest; the
+tests hold generation to that, and `--seed` relies on it. It is not a promise across
+releases: nothing regenerates a stored seed, and a seed is what the site stored, not its
+inputs (ADR 0024).
 
 ### The word bank
 
@@ -363,4 +415,6 @@ golf-randomize show demo.json
 - `--catalog`, `--curation` and `--holes` point at a catalog index, curation file or hole
   store other than the checked-in ones.
 - `show` prints a manifest's holes with distances and wind anchors, totals, rules, wind profiles, music, mercy point, club rules,
-  magic words and required ROMs.
+  magic words and required ROMs. It reads the manifest as a stored one, so it shows a
+  seed's `/h/<id>.json` in any schema, with a schema 3 or 4 seed's draw rule in place of
+  its rules; `build` takes only the current schema.

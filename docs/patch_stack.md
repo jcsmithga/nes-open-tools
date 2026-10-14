@@ -84,9 +84,11 @@ disable patch.
 
 Two independent versions describe that boundary:
 
-- `build_version` identifies the recipe that creates the unfinished artifact. Any change
-  that may change its bytes bumps this version, even when the artifact remains compatible
-  with the same finisher.
+- `build_version` identifies the recipe that creates the unfinished artifact, as a label
+  for what players get. A change that makes seeds play or look different bumps it, as
+  does any change to what the finisher or the scan route reads from a stored artifact,
+  even when the artifact remains compatible with the same finisher. A change that only
+  moves bytes need not (ADR 0024).
 - `finish_abi_version` identifies the interface the artifact exposes to a finisher: the
   locations, expected preimages, field widths and meanings that finishing consumes.
   Several build versions may produce the same finish ABI.
@@ -114,7 +116,7 @@ swing, putt or spin defaults.
 Moving or resizing a placeholder, changing a credential's representation, changing the
 guest-disable mechanism, changing the QR payload's meaning, or having the unfinished
 stack consume a location finishing expects to remain vanilla breaks the ABI. A change
-elsewhere in the unfinished recipe only bumps `build_version`.
+elsewhere in the unfinished recipe at most bumps `build_version`.
 
 Building requires the current build and ABI versions: it must not label an artifact with
 an ABI it does not produce. Finishing dispatches by `finish_abi_version`, not by

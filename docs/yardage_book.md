@@ -16,7 +16,7 @@ Code: `server/yardage_book.py` (the book's metadata), `server/seeds.py` (the sto
 | | Source |
 |---|---|
 | Hole order and par | `seed_holes` |
-| The hole | `hole_data` for a slot with transforms, the hole store for any other |
+| The hole | `hole_data`, as the seed's build made it |
 | Yards | The hole's own `distance` |
 | Pin | `seed_holes.pin_index`, the pin the hole's wind seed deals |
 | Tee-shot wind | `tee_wind` in `server/yardage_book.py`: the first swing's direction and speed |
@@ -33,15 +33,13 @@ Code: `server/yardage_book.py` (the book's metadata), `server/seeds.py` (the sto
 
 ## The holes
 
-A slot with no transforms resolves through the catalog to the hole store, in any
-release. A slot with transforms cannot be worked out again by a later release (ADR
-0015), so the seed's build hands its holes to `insert_seed`, which stores the
-transformed ones in `hole_data` as zlib-compressed canonical JSON under their content
-hash, and names the row in `seed_holes.data_hash` (ADR 0021). A seed with every hole
-transformed adds about 20 KB.
-
-A hole the catalog has since withdrawn is still read for a book, since the seed's ROM
-still holds it. If its file is gone from the store, the book answers 503.
+The seed's build hands its 18 holes to `insert_seed`, which stores each in `hole_data`
+as zlib-compressed canonical JSON under its content hash, and names the row in
+`seed_holes.data_hash` (ADR 0021, ADR 0024). A later release may transform a hole
+differently, or correct its catalog entry, so the book reads only these rows: it needs
+neither the catalog nor the hole store, and a hole the catalog has since withdrawn shows
+as the seed's ROM holds it. A hole two seeds share, such as any untransformed vanilla
+hole, is stored once, and a seed with every hole transformed adds about 20 KB.
 
 ## The renders
 

@@ -402,12 +402,12 @@ exercise every such path.
   setting against the fixed count table.
 - `golf/randomizer/catalog.py` includes par in the ROM-bound content hash. Re-parring a
   hole therefore creates a new version of its lineage; it is not a curation edit.
-- Any change to generation behavior bumps `GENERATOR_VERSION`. A manifest schema bump is
-  needed only if the stored manifest or its build semantics change.
+- A change to generation behavior worth telling seeds apart by bumps `GENERATOR_VERSION`,
+  which is provenance only (ADR 0024). A manifest schema bump is needed only if the stored
+  manifest or its build semantics change.
 
-No generator backward compatibility is required. Stored manifests define existing seeds;
-the generator is free to produce future manifests differently under a new generator
-version.
+No generator backward compatibility is required. Stored seeds define themselves; the
+generator is free to produce future manifests differently.
 
 ## Current direction, without a decision
 

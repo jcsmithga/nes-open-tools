@@ -7,12 +7,13 @@ different contracts:
 
 | File | Holds | Changes |
 |---|---|---|
-| `data/catalog/holes.json` | Ids, provenance and a content hash per hole | Append-only |
+| `data/catalog/holes.json` | Ids, provenance and a content hash per hole | Ids never removed or given another hole |
 | `data/catalog/curation.json` | Tags, drawability, families and display names | Freely edited, with `golf-curate` |
 
-Everything that can reach a ROM is in the frozen index. Everything that only decides
-which holes get drawn is curation. A manifest stores resolved hole ids, never filters, so
-editing curation never changes what an existing seed builds.
+Everything that can reach a ROM is in the index. Everything that only decides which holes
+get drawn is curation. A manifest stores resolved hole ids, never filters, and the site
+stores every hole a seed was built with, and what its pages show of it, so editing either
+file changes no existing seed (ADR 0024).
 
 Code: `golf/randomizer/catalog.py` and `golf/randomizer/curation.py`.
 
@@ -26,8 +27,10 @@ Version 1 is written without a suffix, and `nes_uk/01@1` parses to the same id.
   `jp_france`, `jp_hawaii`, `jp_uk`).
 - **Every other lineage** is `<owner>/<slug>`, where the owner is `community` or one
   author's name. The entry's `author` field holds the credit either way.
-- **A changed hole is a new version.** This applies to vanilla holes too: a corrected
-  extraction of `nes_uk/01` is `nes_uk/01@2`.
+- **A change that matters to play is a new version.** This applies to vanilla holes
+  too: a corrected extraction of `nes_uk/01` that plays differently is `nes_uk/01@2`.
+  Stats group a lineage's versions or split them, so a version is how a change shows in
+  them. Anything else about an entry may be corrected in place.
 - **Only the highest version of a lineage is drawable.** Supersession never rolls back:
   to undo version 2, publish version 3 with version 1's content.
 
@@ -59,16 +62,20 @@ that did not ask for its kind (ADR 0023).
 
 Par and distance are copies for the pool builder and the seed page; the hash covers them.
 
-Guarantees, enforced by `tests/meta/test_catalog_frozen.py` and the loader:
+Guarantees, enforced by `tests/meta/test_catalog_ids.py` and the loader:
 
-1. **An id resolves to the same hole data forever.** `HoleStore.load` recomputes the hash
-   and refuses data that does not match.
-2. **No committed entry is ever removed or changed**, across the index's whole git
-   history, and the index version never decreases.
-3. **Withdrawal is the one permitted mutation.** `"withdrawn": true` retires an entry for
-   a takedown. Its id stays reserved, and seeds that used it remain downloadable from
-   their stored unfinished IPS. `HoleStore.load` refuses a withdrawn entry unless asked
-   with `even_withdrawn`, which is for showing such a seed's hole in its yardage book. A lineage whose highest version is withdrawn has nothing
+1. **An id's hole data matches its entry.** `HoleStore.load` recomputes the hash and
+   refuses data that does not match, which is what makes a rehydration trustworthy. It
+   checks the current data against the current index, not a promise across releases: a
+   seed reads the holes stored with it, never the catalog (ADR 0024).
+2. **No committed id is ever removed or given another hole**, across the index's whole
+   git history: its source stays the same, and the index version never decreases. Stats
+   join seeds on hole ids. An entry's hash, par, distance or author may be corrected in
+   place; a change that matters to play is a new version instead.
+3. **Withdrawal retires an entry for a takedown.** `"withdrawn": true` is never taken
+   back. Its id stays reserved, and seeds that used it remain downloadable from their
+   stored unfinished IPS. `HoleStore.load` refuses a withdrawn entry unless asked with
+   `even_withdrawn`, which is for reading a hole a seed already holds. A lineage whose highest version is withdrawn has nothing
    drawable, and nor has a hole derived from a withdrawn base.
 
 ## The content hash

@@ -1,21 +1,16 @@
 """`server/routes/seed_pages.py`: the seed page and its manifest."""
 
+import json
 import re
-from dataclasses import replace
 
 import pytest
 
 from golf.randomizer.catalog import US_ROM, HoleStore
-from golf.randomizer.manifest import (
-    LEGACY_BUILD_VERSION,
-    LEGACY_FINISH_ABI_VERSION,
-    LEGACY_SCHEMA,
-    Manifest,
-    standard_rules,
-)
+from golf.randomizer.manifest import Manifest, Settings, standard_rules
 from golf.randomizer.roms import vanilla_rom
 from server.forms import FormState
 from tests.app_state import app_state
+from tests.stored_seeds import store_seed
 from tests.unit.server_app.helpers import (
     UNWRITTEN,
     US_ONLY,
@@ -135,9 +130,9 @@ def test_the_seed_page_names_the_wind_profiles_it_was_generated_under(
 
 
 def test_a_seed_stored_before_expert_caps_shows_none(catalog, curation, tmp_path):
-    builder = LegacyBuilder(catalog, curation, HoleStore(), tmp_path / "unused.nes")
+    builder = FakeBuilder(catalog, curation, HoleStore(), tmp_path / "unused.nes")
     with app_client(strings=UNWRITTEN, builder=builder) as test_client:
-        seed_id = generate_seed(test_client)
+        seed_id = legacy_seed(test_client)
         page = test_client.get(f"/h/{seed_id}").text
         stored = test_client.get(f"/h/{seed_id}.json").json()
     assert 'data-draw-rule="uniform"' in page
@@ -146,6 +141,34 @@ def test_a_seed_stored_before_expert_caps_shows_none(catalog, curation, tmp_path
     assert "draw_rule" not in stored["settings"]
     assert "wind_speed_profile" not in stored["settings"]
     assert "wind_speed" not in stored["course"]["holes"][0]
+
+
+def test_a_seed_shows_names_a_later_release_retired_by_name(client):
+    seed_id = generate_seed(client)
+    db = app_state(client).db
+    with db.transaction() as conn:
+        data = json.loads(
+            conn.execute(
+                "SELECT manifest FROM seeds WHERE id = ?", (seed_id,)
+            ).fetchone()[0]
+        )
+        # a schema 3 or 4 seed's draw rule, which schema 5's constraints replaced
+        del data["settings"]["constraints"]
+        data["settings"]["draw_rule"] = {"rule": "ceiling", "per_nine": 2}
+        data["settings"]["wind_speed_profile"] = "hurricane"
+        data["settings"]["wind_direction_profile"] = "swirling"
+        data["course"]["music"] = "jp_mars"
+        conn.execute(
+            "UPDATE seeds SET manifest = ? WHERE id = ?", (json.dumps(data), seed_id)
+        )
+    response = client.get(f"/h/{seed_id}")
+    assert response.status_code == 200
+    page = response.text
+    assert re.search(r'data-draw-rule="ceiling"[^>]*>\s*ceiling\s*<', page)
+    assert 'data-wind-speed="hurricane">hurricane<' in page
+    assert 'data-wind-direction="swirling">swirling<' in page
+    assert 'data-music="jp_mars">jp_mars<' in page
+    assert client.get(f"/h/{seed_id}/book.json").status_code == 200
 
 
 def test_the_manifest_json_is_the_stored_manifest(client, fake_builder):
@@ -291,18 +314,12 @@ def test_the_seed_page_marks_each_hole_against_par(fake_builder):
     assert rounds.count('<td class="num strokes">4</td>') == pars.count(4)
 
 
-class LegacyBuilder(FakeBuilder):
-    """Stores seeds as the randomizer 1.0 site did: schema 1, finish ABI 1."""
-
-    def generate(self, settings):
-        manifest = super().generate(settings)
-        return replace(
-            manifest,
-            schema=LEGACY_SCHEMA,
-            build_version=LEGACY_BUILD_VERSION,
-            finish_abi_version=LEGACY_FINISH_ABI_VERSION,
-            settings=replace(manifest.settings, constraints=standard_rules(72, None)),
-        )
+def legacy_seed(client) -> str:
+    """A seed stored as the randomizer 1.0 site stored them: schema 1, finish ABI 1,
+    drawn uniformly with the wind its seeds deal."""
+    state = app_state(client)
+    manifest = state.builder.generate(Settings(constraints=standard_rules(72, None)))
+    return store_seed(state.db, manifest, schema=1, catalog=state.builder.catalog)
 
 
 def settings_tag(article: str) -> str:
@@ -369,9 +386,9 @@ def test_banned_clubs_are_marked_as_removed_from_the_starting_bag(client):
 def test_an_abi_one_seed_offers_bgm_but_no_swing_putt_or_spin(
     catalog, curation, tmp_path
 ):
-    builder = LegacyBuilder(catalog, curation, HoleStore(), tmp_path / "unused.nes")
+    builder = FakeBuilder(catalog, curation, HoleStore(), tmp_path / "unused.nes")
     with app_client(builder=builder) as test_client:
-        seed_id = generate_seed(test_client)
+        seed_id = legacy_seed(test_client)
         article = download_article(test_client.get(f"/h/{seed_id}").text)
         assert set(summary_values(article)) == {"name", "clubs", "bgm"}
         assert 'name="bgm"' in article

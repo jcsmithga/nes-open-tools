@@ -29,15 +29,14 @@ from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate, stream
 from golf.randomizer.legacy_draw import draw_legacy
 from golf.randomizer.manifest import (
-    LEGACY_BUILD_VERSION,
-    LEGACY_FINISH_ABI_VERSION,
-    LEGACY_SCHEMA,
     ClubRules,
     Settings,
+    StoredManifest,
     standard_rules,
 )
 from golf.randomizer.pool import build_pool
 from golf.randomizer.transforms import apply_transforms
+from tests.legacy_manifest import as_schema
 from tests.new_save import new_save
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -313,14 +312,9 @@ def abi_1_unfinished(jp_manifest, catalog, store, vanilla) -> bytes:
     return PatchStack(steps).ips(vanilla)
 
 
-def legacy(manifest):
-    return replace(
-        manifest,
-        schema=LEGACY_SCHEMA,
-        build_version=LEGACY_BUILD_VERSION,
-        finish_abi_version=LEGACY_FINISH_ABI_VERSION,
-        settings=replace(manifest.settings, constraints=standard_rules(72, None)),
-    )
+def legacy(manifest) -> StoredManifest:
+    """`manifest` as the randomizer 1.0 site stored it: schema 1, finish ABI 1."""
+    return StoredManifest.from_json(as_schema(manifest.to_json(), 1))
 
 
 def test_a_stored_abi_one_unfinished_ips_can_still_be_finished(

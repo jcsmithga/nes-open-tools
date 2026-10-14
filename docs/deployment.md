@@ -210,6 +210,42 @@ sudo systemctl reload caddy
 A migration moves the database forward, and an older release refuses a database newer than
 it knows. Rolling back past a migration is restoring the database from before it.
 
+### A database from before migration 7
+
+Migration 7 keeps every seed's holes as built, and what its pages show from the catalog,
+on the seed (ADR 0024). Seeds stored before it lack them, and `golf-site` refuses to start
+until they are filled in. Production was filled in when `server-v4.1.3` was deployed, on
+2026-10-14. A database from before then, such as a backup restored from before that day or
+an old development database, needs filling in by `golf-site-backfill`, which only
+`server-v4.1.3` has: later releases read stored manifests in a way it cannot (`docs/manifest.md`,
+**Reading stored manifests**).
+
+On the server, deploy `server-v4.1.3`, fill the database in, then deploy the current
+release again:
+
+```bash
+/opt/golf-site/deploy/deploy.sh server-v4.1.3    # the restart fails: seeds need a backfill
+sudo systemctl stop golf-site
+sudo systemd-run --pipe --wait --uid=golf --gid=golf \
+    -p EnvironmentFile=/etc/golf-site/env -p WorkingDirectory=/opt/golf-site \
+    /opt/golf-site/.venv/bin/golf-site-backfill --dry-run
+sudo systemd-run --pipe --wait --uid=golf --gid=golf \
+    -p EnvironmentFile=/etc/golf-site/env -p WorkingDirectory=/opt/golf-site \
+    /opt/golf-site/.venv/bin/golf-site-backfill
+/opt/golf-site/deploy/deploy.sh <current release>
+```
+
+`systemd-run` runs it as the service's user with the service's environment, which only
+root can read. The failed restart has already run the unit's `golf-rehydrate` check, so
+the hole store is current. The backfill migrates the database, works out every unfilled
+seed before writing anything, and writes nothing if a hole is missing from the store, a
+transformed hole was never stored or a manifest does not load; `--dry-run` lists the seeds
+it would fill. Run again, it finds nothing to do.
+
+A development database is filled in from a checkout of the tag:
+`git worktree add /tmp/v4.1.3 server-v4.1.3`, then, from there,
+`GOLF_DATABASE=<database> GOLF_HOLES_DIR=<your courses/> uv run golf-site-backfill`.
+
 ## Operating
 
 | Task | Command |

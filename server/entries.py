@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from golf.core.patches.sram_defaults import Club
 from golf.qr import payload
 from golf.randomizer.build import PlayerOptions
-from golf.randomizer.manifest import Manifest
+from golf.randomizer.manifest import StoredManifest
 
 from .db import Database
 from .seeds import utc_now
@@ -143,7 +143,7 @@ def entries_for_user(db: Database, user_id: int) -> list[EntryListing]:
         ).fetchall()
     listings = []
     for row in rows:
-        course = Manifest.from_json(json.loads(row["manifest"])).course
+        course = StoredManifest.from_json(json.loads(row["manifest"])).course
         listings.append(
             EntryListing(
                 seed_id=row["seed_id"],

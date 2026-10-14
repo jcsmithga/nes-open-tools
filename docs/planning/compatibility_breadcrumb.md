@@ -1,8 +1,3 @@
-> Note: If you're an AI agent, ignore the rest of this file.
-> jdharms: I had Claude write up this prompt to "bootstrap" a future session
-> examining the compatibility guarantees we're carrying.  They're starting to
-> feel like a real tax to me.
-
 I want to reduce how much compatibility and versioning machinery this project carries.
 This session is for gathering context and helping me think it through. Don't change
 any code or docs until we've agreed on a direction.

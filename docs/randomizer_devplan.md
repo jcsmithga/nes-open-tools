@@ -20,8 +20,8 @@ so ROMs can be built and playtested from a manifest file offline; it lives at
 `tools/randomize.py`. The server's systemd unit, proxy and backup configuration are
 `deploy/`, and `docs/deployment.md` is how they are installed and releases deployed.
 
-**The catalog** is two checked-in files (`docs/catalog.md`). The frozen, append-only
-index holds versioned hole ids such as `jp_hawaii/07` or `dharms/cliffside@2`, each with
+**The catalog** is two checked-in files (`docs/catalog.md`). The index, whose ids are
+never removed or given another hole, holds versioned hole ids such as `jp_hawaii/07` or `dharms/cliffside@2`, each with
 its source, a content hash, par and yardage. The curation file holds what steers
 generation, keyed by lineage: tags, drawability and hand-assigned families. Hole data
 lives in a directory the server rehydrates from its vanilla ROMs. Manifests reference hole
@@ -75,9 +75,11 @@ but a release that does not retain their buildchain refuses to rebuild them rath
 silently using the current one. It may still finish their stored artifact through a
 supported ABI; see `docs/patch_stack.md`.
 
-The one thing upstream of the IPS the site keeps beside it is each transformed hole, as
-built, in `hole_data` (ADR 0021): a later release's transforms may give another hole
-(ADR 0015), and the seed's yardage book shows the one in the ROM (`docs/yardage_book.md`).
+Beside the IPS, the site keeps every hole as built, in `hole_data` (ADR 0021), and what
+the seed's pages show of each from the catalog, so a seed's pages read nothing that a later
+release could change: its transforms may give another hole, and its catalog may correct an
+entry in place (ADR 0024). The yardage book shows the hole in the ROM
+(`docs/yardage_book.md`).
 
 ### ROM gating
 
@@ -85,7 +87,8 @@ The ROM never leaves the browser. The ROM setup page reads the file, hashes it w
 SubtleCrypto, and keeps the bytes in IndexedDB so players upload once. The download
 request carries the hashes, and the server refuses a finished IPS for a manifest whose
 holes or music come from Mario Open unless the JP hash is present. The seed page says up
-front which ROMs a seed needs, from `required_roms` (`docs/manifest.md`). This is a speed bump, as `randomizer.md` accepts.
+front which ROMs a seed needs, from `required_roms` (`docs/manifest.md`), stored on the
+seed row when it is made. This is a speed bump, as `randomizer.md` accepts.
 
 ### Users and access
 
@@ -136,9 +139,9 @@ cannot submit.
 | Table | Holds |
 |---|---|
 | `users` | Internal id, Discord id (`dev:<name>` for bypass users), Discord `username` and `global_name` (pages show `global_name`, falling back to `username`), avatar hash, a random unique nonzero uint32 `player_id` drawn at first sign-in, created_at, last_login. Names and avatar are refreshed on every sign-in |
-| `seeds` | A 10-character base62 id for URLs and the same value as an integer, `qr_seed_id`, both unique; manifest JSON, generator, unfinished-build, finish-ABI and catalog versions, curation stamp, the immutable unfinished IPS blob, nullable creator, created_at and nullable withdrawn_at |
-| `seed_holes` | seed, position 1-18, catalog hole id, transforms, par, wind seed, pin index, wind direction anchor, wind speed anchor, and `data_hash`, the `hole_data` row holding the hole when it has transforms. All but `data_hash` is denormalization of the manifest for SQL stats, which a migration can always backfill; `data_hash` and its row are not, since only the seed's build could make them |
-| `hole_data` | A transformed hole as its seed's build made it: its content hash, and the zlib-compressed canonical JSON the hash is taken over. Written once, with the first seed that holds it, and shared by any other (ADR 0021) |
+| `seeds` | A 10-character base62 id for URLs and the same value as an integer, `qr_seed_id`, both unique; manifest JSON, generator, unfinished-build, finish-ABI and catalog versions, curation stamp, the immutable unfinished IPS blob, the vanilla ROMs a download needs (`required_roms`, a JSON list), nullable creator, created_at and nullable withdrawn_at |
+| `seed_holes` | seed, position 1-18, catalog hole id, transforms, par, wind seed, pin index, wind direction anchor, wind speed anchor; `data_hash`, the `hole_data` row holding the hole as built; and what the seed page shows of the hole, kept from the catalog when the seed was made: distance, author, and for a vanilla hole its source ROM, course and hole number (NULL for any other kind). The manifest columns are denormalization for SQL stats, which a migration can always backfill; the rest is what the seed was, which only its build and the catalog of the day could give (ADR 0024) |
+| `hole_data` | A hole as a seed's build made it: its content hash, and the zlib-compressed canonical JSON the hash is taken over. Written once, with the first seed that holds it, and shared by any other (ADR 0021, ADR 0024) |
 | `entries` | One per (seed, user), unique. The player's choices at their latest download (name, clubs), one MAC key per slot, created_at, updated_at |
 | `download_settings` | One per user: the player's saved download settings as a JSON `SavedSettings` record, and updated_at. Written by a signed-in download under the saving rule and by `/me`; deleted by "forget my settings" (`docs/planning/download_settings.md`) |
 | `rounds` | A scan the server accepted: a unique `public_id`, the base62 id of its `/r/<id>` permalink; entry, slot, raw payload (36 bytes for QR protocol version 1, 39 for version 2), total strokes, total putts, penalty strokes (NULL for a version 1 round, which did not record them), received_at, flagged, with an admin-only flag note. Unique on (entry, slot), which is the first-submission rule |

@@ -98,8 +98,10 @@ course, `[{"rule": "standard", "par": <par>}, {"rule": "expert_cap", "per_nine":
 A list is the whole of the rules: nothing is added to it but the family rule, so a
 course with a cap on expert holes says `expert_cap` and one without leaves it out.
 
-Schema 5 has no `draw_rule`. Schemas 3 and 4 held the expert cap there, and their
-manifests load with the `constraints` that say the same.
+Schema 5 has no `draw_rule`. Schemas 3 and 4 held the expert cap there. Their seeds are
+read only as stored manifests (ADR 0024), which keep a `draw_rule` as issued and show a
+schema 5 seed's `constraints` as the draw rule they amount to (`docs/manifest.md`,
+**Reading stored manifests**).
 
 This leaves `par` saying nothing when `constraints` is a list. See **Open questions**.
 

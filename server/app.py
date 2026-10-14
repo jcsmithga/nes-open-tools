@@ -24,7 +24,7 @@ from golf.rendering.hole_renders import HoleRenders
 from .auth import DiscordClient, current_user
 from .builder import BuilderUnavailableError, SeedBuilder
 from .config import Config
-from .db import Database
+from .db import Database, DatabaseError
 from .logging import request_id
 from .pages import PageCatalog
 from .ratelimit import GENERATE_CAPACITY, GENERATE_REFILL_SECONDS, RateLimiter
@@ -33,6 +33,7 @@ from .routes.admin_pages import admin_router
 from .routes.round_pages import round_router
 from .routes.seed_pages import seed_router
 from .routes.site import RANGEFINDER_DATA_URL, site_router
+from .seeds import NOT_BACKFILLED, unfilled_seeds
 from .static_files import (
     LOGO,
     LOGO_SIZE,
@@ -114,6 +115,11 @@ def create_app(
             after = db.migrate()
             if after != before:
                 log.info("schema migrated %d to %d", before, after)
+            unfilled = unfilled_seeds(db)
+            if unfilled:
+                raise DatabaseError(
+                    f"{len(unfilled)} seeds, such as {unfilled[0]}, {NOT_BACKFILLED}"
+                )
             app.state.db = db
             seed_builder = (
                 builder if builder is not None else SeedBuilder.from_config(config)

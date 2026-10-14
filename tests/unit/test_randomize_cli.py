@@ -145,7 +145,7 @@ def test_show_prints_the_course(tmp_path):
     assert f"wind {speed:>2} to {compass(direction)}" in completed.stdout
 
 
-def test_show_reads_schema_one_but_build_refuses_its_historical_buildchain(tmp_path):
+def test_show_reads_schema_one_but_build_refuses_it(tmp_path):
     current = as_schema(
         generate(
             Catalog.load(),
@@ -164,7 +164,7 @@ def test_show_reads_schema_one_but_build_refuses_its_historical_buildchain(tmp_p
     rom.write_bytes(b"")
     built = run("build", rom, path, "--unfinished")
     assert built.returncode == 1
-    assert "requires unfinished build version 1" in built.stderr
+    assert "manifest schema 1 is not this release's" in built.stderr
 
 
 def test_generate_refuses_settings_the_model_refuses(tmp_path):

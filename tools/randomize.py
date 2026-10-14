@@ -41,12 +41,16 @@ from golf.randomizer.generate import GenerationError, course_rules, generate
 from golf.randomizer.layout import COUNTS
 from golf.randomizer.manifest import (
     DEFAULT_EXPERTS_PER_NINE,
+    EXPERT_CAP,
     INCLUDABLE,
     SOURCES,
     ClubRules,
     Manifest,
     ManifestError,
     Settings,
+    StoredDrawRule,
+    StoredManifest,
+    StoredSettings,
     required_roms,
     standard_rules,
 )
@@ -101,6 +105,15 @@ def constraints_from_args(args: argparse.Namespace):
     return standard_rules(args.par, args.experts_per_nine)
 
 
+def describe_draw_rule(rule: StoredDrawRule) -> str:
+    if rule.rule != EXPERT_CAP:
+        return rule.rule
+    if rule.per_nine == 0:
+        return "no expert holes"
+    holes = "hole" if rule.per_nine == 1 else "holes"
+    return f"at most {rule.per_nine} expert {holes} on each nine"
+
+
 def settings_from_args(args: argparse.Namespace) -> Settings:
     """The settings the flags ask for, or a request's: a request stands in for every
     settings flag but `--seed`."""
@@ -143,6 +156,19 @@ def settings_from_args(args: argparse.Namespace) -> Settings:
     )
 
 
+def describe_rules(settings: Settings | StoredSettings) -> list[str]:
+    """The course's rules, one a line: a stored seed's constraints as issued, or its draw
+    rule when its schema has none or they are the default course's."""
+    if isinstance(settings, Settings):
+        return [str(rule) for rule in settings.rules]
+    if settings.constraints is None:
+        return [describe_draw_rule(settings.draw_rule)]
+    return [
+        json.dumps(rule, sort_keys=True, separators=(",", ":"))
+        for rule in settings.constraints
+    ]
+
+
 def describe_clubs(rules: ClubRules) -> str:
     parts = [f"at most {rules.max}"]
     if rules.banned:
@@ -156,7 +182,9 @@ def describe_clubs(rules: ClubRules) -> str:
 
 
 def summary(
-    manifest: Manifest, catalog: Catalog, curation: CurationSnapshot | None
+    manifest: Manifest | StoredManifest,
+    catalog: Catalog,
+    curation: CurationSnapshot | None,
 ) -> list[str]:
     course = manifest.course
     asked = (
@@ -179,20 +207,32 @@ def summary(
     mercy = "off" if course.mercy_point is None else f"stroke {course.mercy_point}"
     lines += [
         f"total: par {course.par}, {total_yards:,} yards",
-        *(f"rule: {rule}" for rule in manifest.settings.rules),
+        *(f"rule: {rule}" for rule in describe_rules(manifest.settings)),
         f"wind: {manifest.settings.wind_speed_profile} speed, "
         f"{manifest.settings.wind_direction_profile} direction",
         f"music: {course.music}",
         f"mercy tap-in: {mercy}",
         f"clubs: {describe_clubs(course.clubs)}",
         f"magic words: {' '.join(course.magic_words)}",
-        f"requires: {', '.join(required_roms(manifest, catalog))}",
+        f"requires: {requires(manifest, catalog)}",
     ]
     return lines
 
 
+def requires(manifest: Manifest | StoredManifest, catalog: Catalog) -> str:
+    """The ROMs a seed needs, or why a stored seed's cannot be told."""
+    if manifest.course.music not in TRACKS:
+        return f"unknown: music {manifest.course.music!r} is not in this release"
+    return ", ".join(required_roms(manifest, catalog))
+
+
 def load_manifest(path: Path) -> Manifest:
     return Manifest.from_json(json.loads(path.read_text()))
+
+
+def load_stored_manifest(path: Path) -> StoredManifest:
+    """A manifest file in any schema, such as a stored seed's from `/h/<id>.json`, to show."""
+    return StoredManifest.from_json(json.loads(path.read_text()))
 
 
 def curation_or_none(path: Path) -> CurationSnapshot | None:
@@ -301,7 +341,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def cmd_show(args: argparse.Namespace) -> int:
-    manifest = load_manifest(args.manifest)
+    manifest = load_stored_manifest(args.manifest)
     catalog = Catalog.load(args.catalog)
     for line in summary(manifest, catalog, curation_or_none(args.curation)):
         print(line)
@@ -520,7 +560,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build.set_defaults(func=cmd_build)
 
-    show = commands.add_parser("show", help="print a manifest's course")
+    show = commands.add_parser(
+        "show", help="print a manifest's course, in any schema a seed was stored in"
+    )
     show.add_argument("manifest", type=Path, help="manifest file")
     show.add_argument(
         "--catalog", type=Path, default=DEFAULT_INDEX, help="catalog index"

@@ -8,10 +8,18 @@ from dataclasses import replace
 import pytest
 
 from golf.core.rng import predict_hole
-from golf.randomizer.catalog import Catalog, canonical_json, content_hash
+from golf.randomizer.catalog import (
+    Catalog,
+    CatalogEntry,
+    DerivedSource,
+    HoleId,
+    RomSource,
+    canonical_json,
+    content_hash,
+)
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate
-from golf.randomizer.manifest import Manifest, Settings
+from golf.randomizer.manifest import Manifest, Settings, StoredManifest, required_roms
 from server.db import Database
 from server.seeds import (
     ID_LENGTH,
@@ -33,9 +41,11 @@ from server.seeds import (
     manifest_text,
     new_qr_seed_id,
     restore_seed,
+    unfilled_seeds,
     withdraw_seed,
 )
 from server.users import sign_in
+from tests.stored_seeds import store_seed, unfill
 from tests.synthetic_holes import synthetic_hole
 
 IPS = b"PATCH\x00\x00\x10\x00\x01\xeaEOF"
@@ -130,7 +140,7 @@ def test_drawn_ids_are_in_range():
 
 
 def test_a_seed_is_stored_with_its_eighteen_holes(db, manifest):
-    seed_id = insert_seed(
+    seed_id = store_seed(
         db, manifest, IPS, now="2026-09-15T12:00:00Z", draw=lambda: 12345
     )
     assert seed_id == encode_seed_id(12345)
@@ -163,19 +173,19 @@ def test_a_seed_is_stored_with_its_eighteen_holes(db, manifest):
 
 
 def test_created_at_defaults_to_utc_now(db, manifest):
-    seed_id = insert_seed(db, manifest, IPS)
+    seed_id = store_seed(db, manifest, IPS)
     assert seed_row(db, seed_id).created_at.endswith("Z")
 
 
 def test_a_taken_id_is_drawn_again(db, manifest):
-    insert_seed(db, manifest, IPS, draw=lambda: 7)
+    store_seed(db, manifest, IPS, draw=lambda: 7)
     draws = iter([7, 7, 8])
-    assert insert_seed(db, manifest, IPS, draw=lambda: next(draws)) == encode_seed_id(8)
+    assert store_seed(db, manifest, IPS, draw=lambda: next(draws)) == encode_seed_id(8)
     assert counts(db) == (2, 36)
 
 
 def test_insert_gives_up_after_its_attempts(db, manifest):
-    insert_seed(db, manifest, IPS, draw=lambda: 7)
+    store_seed(db, manifest, IPS, draw=lambda: 7)
     calls = []
 
     def draw():
@@ -183,17 +193,17 @@ def test_insert_gives_up_after_its_attempts(db, manifest):
         return 7
 
     with pytest.raises(SeedIdExhaustedError):
-        insert_seed(db, manifest, IPS, draw=draw)
+        store_seed(db, manifest, IPS, draw=draw)
     assert len(calls) == INSERT_ATTEMPTS
     assert counts(db) == (1, 18)
 
 
 def test_load_seed_returns_the_stored_manifest(db, manifest):
-    seed_id = insert_seed(db, manifest, IPS, creator_id=None, draw=lambda: 99)
+    seed_id = store_seed(db, manifest, IPS, creator_id=None, draw=lambda: 99)
     row = seed_row(db, seed_id)
     assert row.id == seed_id
     assert row.qr_seed_id == 99
-    assert row.manifest == manifest
+    assert row.manifest == StoredManifest.from_json(manifest.to_json())
     assert row.manifest_json == manifest_text(manifest)
     assert row.build_version == manifest.build_version
     assert row.finish_abi_version == manifest.finish_abi_version
@@ -207,7 +217,7 @@ def test_load_seed_is_none_for_a_missing_or_malformed_id(db, text):
 
 
 def test_load_unfinished_ips_returns_the_stored_blob(db, manifest):
-    seed_id = insert_seed(db, manifest, IPS)
+    seed_id = store_seed(db, manifest, IPS)
     assert load_unfinished_ips(db, seed_id) == IPS
 
 
@@ -234,7 +244,7 @@ def admin(db: Database):
 def test_withdraw_and_restore_change_only_lifecycle_state_and_log_each_action(
     db, manifest
 ):
-    seed_id = insert_seed(db, manifest, IPS, draw=lambda: 7)
+    seed_id = store_seed(db, manifest, IPS, draw=lambda: 7)
     user = admin(db)
     original = seed_row(db, seed_id)
 
@@ -272,7 +282,7 @@ def test_withdraw_and_restore_change_only_lifecycle_state_and_log_each_action(
 
 
 def test_invalid_withdrawal_transitions_write_no_audit_rows(db, manifest):
-    seed_id = insert_seed(db, manifest, IPS)
+    seed_id = store_seed(db, manifest, IPS)
     user = admin(db)
     with pytest.raises(SeedNotWithdrawnError):
         restore_seed(db, seed_id, user.id)
@@ -285,7 +295,7 @@ def test_invalid_withdrawal_transitions_write_no_audit_rows(db, manifest):
         assert conn.execute("SELECT count(*) FROM admin_actions").fetchone()[0] == 1
 
 
-# -- Transformed holes ------------------------------------------------------------------------
+# -- Stored holes ---------------------------------------------------------------------------
 
 
 def with_transforms(manifest: Manifest, transforms: dict[int, tuple[str, ...]]):
@@ -306,57 +316,80 @@ def stored_hashes(db: Database) -> set[str]:
 HOLES = [synthetic_hole(number) for number in range(1, 19)]
 
 
-def test_a_seed_without_transforms_stores_no_holes(db, manifest):
-    seed_id = insert_seed(db, manifest, IPS, holes=HOLES)
-    assert stored_hashes(db) == set()
+def test_every_hole_is_stored_as_built_with_its_catalog_facts(db, manifest):
+    catalog = Catalog.load()
+    changed = with_transforms(manifest, {0: ("mirror@1",)})
+    seed_id = insert_seed(db, changed, IPS, HOLES, catalog)
     holes = load_seed_holes(db, seed_id)
     assert [hole.position for hole in holes] == list(range(1, 19))
-    assert all(hole.data_hash is None for hole in holes)
-    for hole, slot in zip(holes, manifest.course.holes, strict=True):
+    assert stored_hashes(db) == {content_hash(hole) for hole in HOLES}
+    for hole, slot, built in zip(holes, changed.course.holes, HOLES, strict=True):
+        entry = catalog[slot.id]
         assert (hole.hole_id, hole.par) == (str(slot.id), slot.par)
         assert hole.pin_index == predict_hole(slot.wind_seed).pin_index
-
-
-def test_a_transformed_hole_is_stored_as_built(db, manifest):
-    changed = with_transforms(manifest, {0: ("mirror@1",), 4: ("hazards@1:7",)})
-    seed_id = insert_seed(db, changed, IPS, holes=HOLES)
-    holes = load_seed_holes(db, seed_id)
-    assert [hole.position for hole in holes if hole.data_hash] == [1, 5]
-    assert holes[0].data_hash == content_hash(HOLES[0])
-    assert holes[4].data_hash == content_hash(HOLES[4])
-    assert stored_hashes(db) == {holes[0].data_hash, holes[4].data_hash}
-    assert load_hole_data(db, content_hash(HOLES[4])) == json.loads(
+        assert hole.data_hash == content_hash(built)
+        assert hole.distance == built.metadata["distance"]
+        assert hole.author == entry.author
+        assert isinstance(entry.source, RomSource)
+        assert (hole.source_rom, hole.source_course, hole.source_hole) == (
+            entry.source.rom,
+            entry.source.course,
+            entry.source.hole,
+        )
+    assert load_hole_data(db, holes[4].data_hash) == json.loads(
         canonical_json(HOLES[4])
+    )
+    assert seed_row(db, seed_id).required_roms == required_roms(changed, catalog)
+
+
+def test_a_hole_that_is_not_vanilla_has_no_source(db, manifest):
+    base = Catalog.load()[manifest.course.holes[0].id]
+    derived = CatalogEntry(
+        HoleId("jdharms/stored_short3"),
+        DerivedSource(base, "derived/jdharms/stored_short3.json"),
+        "1" * 64,
+        3,
+        190,
+        "jdharms",
+    )
+    catalog = Catalog(1, {**Catalog.load().entries, derived.id: derived})
+    first = replace(manifest.course.holes[0], id=derived.id)
+    changed = replace(
+        manifest,
+        course=replace(manifest.course, holes=(first, *manifest.course.holes[1:])),
+    )
+    hole = load_seed_holes(db, insert_seed(db, changed, IPS, HOLES, catalog))[0]
+    assert (hole.author, hole.source_rom, hole.source_course, hole.source_hole) == (
+        "jdharms",
+        None,
+        None,
+        None,
     )
 
 
 def test_a_hole_two_seeds_share_is_stored_once(db, manifest):
-    changed = with_transforms(manifest, {0: ("mirror@1",)})
-    first = insert_seed(db, changed, IPS, holes=HOLES)
-    second = insert_seed(db, changed, IPS, holes=HOLES)
-    assert len(stored_hashes(db)) == 1
-    assert (
-        load_seed_holes(db, first)[0].data_hash
-        == load_seed_holes(db, second)[0].data_hash
-    )
+    first = store_seed(db, manifest, IPS)
+    second = store_seed(db, manifest, IPS)
+    assert len(stored_hashes(db)) == 18
+    assert [hole.data_hash for hole in load_seed_holes(db, first)] == [
+        hole.data_hash for hole in load_seed_holes(db, second)
+    ]
 
 
-@pytest.mark.parametrize("holes", [None, HOLES[:17]])
-def test_transforms_need_the_holes_the_build_made(db, manifest, holes):
-    changed = with_transforms(manifest, {17: ("mirror@1",)})
-    with pytest.raises(MissingHolesError, match="hole 18"):
-        insert_seed(db, changed, IPS, holes=holes)
+def test_a_seed_needs_the_holes_its_build_made(db, manifest):
+    with pytest.raises(MissingHolesError, match="got 17"):
+        insert_seed(db, manifest, IPS, HOLES[:17], Catalog.load())
     assert counts(db) == (0, 0)
 
 
 def test_a_stored_hole_is_checked_against_its_hash(db, manifest):
-    changed = with_transforms(manifest, {0: ("mirror@1",)})
-    seed_id = insert_seed(db, changed, IPS, holes=HOLES)
+    seed_id = store_seed(db, manifest, IPS)
     digest = load_seed_holes(db, seed_id)[0].data_hash
-    assert digest is not None
     other = zlib.compress(canonical_json(HOLES[1]))
     with db.transaction() as conn:
-        conn.execute("UPDATE hole_data SET data = ?", (other,))
+        conn.execute(
+            "UPDATE hole_data SET data = ? WHERE content_hash = ?", (other, digest)
+        )
     with pytest.raises(RuntimeError, match="has content hash"):
         load_hole_data(db, digest)
     with pytest.raises(LookupError, match="no stored hole"):
@@ -365,3 +398,16 @@ def test_a_stored_hole_is_checked_against_its_hash(db, manifest):
 
 def test_a_seed_that_does_not_exist_has_no_holes(db):
     assert load_seed_holes(db, "0000000001") == []
+
+
+# -- Seeds stored before migration 7 ----------------------------------------------------------
+
+
+def test_a_seed_stored_before_its_holes_were_is_found_and_not_shown(db, manifest):
+    filled = store_seed(db, manifest, IPS)
+    seed_id = store_seed(db, manifest, IPS)
+    unfill(db, seed_id)
+    assert unfilled_seeds(db) == [seed_id]
+    with pytest.raises(RuntimeError, match="golf-site-backfill from server-v4.1.3"):
+        load_seed(db, seed_id)
+    assert seed_row(db, filled).id == filled

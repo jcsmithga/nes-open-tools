@@ -11,10 +11,11 @@ The holes are composed (`golf/randomizer/compose.py`): `course_rules` turns the 
 into a list of rules, and the course is eighteen holes of the pool that keep them all.
 Nothing is added to the rules the settings hold but the family rule.
 
-The same catalog, curation, settings and seed give the same manifest under one
-`GENERATOR_VERSION`. That is a property the tests hold generation to, not a promise across
-versions: a stored manifest, not its inputs, is what a seed is. Bump the version whenever
-the same inputs would give a different manifest. See docs/manifest.md.
+Within one release, the same catalog, curation, settings and seed give the same
+manifest. That is a property the tests hold generation to, not a promise across releases:
+nothing regenerates a stored seed, which is what the site stored rather than its inputs
+(ADR 0024). `GENERATOR_VERSION` is provenance, bumped when a change to generation is worth
+telling seeds apart by. See docs/manifest.md.
 """
 
 import random

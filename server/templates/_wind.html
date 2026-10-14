@@ -10,7 +10,9 @@
   {%- elif profile == "dying_wind" -%}{{ t_plain("wind.speed.dying_wind") }}
   {%- elif profile == "storm_passing" -%}{{ t_plain("wind.speed.storm_passing") }}
   {%- elif profile == "back_nine_pressure" -%}{{ t_plain("wind.speed.back_nine_pressure") }}
-  {%- else -%}{{ t_plain("wind.speed.vanilla") }}
+  {%- elif profile == "vanilla" -%}{{ t_plain("wind.speed.vanilla") }}
+    {#- a stored seed's profile this release no longer has shows by name -#}
+  {%- else -%}{{ profile }}
   {%- endif -%}
 {%- endmacro %}
 
@@ -19,6 +21,8 @@
   {%- elif profile == "out_and_back" -%}{{ t_plain("wind.direction.out_and_back") }}
   {%- elif profile == "headwind_out" -%}{{ t_plain("wind.direction.headwind_out") }}
   {%- elif profile == "tailwind_out" -%}{{ t_plain("wind.direction.tailwind_out") }}
-  {%- else -%}{{ t_plain("wind.direction.vanilla") }}
+  {%- elif profile == "vanilla" -%}{{ t_plain("wind.direction.vanilla") }}
+    {#- a stored seed's profile this release no longer has shows by name -#}
+  {%- else -%}{{ profile }}
   {%- endif -%}
 {%- endmacro %}

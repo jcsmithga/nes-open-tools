@@ -53,7 +53,8 @@ Generation gains a step in front of it:
 
 resolve and generation take the PRNG seed as an argument, drawn fresh when none is
 given; the CLI sets one with `--seed`. The seed used is recorded in the manifest's
-resolved `settings`, so a manifest still reproduces its seed. A request names
+resolved `settings`, so the roll is on record, and within one release the same request
+and seed resolve to it again. A request names
 preferences that are rolled again and again, while a PRNG seed belongs to one roll, so
 a request is a document a player can keep and reuse unchanged.
 
@@ -101,8 +102,8 @@ The parsing rules:
   error asks whether `sets` was meant.
 - Objects are partial at every level: a key left out of an object-valued field takes
   that object's default, so `{"clubs": {"max": 10}}` means a bag of at most 10 clubs,
-  none banned and no required bag. The manifest loaders stay strict, because a field
-  missing from a stored manifest is an error.
+  none banned and no required bag. A manifest about to be built is still loaded
+  strictly, where a missing field is an error; a request's defaults never reach it.
 - `prng_seed` is refused in a request, with an error pointing at `--seed`. It is a
   `Settings` field, so a manifest's `settings` pasted in as a request would otherwise
   bring the old seed along.
@@ -115,8 +116,9 @@ The parsing rules:
   platforms.
 - resolve picks the set first (a settings request is one set), then each weighted field
   in `Settings` field order, so the same request and seed always resolve the same way
-  under one `generator_version`. A change to resolve bumps it, as any other change to
-  generation does.
+  within one release. That is not a promise across releases, since nothing regenerates
+  a stored seed (ADR 0024); a change to resolve bumps `generator_version` only when it
+  is worth telling seeds apart by, as with any other change to generation.
 
 ### Which randomness belongs where
 
@@ -136,8 +138,10 @@ of its own:
 - `settings`: the resolved settings, the PRNG seed used included.
 - `course`: unchanged in role, the concrete course the build reads.
 
-Older schemas load without a `request`, and their settings stand for it. As now, an old
-manifest serializes back in its original shape (`docs/manifest.md`, **Schema history**).
+A stored manifest of an older schema has no `request`, and its settings stand for it.
+It is read as a `StoredManifest`, which supplies an absent field the value that schema's
+seeds had (ADR 0024, `docs/manifest.md`, **Reading stored manifests**), and the site
+serves its text as it was issued.
 
 ### Validation and display
 
@@ -189,8 +193,8 @@ keep it secret from anyone who reads the JSON.
   wind profiles or sources without parsing weights.
 - New settings fields can be weighted without new request syntax, but can never be
   named `sets` or any other reserved key.
-- The manifest schema changes for `request`, and its loader keeps reading every schema
-  before it.
+- The manifest schema changes for `request`, which costs a row in the schema history and
+  no loader branch: stored manifests of every schema are read the same way (ADR 0024).
 - A request upload is untrusted input: its size is limited, it's parsed strictly, and a
   YAML form, if accepted, is loaded with a safe loader.
 - A request that rolls an ungeneratable combination fails some fraction of the time

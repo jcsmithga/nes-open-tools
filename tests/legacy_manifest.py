@@ -1,4 +1,5 @@
-"""Manifest JSON as the schemas before the current one stored it, for tests of the legacy loaders."""
+"""Manifest JSON as the schemas before the current one stored it, for tests of reading
+stored seeds (`StoredManifest`)."""
 
 import copy
 
@@ -27,10 +28,11 @@ def draw_rule(settings: dict) -> dict:
 def as_schema(data: dict, schema: int) -> dict:
     """A current manifest's JSON reshaped as schema 1 to 4: the fields it lacks removed.
 
-    The manifest must have been generated as that schema's seeds were, or the result will
-    not load: as a standard course with or without an expert cap for any of them, with no
-    `include` for schema 1 to 3, and with no expert cap and vanilla wind for schema 1 or 2.
-    Schemas 3 and 4 say which cap in a `draw_rule`, in the place `constraints` has.
+    The manifest should have been generated as that schema's seeds were, or what a stored
+    reader supplies for the missing fields is not what it was made with: as a standard
+    course with or without an expert cap for any of them, with no `include` for schema 1
+    to 3, and with no expert cap and vanilla wind for schema 1 or 2. Schemas 3 and 4 say
+    which cap in a `draw_rule`, in the place `constraints` has.
     """
     data = copy.deepcopy(data)
     data["schema"] = schema

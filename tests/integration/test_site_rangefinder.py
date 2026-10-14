@@ -161,7 +161,7 @@ def test_a_yardage_book_shows_one_course_at_the_seeds_pins_with_tee_wind(tmp_pat
         tmp_path / "unused.nes",
     )
     manifest = builder.generate(Settings(prng_seed="yardage-browser"))
-    # Every hole transformed, so the book reads the stored holes and needs no ROM's.
+    # Every hole transformed, as the book shows a hole as built.
     slots = tuple(
         replace(slot, transforms=("mirror@1",)) for slot in manifest.course.holes
     )
@@ -174,7 +174,7 @@ def test_a_yardage_book_shows_one_course_at_the_seeds_pins_with_tee_wind(tmp_pat
     )
     errors: list[str] = []
     with LiveServer(app) as base, sync_playwright() as playwright:
-        seed_id = insert_seed(app.state.db, manifest, IPS, holes=holes)
+        seed_id = insert_seed(app.state.db, manifest, IPS, holes, builder.catalog)
         browser = playwright.chromium.launch()
         try:
             page = browser.new_page(viewport={"width": 1280, "height": 800})

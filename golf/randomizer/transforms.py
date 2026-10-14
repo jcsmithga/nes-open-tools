@@ -4,10 +4,11 @@ A transform's name carries its version (`mirror@1`), and a transform that takes 
 writes it after a colon (`hazards@1:1234`). The rewrites themselves are plain hole
 operations in `golf/algorithms/`; this module names them.
 
-Every transform's output for the vanilla holes is pinned by a golden test. Output that
-changes needs a new `BUILD_VERSION`, and a new transform version if what the transform
-means changed (ADR 0015, `docs/hole_transforms.md`). A version stays in `TRANSFORMS`
-after a newer one ships, because the site still loads the manifests that name it.
+A golden test hashes every transform's output for the vanilla holes, as a regression
+test: output that changes on purpose updates its digest, and needs a new transform
+version only if what the transform means changed (ADR 0024, `docs/hole_transforms.md`).
+A version can leave `TRANSFORMS` once nothing generates it: a stored seed's manifest is
+read without checking its transform names.
 """
 
 from collections.abc import Callable, Iterable

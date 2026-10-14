@@ -6,12 +6,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from golf.randomizer.catalog import HoleStore
+from golf.randomizer.manifest import Settings
 from golf.randomizer.roms import VANILLA_ROMS
 from server.app import create_app
 from server.builder import SeedBuilder
 from server.config import Config
+from server.db import Database, DatabaseError
 from server.migrations import MIGRATIONS
 from tests.app_state import app_state
+from tests.stored_seeds import store_seed, unfill
 from tests.unit.server_app.helpers import (
     UNWRITTEN,
     FakeBuilder,
@@ -39,6 +42,21 @@ class BrokenFinish(FakeBuilder):
 
 def test_startup_migrates_the_database(client):
     assert app_state(client).db.version() == len(MIGRATIONS)
+
+
+def test_startup_refuses_seeds_stored_before_their_holes_were(tmp_path, fake_builder):
+    path = str(tmp_path / "site.db")
+    db = Database(path)
+    db.migrate()
+    seed_id = store_seed(db, fake_builder.generate(Settings(prng_seed="old")))
+    unfill(db, seed_id)
+    db.close()
+    app = create_app(Config(database=path), builder=fake_builder)
+    with (
+        pytest.raises(DatabaseError, match="1 seeds.*golf-site-backfill"),
+        TestClient(app),
+    ):
+        pass
 
 
 def test_startup_makes_a_builder_from_the_config_when_given_none(tmp_path):

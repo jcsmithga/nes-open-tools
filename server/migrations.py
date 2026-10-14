@@ -239,4 +239,22 @@ MIGRATIONS: list[str] = [
     ALTER TABLE seed_holes
         ADD COLUMN data_hash TEXT REFERENCES hole_data (content_hash);
     """,
+    # 7: what a seed's pages read from the catalog, kept on the seed, and every slot's hole
+    # in `hole_data`, not only the transformed ones (ADR 0024). A seed stored before this
+    # has these columns NULL until `golf-site-backfill` fills them in from the catalog and
+    # the hole store, which a migration cannot read; the site refuses to start until then.
+    # `source_rom`, `source_course` and `source_hole` stay NULL for a hole that is not
+    # vanilla.
+    """
+    ALTER TABLE seeds
+        ADD COLUMN required_roms TEXT
+            CHECK (required_roms IS NULL
+                   OR (json_valid(required_roms) AND json_type(required_roms) = 'array'));
+
+    ALTER TABLE seed_holes ADD COLUMN distance INTEGER;
+    ALTER TABLE seed_holes ADD COLUMN author TEXT;
+    ALTER TABLE seed_holes ADD COLUMN source_rom TEXT;
+    ALTER TABLE seed_holes ADD COLUMN source_course TEXT;
+    ALTER TABLE seed_holes ADD COLUMN source_hole INTEGER;
+    """,
 ]
