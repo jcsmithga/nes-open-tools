@@ -190,8 +190,14 @@
                   <td>
                     {% if hole.display_name %}{{ hole.display_name }}<br>{% endif %}
                     <code>{{ hole.id }}</code>
-                    {% if hole.mirrored %}<br><small data-transform="mirror">{{ t("seed.holes.mirrored") }}</small>{% endif %}
-                    {% if hole.hazards_shuffled %}<br><small data-transform="hazards">{{ t("seed.holes.hazards_shuffled") }}</small>{% endif %}
+                    {% if hole.mirrored %}
+                      <small data-transform="mirror"
+                             title="{{ t_plain('seed.holes.mirrored_title') }}">{{ t("seed.holes.mirrored") }}</small>
+                    {% endif %}
+                    {% if hole.hazards_shuffled %}
+                      <small data-transform="hazards"
+                             title="{{ t_plain('seed.holes.hazards_shuffled_title') }}">{{ t("seed.holes.hazards_shuffled") }}</small>
+                    {% endif %}
                   </td>
                   <td>
                     {% if hole.rom_title %}

@@ -571,6 +571,22 @@ form.admin-inline button {
     var(--pico-form-element-spacing-horizontal);
 }
 
+/* The seed page's course overview: a hole's transforms as small outlined chips after its
+   id, on the same line, so a transformed hole's row is no taller than any other. */
+table.holes [data-transform] {
+  display: inline-block;
+  margin-left: 0.35em;
+  padding: 0 0.4em;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  color: var(--pico-muted-color);
+  font-size: 0.75em;
+  line-height: 1.6;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: help;
+}
+
 /* The metrics window picker: two small controls on one line, rather than the full-width
    stack Pico gives a form by default. */
 form.admin-window {

@@ -283,11 +283,19 @@ text = "Source"
 
 [seed.holes.mirrored]
 note = "small marker under a hole's id; this seed mirrored the hole (flipped left to right)"
-text = "(m)"
+text = "m"
 
 [seed.holes.hazards_shuffled]
 note = "small marker under a hole's id; this seed reshuffled the hole's bunkers and water"
-text = "(hs)"
+text = "hs"
+
+[seed.holes.mirrored_title]
+note = "plain: hover text of the mirrored marker; this seed flipped the hole left to right"
+text = "Mirrored, this hole has been flipped left to right."
+
+[seed.holes.hazards_shuffled_title]
+note = "plain: hover text of the hazards shuffled marker; this seed reshuffled the hole's bunkers and water"
+text = "Hazards shuffled, this hole has had bunkers and water hazards shuffled."
 
 [seed.holes.par]
 note = "hole table column header; par"
