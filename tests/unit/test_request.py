@@ -1,35 +1,100 @@
-"""Unit tests for requests, the settings files a seed is rolled from."""
+"""Unit tests for requests and `resolve`, which turns one into concrete settings (ADR 0016)."""
+
+from collections import Counter
 
 import pytest
 
-from golf.randomizer.catalog import US_ROM
-from golf.randomizer.manifest import ManifestError, Settings
+from golf.randomizer.catalog import JP_ROM, US_ROM
+from golf.randomizer.manifest import Settings, mode_rules
 from golf.randomizer.request import (
     RequestError,
+    check_request,
+    is_weighted,
     load_request,
-    settings_from_request,
+    resolve,
 )
-from golf.randomizer.rules import Rule
 
 
-def test_an_empty_request_is_the_default_settings():
-    assert settings_from_request({}) == Settings()
-    assert settings_from_request({}, "week-6") == Settings(prng_seed="week-6")
+def one_of(*values, weights=None) -> dict:
+    weights = weights or [1] * len(values)
+    return {
+        "one_of": [
+            {"weight": weight, "value": value}
+            for weight, value in zip(weights, values, strict=True)
+        ]
+    }
+
+
+def test_an_empty_request_is_the_default_settings_with_the_seed_given():
+    assert resolve({}, "week-6") == Settings(prng_seed="week-6")
+    drawn = resolve({})
+    assert drawn.prng_seed and drawn == Settings(prng_seed=drawn.prng_seed)
 
 
 def test_a_request_sets_only_what_it_names():
-    settings = settings_from_request(
+    settings = resolve(
         {
             "sources": [US_ROM],
             "clubs": {"max": 10},
             "constraints": [{"rule": "par_3"}],
-        }
+            "mirror_chance": 25,
+        },
+        "abc",
     )
     assert settings.sources == {US_ROM}
-    assert settings.experts_per_nine is None
+    assert settings.constraints == mode_rules("par_3", None)
     assert settings.clubs.max == 10 and settings.clubs.banned == frozenset()
-    assert settings.constraints == (Rule.parse({"rule": "par_3"}),)
+    assert settings.mirror_chance == 25 and settings.hazard_chance == 0
     assert settings.mercy_point == Settings().mercy_point
+
+
+def test_a_weighted_field_resolves_to_one_of_its_values_by_weight():
+    request = {"mercy_point": one_of(9, None, 5, weights=[3, 1, 0])}
+    seen = Counter(resolve(request, str(seed)).mercy_point for seed in range(400))
+    assert set(seen) == {9, None}
+    assert 0.65 < seen[9] / 400 < 0.85
+    assert resolve(request, "same") == resolve(request, "same")
+    assert is_weighted(request) and not is_weighted({"mercy_point": 9})
+
+
+def test_a_weighted_object_field_is_partial_like_any_other():
+    request = {"clubs": one_of({"max": 10}, {"banned": ["1W"]})}
+    seen = {resolve(request, str(seed)).clubs for seed in range(40)}
+    assert {(rules.max, len(rules.banned)) for rules in seen} == {(10, 0), (14, 1)}
+
+
+def test_a_weighted_constraints_chooses_between_modes():
+    request = {
+        "constraints": one_of(
+            [{"rule": "natural_par"}],
+            [{"rule": "par_3"}, {"rule": "expert_cap", "per_nine": 0}],
+        ),
+        "include": ["derived"],
+    }
+    modes = {resolve(request, str(seed)).mode.name for seed in range(40)}
+    assert modes == {"natural_par", "par_3"}
+
+
+def test_a_sets_request_picks_a_set_then_its_weighted_fields():
+    request = {
+        "sets": [
+            {"weight": 7, "settings": {"sources": [US_ROM]}},
+            {
+                "weight": 3,
+                "settings": {
+                    "sources": [US_ROM, JP_ROM],
+                    "mercy_point": one_of(9, None),
+                },
+            },
+        ]
+    }
+    resolved = [resolve(request, str(seed)) for seed in range(400)]
+    us_only = [settings for settings in resolved if settings.sources == {US_ROM}]
+    assert 0.6 < len(us_only) / 400 < 0.8
+    assert {settings.mercy_point for settings in us_only} == {9}
+    both = [settings for settings in resolved if settings.sources != {US_ROM}]
+    assert {settings.mercy_point for settings in both} == {9, None}
+    assert is_weighted(request)
 
 
 @pytest.mark.parametrize(
@@ -38,25 +103,49 @@ def test_a_request_sets_only_what_it_names():
         ([], "an object of settings"),
         ({"pars": 72}, "unknown settings"),
         ({"about": "a default seed"}, "unknown settings"),
+        ({"set": []}, "did you mean 'sets'"),
+        ({"Sets": []}, "did you mean 'sets'"),
         ({"prng_seed": "abc"}, "holds no prng_seed"),
-        ({"sets": [{"weight": 1, "settings": {}}]}, "weighted request"),
-        ({"par": {"one_of": [{"weight": 1, "value": 72}]}}, "weighted request"),
+        ({"sets": [{"weight": 1, "settings": {}}], "music": "nes_us"}, "only 'sets'"),
+        ({"sets": []}, "non-empty list"),
+        ({"sets": [{"weight": 0, "settings": {}}]}, "every weight is 0"),
+        ({"sets": [{"weight": 1, "settings": []}]}, "expected an object"),
+        ({"sets": [{"weight": 1}]}, '"settings"'),
+        ({"mercy_point": {"one_of": []}}, "non-empty list"),
+        ({"mercy_point": one_of(9, weights=[-1])}, "weight must be"),
+        ({"mercy_point": one_of(9, weights=[1.5])}, "weight must be"),
+        ({"mercy_point": {"one_of": [{"weight": 1, "value": 9}], "x": 1}}, "only"),
+        ({"clubs": {"max": one_of(10)}}, "whole field"),
+        ({"mercy_point": one_of(9, 300)}, r"mercy_point\.one_of\[1\]"),
         ({"constraints": [{"rule": "shuffle"}]}, "unknown rule"),
         (
             {"constraints": [{"rule": "count", "where": {"par": 3}, "max": 1}]},
             "not a rule settings may hold",
         ),
-        ({"constraints": {"rule": "standard"}}, "constraints must be null or a list"),
-        ({"par": 54}, "par must be one of"),
+        ({"constraints": {"rule": "standard"}}, "constraints must be a list"),
+        ({"constraints": None}, "constraints must be a list"),
+        ({"par": 72}, "unknown settings"),
+        ({"mirror_chance": 30.5}, "mirror_chance must be a whole percent"),
+        (
+            {"sets": [{"weight": 1, "settings": {"music": "bogus"}}]},
+            r"sets\[0\] settings: music must be",
+        ),
     ],
 )
 def test_a_malformed_request_is_refused(data, message):
-    with pytest.raises(ManifestError, match=message):
-        settings_from_request(data)
+    with pytest.raises(RequestError, match=message):
+        check_request(data)
+    with pytest.raises(RequestError, match=message):
+        resolve(data, "abc")
 
 
-def test_a_request_file_that_is_not_json_is_refused(tmp_path):
+def test_a_request_file_is_read_and_checked(tmp_path):
     path = tmp_path / "request.json"
     path.write_text("{")
     with pytest.raises(RequestError, match="not JSON"):
         load_request(path)
+    path.write_text('{"music": "bogus"}')
+    with pytest.raises(RequestError, match="music must be"):
+        load_request(path)
+    path.write_text('{"music": "nes_us"}')
+    assert load_request(path) == {"music": "nes_us"}

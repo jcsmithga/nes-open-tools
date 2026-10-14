@@ -9,41 +9,43 @@ SCHEMA_3_SETTINGS = ("wind_speed_profile", "wind_direction_profile")
 SCHEMA_3_HOLE = ("wind_direction", "wind_speed")
 #: settings fields schema 4 added
 SCHEMA_4_SETTINGS = ("include",)
-STANDARD = {"rule": "standard", "par": 72}
+#: settings fields schema 5 added beside `constraints`, which stands where `par` and
+#: `draw_rule` did
+SCHEMA_5_SETTINGS = ("mirror_chance", "hazard_chance")
+STANDARD = {"rule": "standard"}
 
 
 def draw_rule(settings: dict) -> dict:
     """The `draw_rule` schemas 3 and 4 hold for a current manifest's settings."""
     rules = settings["constraints"]
-    if rules is None:
-        return {"rule": "expert_cap", "per_nine": 1}
-    standard = STANDARD | {"par": settings["par"]}
-    if rules == [standard]:
+    if rules == [STANDARD]:
         return {"rule": "uniform"}
     (first, cap) = rules
-    assert first == standard and cap["rule"] == "expert_cap", rules
+    assert first == STANDARD and cap["rule"] == "expert_cap", rules
     return {"rule": "expert_cap", "per_nine": cap["per_nine"]}
 
 
 def as_schema(data: dict, schema: int) -> dict:
-    """A current manifest's JSON reshaped as schema 1 to 4: the fields it lacks removed.
+    """A current manifest's JSON reshaped as schema 1 to 4: the fields it lacks removed,
+    and the standard course's `par` and `draw_rule` in place of `constraints`.
 
     The manifest should have been generated as that schema's seeds were, or what a stored
     reader supplies for the missing fields is not what it was made with: as a standard
-    course with or without an expert cap for any of them, with no `include` for schema 1
-    to 3, and with no expert cap and vanilla wind for schema 1 or 2. Schemas 3 and 4 say
-    which cap in a `draw_rule`, in the place `constraints` has.
+    course with or without an expert cap and no transforms for any of them, with no
+    `include` for schema 1 to 3, and with no expert cap and vanilla wind for schema 1 or
+    2. Schemas 3 and 4 say which cap in a `draw_rule`.
     """
     data = copy.deepcopy(data)
     data["schema"] = schema
     settings = data["settings"]
     rule = draw_rule(settings)
-    data["settings"] = {
-        ("draw_rule" if key == "constraints" else key): (
-            rule if key == "constraints" else value
-        )
-        for key, value in settings.items()
-    }
+    reshaped = {"prng_seed": settings["prng_seed"], "par": 72}
+    for key, value in settings.items():
+        if key == "constraints":
+            reshaped["draw_rule"] = rule
+        elif key not in ("prng_seed", *SCHEMA_5_SETTINGS):
+            reshaped[key] = value
+    data["settings"] = reshaped
     if schema == 4:
         return data
     for key in SCHEMA_4_SETTINGS:

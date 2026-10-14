@@ -1,13 +1,16 @@
 """`server/routes/seed_pages.py`: the generate form, its refusals and what it stores."""
 
+import json
 import logging
 import re
 
+import pytest
 from fastapi.testclient import TestClient
 
 from golf.randomizer.catalog import HoleStore
 from golf.randomizer.generate import GenerationError
 from golf.randomizer.manifest import DEFAULT_MERCY_POINT, Manifest
+from golf.randomizer.music import TRACKS
 from golf.randomizer.roms import VANILLA_ROMS
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
 from server.builder import SeedBuilder
@@ -27,7 +30,7 @@ from tests.unit.server_app.helpers import (
 
 
 class PoolTooSmall(FakeBuilder):
-    def generate(self, settings):
+    def generate(self, settings, request=None):
         raise GenerationError("no fill")
 
 
@@ -41,13 +44,39 @@ def test_the_generate_form_offers_every_setting_with_its_default(client):
     assert response.status_code == 200
     page = response.text
     assert re.search(r'href="/generate"\s+aria-current="page"', page)
-    assert len(re.findall(r'name="par"', page)) == 3
-    assert re.search(r'name="par"\s+value="72"\s+checked', page)
+    assert 'name="par"' not in page
+    mode = re.search(r'<select[^>]*name="mode"[^>]*>(.*?)</select>', page, re.S)
+    assert mode is not None
+    assert re.findall(r'<option value="(\w+)"\s*(selected)?', mode.group(1)) == [
+        ("standard", "selected"),
+        ("natural_par", ""),
+        ("executive", ""),
+        ("par_3", ""),
+        ("vanilla_course", ""),
+    ]
+    course = re.search(r'<select[^>]*name="course">(.*?)</select>', page, re.S)
+    assert course is not None
+    assert re.findall(r'<option value="(\w+)"', course.group(1)) == list(TRACKS)
+    for name in ("mirror_chance", "hazard_chance"):
+        select = re.search(
+            rf'<select[^>]*name="{name}"[^>]*>(.*?)</select>', page, re.S
+        )
+        assert select is not None
+        assert re.findall(r'<option value="(\d+)"\s*(selected)?', select.group(1)) == [
+            ("0", "selected"),
+            ("25", ""),
+            ("50", ""),
+            ("75", ""),
+            ("100", ""),
+        ]
+    assert 'href="/mystery"' in page
     for rom in VANILLA_ROMS:
         assert re.search(rf'name="sources"\s+value="{rom.id}"\s+checked', page)
     assert 'name="allow_family_repeats"' in page
     assert re.search(r'<option value="random"\s+selected', page)
-    assert page.count("<option ") == 12 + len(SPEED_PROFILES) + len(DIRECTION_PROFILES)
+    assert page.count("<option ") == (
+        5 + 8 + 4 + 2 * 5 + 9 + len(SPEED_PROFILES) + len(DIRECTION_PROFILES)
+    )
     for name, profiles in [
         ("wind_speed", SPEED_PROFILES),
         ("wind_direction", DIRECTION_PROFILES),
@@ -59,9 +88,12 @@ def test_the_generate_form_offers_every_setting_with_its_default(client):
             (profile, "selected" if profile == "vanilla" else "")
             for profile in profiles
         ]
-    assert re.findall(r'<option value="(\w+)"\s*(selected)?', page)[:3] == [
+    rule = re.search(r'<select[^>]*name="draw_rule"[^>]*>(.*?)</select>', page, re.S)
+    assert rule is not None
+    assert re.findall(r'<option value="(\w+)"\s*(selected)?', rule.group(1)) == [
         ("experts_0", ""),
         ("experts_1", "selected"),
+        ("experts_2", ""),
         ("uniform", ""),
     ]
     assert re.search(r'name="clubs_max"[^>]*value="14"', page)
@@ -98,14 +130,14 @@ def test_generating_stores_the_seed_and_redirects_to_its_page(client, fake_build
 
 def test_a_refused_form_comes_back_with_its_values_and_a_notice(unwritten_client):
     form = FormState.default()
-    form.par = "70"
+    form.mode = "natural_par"
     form.sources = set()
     form.banned = {"2W"}
     response = post_generate(unwritten_client, form)
     assert response.status_code == 400
     page = response.text
     assert 'role="alert"' in page and "generate.error.no_sources" in page
-    assert re.search(r'name="par"\s+value="70"\s+checked', page)
+    assert re.search(r'<option value="natural_par"\s+selected', page)
     assert re.search(r'name="banned"\s+value="2W"\s+checked', page)
     assert seed_count(unwritten_client) == 0
 
@@ -234,3 +266,89 @@ def test_a_pool_that_cannot_fill_is_logged_with_its_settings(
     (found,) = [r for r in caplog.records if "no pool" in r.getMessage()]
     assert found.levelno == logging.WARNING
     assert hasattr(found, "settings")
+
+
+# -- The mystery page -------------------------------------------------------------------------
+
+
+def post_request(client: TestClient, content: bytes | None, **kwargs):
+    files = None if content is None else {"request": ("mine.json", content)}
+    return client.post("/mystery", files=files, follow_redirects=False, **kwargs)
+
+
+def test_the_mystery_page_takes_a_request_file(unwritten_client):
+    page = unwritten_client.get("/mystery").text
+    assert 'enctype="multipart/form-data"' in page
+    assert re.search(
+        r'<input type="file"\s+id="mystery-request"\s+name="request"', page
+    )
+    assert "mystery.file_help max_kb=16" in page
+
+
+def test_a_mystery_request_is_resolved_and_recorded_as_given(client, fake_builder):
+    request = {
+        "sets": [
+            {"weight": 1, "settings": {"constraints": [{"rule": "par_3"}]}},
+            {
+                "weight": 1,
+                "settings": {
+                    "mercy_point": {
+                        "one_of": [
+                            {"weight": 1, "value": None},
+                            {"weight": 1, "value": 9},
+                        ]
+                    }
+                },
+            },
+        ]
+    }
+    response = post_request(client, json.dumps(request).encode())
+    assert response.status_code == 303
+    seed_id = response.headers["location"].removeprefix("/h/")
+    stored = client.get(f"/h/{seed_id}.json").json()
+    assert stored["request"] == request
+    assert stored == fake_builder.built.to_json()
+    assert fake_builder.built.settings.prng_seed
+
+
+@pytest.mark.parametrize(
+    "content, key",
+    [
+        (None, "mystery.error.no_file"),
+        (b"{" * (16 * 1024 + 1), "mystery.error.too_large max_kb=16"),
+        (b"{not json", "mystery.error.not_json"),
+        (b"\xff\xfe", "mystery.error.not_json"),
+        (b'{"set": []}', "mystery.error.bad_request problem=request: unknown key"),
+        (b'{"music": "bogus"}', "mystery.error.bad_request problem=request: music"),
+    ],
+)
+def test_a_request_the_site_cannot_roll_is_refused(unwritten_client, content, key):
+    response = post_request(unwritten_client, content)
+    assert response.status_code == 400
+    assert 'role="alert"' in response.text and key in response.text
+    assert seed_count(unwritten_client) == 0
+
+
+def test_a_mystery_request_that_rolls_no_course_says_what_was_rolled(
+    catalog, curation, tmp_path
+):
+    with app_client(
+        strings=UNWRITTEN,
+        builder=PoolTooSmall(catalog, curation, HoleStore(), tmp_path / "x.nes"),
+    ) as test_client:
+        response = post_request(test_client, b'{"mirror_chance": 25}')
+        assert response.status_code == 400
+        assert "mystery.error.pool" in response.text
+        assert "rolled=" in response.text and "problem=no fill" in response.text
+        assert seed_count(test_client) == 0
+
+
+def test_mystery_seeds_share_the_generate_rate_limit(fake_builder):
+    with app_client(
+        strings=UNWRITTEN, builder=fake_builder, rate_limiter=RateLimiter(1, 3600)
+    ) as test_client:
+        assert post_request(test_client, b"{}").status_code == 303
+        refused = post_request(test_client, b"{}")
+        assert refused.status_code == 429
+        assert "mystery.error.rate_limited" in refused.text
+        assert post_request(test_client, b"{bad").status_code == 400

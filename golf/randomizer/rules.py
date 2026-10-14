@@ -7,9 +7,13 @@ any part of it. This module is the vocabulary and nothing else. It checks a rule
 and expands each rule into the few general ones; `golf/randomizer/compose.py` turns those
 into a problem for `golf/randomizer/solver.py`, against a pool.
 
-**Public rules** are the ones a seed's settings, and so a request, may hold: the course
-modes and the expert cap (ADR 0025). The rest are building blocks the public rules
-expand into, and generation's own family rule.
+**Public rules** are the ones a seed's settings, and so a request, may hold: one course
+mode and at most one expert cap (ADR 0025). The rest are building blocks the public
+rules expand into, and generation's own family rule.
+
+**Rolled rules** (`natural_par`, `executive`) stand for a mix of pars that generation
+draws for each seed, from odds the rule's definition fixes; `roll` turns them into the
+fixed rules of the mix drawn, before anything is expanded.
 
 **General rules**, which every other rule is written in:
 
@@ -31,14 +35,23 @@ See docs/manifest.md.
 """
 
 import json
+import random
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import cache
 from typing import TypeGuard
-
-from .layout import COUNTS
 
 HOLES = 18
 NINE = 9
+#: the pars of a standard course: four par 3s, ten par 4s and four par 5s, par 72
+STANDARD_COUNTS = {3: 4, 4: 10, 5: 4}
+#: `natural_par`: the odds of each par on a slot, and the course pars kept
+NATURAL_ODDS = {3: 4, 4: 10, 5: 4}
+NATURAL_PARS = range(68, 77)
+#: `executive`: the numbers of par 4s, each as likely as another; the rest are par 3s
+EXECUTIVE_FOURS = range(2, 7)
+#: the rules that each make a course of one shape; settings name exactly one
+MODES = ("standard", "natural_par", "executive", "par_3", "vanilla_course")
 
 #: what `limit` can group holes by
 KEYS = ("family",)
@@ -176,6 +189,8 @@ class RuleType:
     expand: Callable[[Mapping], list[dict]] | None = None
     #: whether a seed's settings may hold it (ADR 0025)
     public: bool = False
+    #: for a rolled rule, the fixed rules of a mix it draws
+    roll: Callable[[Mapping, random.Random], list[dict]] | None = None
 
 
 RULES: dict[str, RuleType] = {}
@@ -192,6 +207,19 @@ def _register(name: str, summary: str, *, expand: bool = False, public: bool = F
             RULES[name] = RuleType(name, summary, check, function, public)
         else:
             RULES[name] = RuleType(name, summary, function, public=public)
+        return function
+
+    return decorate
+
+
+def _rolled(name: str, summary: str):
+    """A public rule that draws a mix of pars; the function draws one."""
+
+    def decorate(function):
+        def check(data: Mapping) -> None:
+            _fields(data, name, ())
+
+        RULES[name] = RuleType(name, summary, check, public=True, roll=function)
         return function
 
     return decorate
@@ -307,24 +335,82 @@ def _no_consecutive(data: Mapping) -> list[dict]:
     ]
 
 
-@_register(
-    "standard", "a traditional course of the given par", expand=True, public=True
-)
+def _counts(counts: Mapping[int, int]) -> dict:
+    return {"rule": "par_counts", "counts": {str(par): n for par, n in counts.items()}}
+
+
+#: a course that finishes on a par 3 is rare, and standard and natural par courses never do
+NO_PAR_3_FINISH = {"rule": "count", "where": {"par": 3}, "scope": [HOLES], "max": 0}
+
+
+@_register("standard", "a traditional par 72", expand=True, public=True)
 def _standard(data: Mapping) -> list[dict]:
-    """Four par 3s, and par 4s and 5s to the course's par, split evenly between the
-    nines, with no two par 3s or par 5s in a row."""
-    _fields(data, "standard", (), ("par",))
-    par = data.get("par", 72)
-    if not _is_int(par) or par not in COUNTS:
-        raise RuleError(f"standard par: expected one of {sorted(COUNTS)}, got {par!r}")
+    """Four par 3s, ten par 4s and four par 5s, each par split evenly between the
+    nines, with no two par 3s or par 5s in a row and no par 3 on the 18th."""
+    _fields(data, "standard", ())
     return [
-        {
-            "rule": "par_counts",
-            "counts": {str(value): count for value, count in COUNTS[par].items()},
-        },
+        _counts(STANDARD_COUNTS),
         {"rule": "balanced_nines"},
         {"rule": "no_consecutive", "pars": [3, 5]},
+        NO_PAR_3_FINISH,
     ]
+
+
+@cache
+def natural_mixes() -> tuple[tuple[Mapping[int, int], int], ...]:
+    """`natural_par`'s mixes of pars, each with its weight: the number of layouts that
+    make it, each layout weighted by `NATURAL_ODDS` on every slot, among the layouts
+    of a par in `NATURAL_PARS` with no two par 3s or par 5s in a row.
+
+    Where the pars go is not part of the odds: the rule keeps a par 3 off the 18th when
+    the course is laid out, as `standard` does, without moving which mixes are drawn.
+    Every mix has room for that, its par 3s on holes 1, 3, ..., 17 at the most."""
+    # (last par, par 3s, par 5s) -> the weight of the layouts so far that end so
+    layouts: dict[tuple[int, int, int], int] = {(0, 0, 0): 1}
+    for _ in range(HOLES):
+        following: dict[tuple[int, int, int], int] = {}
+        for (last, threes, fives), weight in layouts.items():
+            for par, odds in NATURAL_ODDS.items():
+                if par == last and par != 4:
+                    continue
+                key = (par, threes + (par == 3), fives + (par == 5))
+                following[key] = following.get(key, 0) + weight * odds
+        layouts = following
+    mixes: dict[tuple[int, int], int] = {}
+    for (_, threes, fives), weight in layouts.items():
+        if 72 - threes + fives in NATURAL_PARS:
+            mixes[threes, fives] = mixes.get((threes, fives), 0) + weight
+    return tuple(
+        ({3: threes, 4: HOLES - threes - fives, 5: fives}, weight)
+        for (threes, fives), weight in sorted(mixes.items())
+    )
+
+
+@_rolled(
+    "natural_par", "a par of 68 to 76, with each par as common as on a standard course"
+)
+def _natural_par(data: Mapping, rng: random.Random) -> list[dict]:
+    """A mix from `natural_mixes`, drawn exactly by its weight, with no two par 3s or
+    par 5s in a row and no par 3 on the 18th."""
+    mixes = natural_mixes()
+    pick = rng.randrange(sum(weight for _, weight in mixes))
+    for counts, weight in mixes:
+        if pick < weight:
+            return [
+                _counts(counts),
+                {"rule": "no_consecutive", "pars": [3, 5]},
+                NO_PAR_3_FINISH,
+            ]
+        pick -= weight
+    raise AssertionError("a draw below the total lands in some mix")
+
+
+@_rolled(
+    "executive", "par 3s and two to six par 4s, the par 4s split between the nines"
+)
+def _executive(data: Mapping, rng: random.Random) -> list[dict]:
+    fours = rng.choice(EXECUTIVE_FOURS)
+    return [_counts({3: HOLES - fours, 4: fours, 5: 0}), {"rule": "balanced_nines"}]
 
 
 @_register(
@@ -404,8 +490,11 @@ def check_rule(data: object) -> None:
 
 
 def expand(data: Mapping) -> list[dict]:
-    """The general rules a rule stands for; a general rule is itself."""
+    """The general rules a rule stands for; a general rule is itself. A rolled rule
+    stands for nothing until it is rolled (`roll`)."""
     kind = RULES[data["rule"]]
+    if kind.roll is not None:
+        raise RuleError(f"{data['rule']} is rolled before it is expanded")
     if kind.expand is None:
         return [dict(data)]
     return [general for inner in kind.expand(data) for general in expand(inner)]
@@ -446,7 +535,9 @@ def parse_rules(data: object, what: str = "constraints") -> tuple[Rule, ...]:
 
 
 def check_public(rules: Sequence[Rule]) -> None:
-    """Refuse a rule a seed's settings may not hold (ADR 0025)."""
+    """Refuse rules a seed's settings may not hold (ADR 0025): anything but a mode
+    and an expert cap, a list without exactly one mode, or a vanilla course with a
+    cap, which plays the expert holes its course has."""
     public = sorted(name for name, kind in RULES.items() if kind.public)
     for rule in rules:
         if not RULES[rule.name].public:
@@ -454,3 +545,31 @@ def check_public(rules: Sequence[Rule]) -> None:
                 f"{rule.name!r} is not a rule settings may hold; they may hold "
                 f"{', '.join(public)}"
             )
+    names = [rule.name for rule in rules]
+    modes = [name for name in names if name in MODES]
+    if len(modes) != 1:
+        raise RuleError(
+            f"the rules name one course mode, one of {', '.join(MODES)}; got "
+            f"{modes or 'none'}"
+        )
+    if names.count("expert_cap") > 1:
+        raise RuleError("the rules hold at most one expert_cap")
+    if modes == ["vanilla_course"] and "expert_cap" in names:
+        raise RuleError("a vanilla course has its own expert holes and takes no cap")
+
+
+def is_rolled(rule: Rule) -> bool:
+    return RULES[rule.name].roll is not None
+
+
+def roll(rules: Sequence[Rule], rng: random.Random) -> tuple[Rule, ...]:
+    """The rules with each rolled rule replaced by the fixed rules of a mix it draws,
+    in list order, from `rng`."""
+    rolled: list[Rule] = []
+    for rule in rules:
+        draw = RULES[rule.name].roll
+        if draw is None:
+            rolled.append(rule)
+        else:
+            rolled.extend(Rule.parse(fixed) for fixed in draw(rule.to_json(), rng))
+    return tuple(rolled)

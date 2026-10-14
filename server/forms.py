@@ -1,11 +1,12 @@
 """The site's forms: what they show, what a submission holds, and what it becomes.
 
-The generate form becomes `Settings`; the seed page's download form becomes `PlayerOptions`
-and the ROM hashes a download is gated on.
+The generate form becomes a request (ADR 0016), which the route resolves into `Settings`;
+the seed page's download form becomes `PlayerOptions` and the ROM hashes a download is
+gated on.
 
 `FormState` is the form's values as strings and sets, the way a browser sends them and the
 template renders them, so a refused submission comes back with the player's choices. A
-state becomes `Settings` through `settings_from_state`, which raises `FormError` naming the
+state becomes a request through `request_from_state`, which raises `FormError` naming the
 problem for the template to show. A download submission is a `DownloadState`, checked by
 `check_rom_hashes` and turned into `PlayerOptions` by `player_options_from_state`.
 
@@ -15,9 +16,11 @@ seed's club rules and finish ABI, and `to_save` applies the saving rule to a dow
 `docs/planning/download_settings.md`.
 
 The mercy point and excluded tags are not on the form: a seed from the site takes their
-`Settings` defaults. The cap on expert holes is one select over `DRAW_RULE_CHOICES`, and the
-two wind profiles are a select each over every profile. The form sends no other course
-rule: every seed from it is a standard course of its par.
+`Settings` defaults. The course is a mode (`MODE_CHOICES`), and for a vanilla course which
+one (`COURSE_CHOICES`); the cap on expert holes is one select over `DRAW_RULE_CHOICES`, which
+a vanilla course ignores, and so are its sources: it takes its own ROM's holes. The two
+transform chances are a select each over `CHANCE_CHOICES`, and the two wind profiles a
+select each over every profile (ADR 0025).
 """
 
 import base64
@@ -37,21 +40,26 @@ from golf.core.patches.sram_defaults import (
     parse_club,
 )
 from golf.randomizer.build import FINISH_ABI_VERSION, BuildError, PlayerOptions
-from golf.randomizer.layout import COUNTS
 from golf.randomizer.manifest import (
-    DEFAULT_EXPERTS_PER_NINE,
     SOURCES,
     ClubRules,
     ManifestError,
     Settings,
-    standard_rules,
+    mode_rules,
 )
 from golf.randomizer.music import RANDOM, TRACKS
+from golf.randomizer.request import resolve
 from golf.randomizer.roms import vanilla_rom
+from golf.randomizer.rules import MODES
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
 
-#: par targets, largest first, as the form lists them
-PARS = tuple(sorted(COUNTS, reverse=True))
+VANILLA_COURSE = "vanilla_course"
+#: the course modes, in the order the form lists them
+MODE_CHOICES = MODES
+#: the vanilla courses, by the slug their music and their holes' lineages share
+COURSE_CHOICES = tuple(TRACKS)
+#: each hole's chance of a transform, a whole percent, as the form offers them
+CHANCE_CHOICES = ("0", "25", "50", "75", "100")
 #: every club a rule can name: the putter is always allowed and never listed
 RULE_CLUBS = tuple(club for club in Club if club != Club.PT)
 MUSIC_CHOICES = (RANDOM, *TRACKS)
@@ -60,6 +68,7 @@ MUSIC_CHOICES = (RANDOM, *TRACKS)
 DRAW_RULE_CHOICES: dict[str, int | None] = {
     "experts_0": 0,
     "experts_1": 1,
+    "experts_2": 2,
     "uniform": None,
 }
 
@@ -88,13 +97,19 @@ class FormError(ValueError):
 
 @dataclass
 class FormState:
-    par: str
     sources: set[str]
     allow_family_repeats: bool
     music: str
     clubs_max: str
+    #: one of `MODE_CHOICES`
+    mode: str = "standard"
+    #: one of `COURSE_CHOICES`, read only for a vanilla course
+    course: str = COURSE_CHOICES[0]
     #: a key of `DRAW_RULE_CHOICES`
     draw_rule: str = ""
+    #: each one of `CHANCE_CHOICES`
+    mirror_chance: str = "0"
+    hazard_chance: str = "0"
     #: one of `SPEED_PROFILES`
     wind_speed: str = ""
     #: one of `DIRECTION_PROFILES`
@@ -106,7 +121,6 @@ class FormState:
     def default(cls) -> "FormState":
         settings = Settings()
         return cls(
-            par=str(settings.par),
             sources=set(settings.sources),
             allow_family_repeats=settings.allow_family_repeats,
             music=settings.music,
@@ -116,6 +130,8 @@ class FormState:
                 for name, cap in DRAW_RULE_CHOICES.items()
                 if cap == settings.experts_per_nine
             ),
+            mirror_chance=str(settings.mirror_chance),
+            hazard_chance=str(settings.hazard_chance),
             wind_speed=settings.wind_speed_profile,
             wind_direction=settings.wind_direction_profile,
         )
@@ -132,12 +148,15 @@ class FormState:
             return {value for value in form.getlist(name) if isinstance(value, str)}
 
         return cls(
-            par=text("par"),
             sources=chosen("sources"),
             allow_family_repeats=bool(text("allow_family_repeats")),
             music=text("music"),
             clubs_max=text("clubs_max"),
+            mode=text("mode"),
+            course=text("course"),
             draw_rule=text("draw_rule"),
+            mirror_chance=text("mirror_chance"),
+            hazard_chance=text("hazard_chance"),
             wind_speed=text("wind_speed"),
             wind_direction=text("wind_direction"),
             banned=chosen("banned"),
@@ -154,12 +173,14 @@ class FormState:
 
     def to_pairs(self) -> list[tuple[str, str]]:
         """The state as the fields a browser would submit for it."""
-        pairs = [("par", self.par)]
+        pairs = [("mode", self.mode), ("course", self.course)]
         pairs += [("sources", source) for source in SOURCES if source in self.sources]
         if self.allow_family_repeats:
             pairs.append(("allow_family_repeats", "on"))
         pairs += [
             ("draw_rule", self.draw_rule),
+            ("mirror_chance", self.mirror_chance),
+            ("hazard_chance", self.hazard_chance),
             ("wind_speed", self.wind_speed),
             ("wind_direction", self.wind_direction),
             ("music", self.music),
@@ -190,16 +211,23 @@ def _rule_clubs(labels: set[str], name: str) -> frozenset[Club]:
     return clubs
 
 
-def settings_from_state(state: FormState) -> Settings:
-    """The settings a submission asks for. Raises FormError for anything the form cannot use."""
-    if state.par not in {str(par) for par in PARS}:
-        raise FormError(INVALID, field="par")
-    if not state.sources:
+def request_from_state(state: FormState) -> dict:
+    """The request a submission makes (ADR 0016): a settings request with no weighted
+    field. Raises FormError for anything the form cannot use."""
+    if state.mode not in MODE_CHOICES:
+        raise FormError(INVALID, field="mode")
+    vanilla = state.mode == VANILLA_COURSE
+    if vanilla and state.course not in COURSE_CHOICES:
+        raise FormError(INVALID, field="course")
+    if not vanilla and not state.sources:
         raise FormError(NO_SOURCES)
     if not state.sources <= set(SOURCES):
         raise FormError(INVALID, field="sources")
     if state.draw_rule not in DRAW_RULE_CHOICES:
         raise FormError(INVALID, field="draw_rule")
+    for name in ("mirror_chance", "hazard_chance"):
+        if getattr(state, name) not in CHANCE_CHOICES:
+            raise FormError(INVALID, field=name)
     if state.wind_speed not in SPEED_PROFILES:
         raise FormError(INVALID, field="wind_speed")
     if state.wind_direction not in DIRECTION_PROFILES:
@@ -219,24 +247,42 @@ def settings_from_state(state: FormState) -> Settings:
         if len(bag) > clubs_max:
             raise FormError(REQUIRED_BAG_OVER_MAX, count=len(bag), max=clubs_max)
 
-    par = int(state.par)
-    cap = DRAW_RULE_CHOICES[state.draw_rule]
+    if vanilla:
+        mode = {"rule": VANILLA_COURSE, "course": state.course}
+        constraints = mode_rules(mode, None)
+        sources = [TRACKS[state.course].rom]
+    else:
+        constraints = mode_rules(state.mode, DRAW_RULE_CHOICES[state.draw_rule])
+        sources = [source for source in SOURCES if source in state.sources]
+    request = {
+        "sources": sources,
+        "allow_family_repeats": state.allow_family_repeats,
+        "constraints": [rule.to_json() for rule in constraints],
+        "wind_speed_profile": state.wind_speed,
+        "wind_direction_profile": state.wind_direction,
+        "mirror_chance": int(state.mirror_chance),
+        "hazard_chance": int(state.hazard_chance),
+        "music": state.music,
+        "clubs": {
+            "max": clubs_max,
+            "banned": [club.label for club in sorted(banned)],
+            "required_bag": None
+            if not required
+            else [club.label for club in sorted(required)],
+        },
+    }
+    if not vanilla and state.mode == "par_3":
+        # par 3s beyond the vanilla ones are the forward tees of longer holes
+        request["include"] = ["derived"]
+    return request
+
+
+def settings_from_state(state: FormState, prng_seed: str | None = None) -> Settings:
+    """The settings a submission's request resolves to. Raises FormError for anything
+    the form cannot use."""
+    request = request_from_state(state)
     try:
-        return Settings(
-            par=par,
-            sources=frozenset(state.sources),
-            allow_family_repeats=state.allow_family_repeats,
-            # the default cap is the default course, which settings hold as no list
-            constraints=None
-            if cap == DEFAULT_EXPERTS_PER_NINE
-            else standard_rules(par, cap),
-            wind_speed_profile=state.wind_speed,
-            wind_direction_profile=state.wind_direction,
-            music=state.music,
-            clubs=ClubRules(
-                max=clubs_max, banned=banned, required_bag=required or None
-            ),
-        )
+        return resolve(request, prng_seed)
     except (
         ManifestError
     ):  # pragma: no cover - every rule Settings checks is checked above

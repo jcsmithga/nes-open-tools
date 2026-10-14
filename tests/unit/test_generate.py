@@ -2,6 +2,7 @@
 
 import json
 import re
+from itertools import pairwise
 
 import pytest
 
@@ -18,17 +19,18 @@ from golf.randomizer.catalog import (
 )
 from golf.randomizer.curation import EXPERT_TAG, CurationSnapshot
 from golf.randomizer.generate import GENERATOR_VERSION, GenerationError, generate
-from golf.randomizer.layout import COUNTS, satisfies
 from golf.randomizer.manifest import (
     SCHEMA,
     ClubRules,
     Manifest,
     Settings,
+    mode_rules,
     required_roms,
     standard_rules,
 )
 from golf.randomizer.pool import build_pool
 from golf.randomizer.wind import BANDS, DIRECTION_PROFILES, SPEED_PROFILES
+from tests.standard_course import is_standard
 
 
 @pytest.fixture(scope="module")
@@ -85,14 +87,71 @@ def test_records_versions_and_round_trips(real_catalog, real_curation):
     assert Manifest.from_json(json.loads(json.dumps(manifest.to_json()))) == manifest
 
 
-@pytest.mark.parametrize("par", sorted(COUNTS))
-def test_course_follows_a_valid_layout_of_real_holes(real_catalog, real_curation, par):
-    for seed in range(10):
-        course = generate(
-            real_catalog, real_curation, Settings(prng_seed=str(seed), par=par)
-        ).course
-        assert satisfies(course.layout, COUNTS[par])
+#: the course pars each mode's seeds may have
+MODE_PARS = {
+    "standard": {72},
+    "natural_par": set(range(68, 77)),
+    "executive": set(range(56, 61)),
+    "par_3": {54},
+}
+
+
+def no_two_in_a_row(layout, par: int) -> bool:
+    return not any(one == other == par for one, other in pairwise(layout))
+
+
+@pytest.mark.parametrize("mode", sorted(MODE_PARS))
+def test_each_mode_gives_courses_of_its_shape(real_catalog, real_curation, mode):
+    pars = set()
+    for seed in range(12):
+        settings = Settings(
+            prng_seed=f"{mode}-{seed}",
+            include=frozenset({"derived"}),
+            constraints=mode_rules(mode, 1),
+        )
+        course = generate(real_catalog, real_curation, settings).course
+        assert course.par in MODE_PARS[mode]
         assert all(real_catalog[slot.id].par == slot.par for slot in course.holes)
+        layout = course.layout
+        if mode == "standard":
+            assert is_standard(layout)
+        if mode == "natural_par":
+            assert no_two_in_a_row(layout, 3) and no_two_in_a_row(layout, 5)
+            assert layout[-1] != 3
+        if mode == "executive":
+            assert 5 not in layout
+            assert abs(layout[:9].count(4) - layout[9:].count(4)) <= 1
+        pars.add(course.par)
+    if mode in ("natural_par", "executive"):
+        assert len(pars) > 1, "a rolled mode draws its mix per seed"
+
+
+def test_transform_chances_roll_each_hole_on_its_own(real_catalog, real_curation):
+    def holes(**chances):
+        settings = Settings(prng_seed="transforms", **chances)
+        return generate(real_catalog, real_curation, settings).course.holes
+
+    plain = holes()
+    assert all(slot.transforms == () for slot in plain)
+    every = holes(mirror_chance=100, hazard_chance=100)
+    assert [slot.id for slot in every] == [slot.id for slot in plain]
+    for slot in every:
+        assert slot.transforms[0] == "mirror@1"
+        assert slot.transforms[1].startswith("hazards@1:")
+    seeds = {slot.transforms[1] for slot in every}
+    assert len(seeds) == 18
+
+    def mirrored(slots) -> list[bool]:
+        return ["mirror@1" in slot.transforms for slot in slots]
+
+    half = holes(mirror_chance=50)
+    assert 0 < sum(mirrored(half)) < 18
+    assert mirrored(holes(mirror_chance=50, hazard_chance=100)) == mirrored(half)
+    assert all(
+        "mirror@1" in many.transforms
+        for few, many in zip(half, holes(mirror_chance=75), strict=True)
+        if "mirror@1" in few.transforms
+    )
 
 
 def test_copies_settings_into_the_course(real_catalog, real_curation):
@@ -294,11 +353,11 @@ def test_an_expert_cap_holds_on_each_nine_of_real_seeds(
         manifest = generate(
             real_catalog,
             real_curation,
-            Settings(prng_seed=str(seed), constraints=standard_rules(72, per_nine)),
+            Settings(prng_seed=str(seed), constraints=standard_rules(per_nine)),
         )
         nines = experts_by_nine(manifest, real_curation)
         assert max(nines) <= per_nine, f"seed {seed}: {nines}"
-        assert satisfies(manifest.course.layout, COUNTS[72])
+        assert is_standard(manifest.course.layout)
         assert len({slot.id for slot in manifest.course.holes}) == 18
         most = max(most, *nines)
     assert most == per_nine, "the cap was never reached, so it was never tested"
@@ -312,7 +371,7 @@ def test_a_uniform_draw_goes_over_the_cap_on_real_seeds(real_catalog, real_curat
                 generate(
                     real_catalog,
                     real_curation,
-                    Settings(prng_seed=str(seed), constraints=standard_rules(72, None)),
+                    Settings(prng_seed=str(seed), constraints=standard_rules(None)),
                 ),
                 real_curation,
             )
@@ -332,7 +391,7 @@ def test_a_capped_seed_never_repeats_a_family(real_catalog, real_curation):
         holes = generate(
             real_catalog,
             real_curation,
-            Settings(prng_seed=str(seed), constraints=standard_rules(72, 1)),
+            Settings(prng_seed=str(seed), constraints=standard_rules(1)),
         ).course.holes
         drawn = [
             label_of[slot.id.lineage] for slot in holes if slot.id.lineage in label_of
@@ -342,7 +401,7 @@ def test_a_capped_seed_never_repeats_a_family(real_catalog, real_curation):
 
 def test_a_capped_draw_is_the_same_for_the_same_seed():
     catalog, curation = expert_catalog()
-    settings = Settings(prng_seed="abc", constraints=standard_rules(72, 1))
+    settings = Settings(prng_seed="abc", constraints=standard_rules(1))
     assert generate(catalog, curation, settings) == generate(
         catalog, curation, settings
     )
@@ -356,7 +415,7 @@ def test_expert_holes_land_on_every_slot_of_a_nine():
         manifest = generate(
             catalog,
             curation,
-            Settings(prng_seed=str(seed), constraints=standard_rules(72, 1)),
+            Settings(prng_seed=str(seed), constraints=standard_rules(1)),
         )
         seen |= {
             number
@@ -388,7 +447,7 @@ def test_a_cap_of_zero_leaves_a_mixed_family_its_other_member():
         course = generate(
             catalog,
             curation,
-            Settings(prng_seed=str(seed), constraints=standard_rules(72, 0)),
+            Settings(prng_seed=str(seed), constraints=standard_rules(0)),
         ).course
         drawn |= {str(slot.id) for slot in course.holes}
     assert "t/twin_plain" in drawn and "t/twin_expert" not in drawn
@@ -405,7 +464,7 @@ def test_a_capped_draw_uses_the_expert_holes_the_pool_needs():
         manifest = generate(
             catalog,
             curation,
-            Settings(prng_seed="abc", constraints=standard_rules(72, cap)),
+            Settings(prng_seed="abc", constraints=standard_rules(cap)),
         )
         assert sum(experts_by_nine(manifest, curation)) >= 5
     # four expert holes at most, and thirteen others: seventeen holes for eighteen slots
@@ -413,7 +472,7 @@ def test_a_capped_draw_uses_the_expert_holes_the_pool_needs():
         generate(
             catalog,
             curation,
-            Settings(prng_seed="abc", constraints=standard_rules(72, 2)),
+            Settings(prng_seed="abc", constraints=standard_rules(2)),
         )
 
 

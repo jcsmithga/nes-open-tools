@@ -69,6 +69,7 @@ def test_the_seed_page_starts_its_hole_table_and_details_collapsed(unwritten_cli
     [
         ("experts_1", "expert_cap", "1", "seed.details.draw_rule_expert_cap"),
         ("experts_0", "expert_cap", "0", "seed.details.draw_rule_no_experts"),
+        ("experts_2", "expert_cap", "2", "seed.details.draw_rule_expert_cap"),
         ("uniform", "uniform", None, "seed.details.draw_rule_uniform"),
     ],
 )
@@ -89,15 +90,69 @@ def test_the_seed_page_shows_the_expert_cap_it_was_generated_under(
     assert key in cell.group(1)
     stored = unwritten_client.get(f"/h/{seed_id}.json").json()["settings"]
     assert "draw_rule" not in stored
-    standard = {"rule": "standard", "par": 72}
+    standard = {"rule": "standard"}
     assert (
         stored["constraints"]
         == {
-            "experts_1": None,
+            "experts_1": [standard, {"rule": "expert_cap", "per_nine": 1}],
             "experts_0": [standard, {"rule": "expert_cap", "per_nine": 0}],
+            "experts_2": [standard, {"rule": "expert_cap", "per_nine": 2}],
             "uniform": [standard],
         }[choice]
     )
+
+
+@pytest.mark.parametrize(
+    "mode, key",
+    [
+        ("standard", "seed.details.mode_standard"),
+        ("natural_par", "seed.details.mode_natural_par"),
+        ("executive", "seed.details.mode_executive"),
+        ("par_3", "seed.details.mode_par_3"),
+    ],
+)
+def test_the_seed_page_shows_its_mode_in_place_of_a_par(unwritten_client, mode, key):
+    form = FormState.default()
+    form.mode = mode
+    seed_id = generate_seed(unwritten_client, form)
+    page = unwritten_client.get(f"/h/{seed_id}").text
+    cell = re.search(r'<td data-mode="(\w+)">(.*?)</td>', page, re.S)
+    assert cell is not None and cell.group(1) == mode
+    assert key in cell.group(2)
+    assert "seed.details.par_target" not in page
+    assert unwritten_client.get(f"/h/{seed_id}.json").json()["request"]["constraints"]
+
+
+def test_a_vanilla_seed_shows_its_course(unwritten_client):
+    form = FormState.default()
+    form.mode = "vanilla_course"
+    form.course = "jp_uk"
+    seed_id = generate_seed(unwritten_client, form)
+    page = unwritten_client.get(f"/h/{seed_id}").text
+    cell = re.search(r'<td data-mode="vanilla_course">(.*?)</td>', page, re.S)
+    assert cell is not None
+    assert "seed.details.mode_vanilla_course" in cell.group(1)
+    assert "course=" in cell.group(1) and "rom=Mario Open" in cell.group(1)
+
+
+def test_the_seed_page_shows_each_transformed_hole_and_how_many(unwritten_client):
+    form = FormState.default()
+    form.mirror_chance = "100"
+    form.hazard_chance = "25"
+    seed_id = generate_seed(unwritten_client, form)
+    page = unwritten_client.get(f"/h/{seed_id}").text
+    assert page.count('data-transform="mirror"') == 18
+    shuffled = page.count('data-transform="hazards"')
+    manifest = unwritten_client.get(f"/h/{seed_id}.json").json()
+    assert shuffled == sum(
+        any(name.startswith("hazards@1:") for name in hole["transforms"])
+        for hole in manifest["course"]["holes"]
+    )
+    assert re.search(r'data-mirror-chance="100"\s+data-mirrored="18"', page)
+    assert re.search(
+        rf'data-hazard-chance="25"\s+data-hazards-shuffled="{shuffled}"', page
+    )
+    assert "seed.details.chance_p100" in page and "seed.details.chance_p25" in page
 
 
 def test_the_seed_page_names_the_wind_profiles_it_was_generated_under(
@@ -136,6 +191,7 @@ def test_a_seed_stored_before_expert_caps_shows_none(catalog, curation, tmp_path
         page = test_client.get(f"/h/{seed_id}").text
         stored = test_client.get(f"/h/{seed_id}.json").json()
     assert 'data-draw-rule="uniform"' in page
+    assert "seed.details.par_target" in page and 'data-mode="' not in page
     assert 'data-wind-speed="vanilla"' in page
     assert 'data-wind-direction="vanilla"' in page
     assert "draw_rule" not in stored["settings"]
@@ -318,7 +374,7 @@ def legacy_seed(client) -> str:
     """A seed stored as the randomizer 1.0 site stored them: schema 1, finish ABI 1,
     drawn uniformly with the wind its seeds deal."""
     state = app_state(client)
-    manifest = state.builder.generate(Settings(constraints=standard_rules(72, None)))
+    manifest = state.builder.generate(Settings(constraints=standard_rules(None)))
     return store_seed(state.db, manifest, schema=1, catalog=state.builder.catalog)
 
 

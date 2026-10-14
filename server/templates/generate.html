@@ -20,20 +20,34 @@
   {% endif %}
 
   <form method="post" action="/generate" id="generate-form">
-    <fieldset>
-      <legend>{{ t("generate.par.legend") }}</legend>
-      {% for par in options.pars %}
-        <label>
-          <input type="radio"
-                 name="par"
-                 value="{{ par }}"
-                 {% if form.par == par|string %}checked{% endif %}>
-          {{ t("generate.par.option", par=par) }}
-        </label>
+    <label for="generate-mode">{{ t("generate.mode.label") }}</label>
+    <select id="generate-mode" name="mode" aria-describedby="generate-mode-help">
+      {% for mode in options.modes %}
+        <option value="{{ mode }}" {% if form.mode == mode %}selected{% endif %}>
+          {% if mode == "standard" %}{{ t_plain("generate.mode.standard") }}
+          {% elif mode == "natural_par" %}{{ t_plain("generate.mode.natural_par") }}
+          {% elif mode == "executive" %}{{ t_plain("generate.mode.executive") }}
+          {% elif mode == "par_3" %}{{ t_plain("generate.mode.par_3") }}
+      {% else %}{{ t_plain("generate.mode.vanilla_course") }}{% endif %}
+        </option>
       {% endfor %}
-    </fieldset>
+    </select>
+    <small id="generate-mode-help">{{ t("generate.mode.help") }}</small>
 
-    <fieldset>
+    {# Shown only for a vanilla course, by site.css; a vanilla course ignores the sources and the cap. #}
+    <div class="vanilla-only">
+      <label for="generate-course">{{ t("generate.course.label") }}</label>
+      <select id="generate-course" name="course">
+        {% for option in options.courses %}
+          <option value="{{ option.slug }}"
+                  {% if form.course == option.slug %}selected{% endif %}>
+            {{ t_plain("generate.course.option", course=option.course, rom=option.rom_title) }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <fieldset class="not-vanilla">
       <legend>{{ t("generate.sources.legend") }}</legend>
       {% for rom in options.sources %}
         <label>
@@ -57,19 +71,45 @@
       <small>{{ t("generate.family_repeats.help") }}</small>
     </fieldset>
 
-    <label for="generate-draw-rule">{{ t("generate.draw_rule.label") }}</label>
-    <select id="generate-draw-rule"
-            name="draw_rule"
-            aria-describedby="generate-draw-rule-help">
-      {% for rule in options.draw_rules %}
-        <option value="{{ rule }}" {% if form.draw_rule == rule %}selected{% endif %}>
-          {% if rule == "experts_0" %}{{ t_plain("generate.draw_rule.experts_0") }}
-          {% elif rule == "experts_1" %}{{ t_plain("generate.draw_rule.experts_1") }}
-      {% else %}{{ t_plain("generate.draw_rule.uniform") }}{% endif %}
-        </option>
-      {% endfor %}
-    </select>
-    <small id="generate-draw-rule-help">{{ t("generate.draw_rule.help") }}</small>
+    <div class="not-vanilla">
+      <label for="generate-draw-rule">{{ t("generate.draw_rule.label") }}</label>
+      <select id="generate-draw-rule"
+              name="draw_rule"
+              aria-describedby="generate-draw-rule-help">
+        {% for rule in options.draw_rules %}
+          <option value="{{ rule }}" {% if form.draw_rule == rule %}selected{% endif %}>
+            {% if rule == "experts_0" %}{{ t_plain("generate.draw_rule.experts_0") }}
+            {% elif rule == "experts_1" %}{{ t_plain("generate.draw_rule.experts_1") }}
+            {% elif rule == "experts_2" %}{{ t_plain("generate.draw_rule.experts_2") }}
+        {% else %}{{ t_plain("generate.draw_rule.uniform") }}{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+      <small id="generate-draw-rule-help">{{ t("generate.draw_rule.help") }}</small>
+    </div>
+
+    {% macro chance_select(name, id, chosen) %}
+      <select id="{{ id }}"
+              name="{{ name }}"
+              aria-describedby="generate-chance-help">
+        {% for chance in options.chances %}
+          <option value="{{ chance }}" {% if chosen == chance %}selected{% endif %}>
+            {% if chance == "0" %}{{ t_plain("generate.chance.p0") }}
+            {% elif chance == "25" %}{{ t_plain("generate.chance.p25") }}
+            {% elif chance == "50" %}{{ t_plain("generate.chance.p50") }}
+            {% elif chance == "75" %}{{ t_plain("generate.chance.p75") }}
+        {% else %}{{ t_plain("generate.chance.p100") }}{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+    {% endmacro %}
+
+    <label for="generate-mirror-chance">{{ t("generate.mirror_chance.label") }}</label>
+    {{ chance_select("mirror_chance", "generate-mirror-chance", form.mirror_chance) }}
+
+    <label for="generate-hazard-chance">{{ t("generate.hazard_chance.label") }}</label>
+    {{ chance_select("hazard_chance", "generate-hazard-chance", form.hazard_chance) }}
+    <small id="generate-chance-help">{{ t("generate.chance.help") }}</small>
 
     <label for="generate-wind-speed">{{ t("generate.wind_speed.label") }}</label>
     <select id="generate-wind-speed" name="wind_speed">
@@ -155,4 +195,6 @@
 
     <button type="submit">{{ t("generate.submit") }}</button>
   </form>
+
+  <p><a href="/mystery">{{ t("generate.mystery_link") }}</a></p>
 {% endblock %}

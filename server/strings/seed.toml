@@ -281,6 +281,14 @@ text = "Hole"
 note = "hole table column header; where the hole comes from"
 text = "Source"
 
+[seed.holes.mirrored]
+note = "small marker under a hole's id; this seed mirrored the hole (flipped left to right)"
+text = "(m)"
+
+[seed.holes.hazards_shuffled]
+note = "small marker under a hole's id; this seed reshuffled the hole's bunkers and water"
+text = "(hs)"
+
 [seed.holes.par]
 note = "hole table column header; par"
 text = "Par"
@@ -363,6 +371,30 @@ text = "\"{course}\", {rom}"
 note = "settings row label; par the course was generated for"
 text = "Total Par"
 
+[seed.details.mode]
+note = "settings row label; the course mode the seed was rolled with (its name follows); shown in place of the par row"
+text = "Mode"
+
+[seed.details.mode_standard]
+note = "mode row value; a standard par 72"
+text = "Standard"
+
+[seed.details.mode_natural_par]
+note = "mode row value; par rolled per seed, 68-76"
+text = "Natural Par"
+
+[seed.details.mode_executive]
+note = "mode row value; par 3s and two to six par 4s"
+text = "Executive Course"
+
+[seed.details.mode_par_3]
+note = "mode row value; eighteen par 3s"
+text = "Par 3 Course"
+
+[seed.details.mode_vanilla_course]
+note = "mode row value; one cartridge course as it is; {course} its name, {rom} its ROM title"
+text = "Vanilla"
+
 [seed.details.sources]
 note = "settings row label; ROMs the holes were drawn from (ROM titles follow)"
 text = "Hole Sources Enabled"
@@ -394,6 +426,38 @@ text = "Zero"
 [seed.details.draw_rule_expert_cap]
 note = "draw rule row value; at most {count} expert holes on each nine, {count} 1 or more"
 text = "At most {count} per nine"
+
+[seed.details.mirror_chance]
+note = "settings row label; each hole's chance of being mirrored (the value follows)"
+text = "Mirroring odds per hole"
+
+[seed.details.hazard_chance]
+note = "settings row label; each hole's chance of its bunkers and water being reshuffled (the value follows)"
+text = "Hazard shuffle odds per hole"
+
+[seed.details.chance_p0]
+note = "chance row value; no hole changed"
+text = "0%"
+
+[seed.details.chance_p25]
+note = "chance row value; 25% each hole; {holes} how many it changed on this seed"
+text = "25% (applied to {holes} holes)"
+
+[seed.details.chance_p50]
+note = "chance row value; 50% each hole; {holes} how many it changed on this seed"
+text = "50% (applied to {holes} holes)"
+
+[seed.details.chance_p75]
+note = "chance row value; 75% each hole; {holes} how many it changed on this seed"
+text = "75% (applied to {holes} holes)"
+
+[seed.details.chance_p100]
+note = "chance row value; every hole; {holes} how many (18)"
+text = "100%"
+
+[seed.details.chance_percent]
+note = "chance row value for an odd chance the form doesn't offer (a CLI seed); {percent} each hole's chance in %, {holes} how many it changed"
+text = "{percent}% (applied to {holes} holes)"
 
 [seed.details.wind_speed]
 note = "settings row label; the seed's wind speed profile (its name follows)"

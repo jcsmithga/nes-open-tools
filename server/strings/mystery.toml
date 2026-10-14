@@ -1,0 +1,63 @@
+# Mystery seed page strings (mystery.html): a seed from a request file (ADR 0016).
+# Format: see common.toml, and server/CLAUDE.md "Player-facing text".
+
+[mystery.page_title]
+note = "plain: browser tab title, mystery seed page"
+text = "Mystery Seed - NES Open Tournament Golf Randomizer"
+
+[mystery.heading]
+note = "mystery seed page h1"
+text = "Mystery Seed"
+
+[mystery.tagline]
+note = "line under the h1; roll a seed from your own request file"
+text = "Roll a seed from a request file with weighted options"
+
+[mystery.lead]
+note = "what a request file is: settings with weighted choices and sets, rolled when the seed is made; where to learn the format"
+text = """
+A "request" is a settings file with weighted choices and potentially sets.  The weights are rolled out when the seed is made.
+More information coming soon, I promise.
+"""
+
+[mystery.file_label]
+note = "label of the request file picker"
+text = "Choose file"
+
+[mystery.file_help]
+note = "small line under the file picker; a .json request file, at most {max_kb} KB"
+text = "File should be a valid json request file, at most {max_kb} KB"
+
+[mystery.submit]
+note = "form submit button; rolls the request and goes to the seed page"
+text = "Randomize"
+
+# Notices over the form when a submission is refused. One shows at a time.
+
+[mystery.error.no_file]
+note = "no file was chosen"
+text = "No file was chosen"
+
+[mystery.error.too_large]
+note = "the file is over the size limit; {max_kb} the limit in KB"
+text = "File too large, currently limited to {max_kb} KB"
+
+[mystery.error.not_json]
+note = "the file isn't JSON (or isn't UTF-8 text)"
+text = "Had trouble parsing the file, make sure it's valid JSON and UTF-8 encoded."
+
+[mystery.error.bad_request]
+note = "the request isn't one the site can roll; {problem} the checker's message, technical, shown as is (put it in <code>)"
+text = "Bad request: <code>{problem}</code>"
+
+[mystery.error.pool]
+note = "the request rolled settings no course can be made from; not re-rolled; {rolled} the rolled settings as JSON, {problem} why, both technical (put them in <code>)"
+text = "Mystery request determined to not be feasible. As rolled: <code>{rolled}</code>.  Problem: <code>{problem}</code>"
+
+[mystery.error.rate_limited]
+note = "too many seeds from this address in a short time; wait a minute and try again"
+text = "Whoa buddy, slow down a bit.  Maybe grab a drink from the clubhouse before rolling your next seed."
+
+[mystery.error.unavailable]
+note = "the server can't build seeds right now (its own ROM is missing); not the player's fault; try later"
+text = "It's not you, it's me.  Server unable to build seeds right now, check back later."

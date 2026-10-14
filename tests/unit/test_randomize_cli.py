@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from golf.core.patches.sram_defaults import Club
 from golf.randomizer.catalog import US_ROM, Catalog
 from golf.randomizer.curation import CurationSnapshot
@@ -13,6 +15,7 @@ from golf.randomizer.manifest import (
     ClubRules,
     Manifest,
     Settings,
+    mode_rules,
     standard_rules,
 )
 from golf.randomizer.wind import compass
@@ -59,8 +62,8 @@ def test_every_generate_flag_lands_in_the_settings(tmp_path):
         path,
         "--seed",
         "flags",
-        "--par",
-        "70",
+        "--mode",
+        "natural_par",
         "--sources",
         US_ROM,
         "--include",
@@ -74,6 +77,10 @@ def test_every_generate_flag_lands_in_the_settings(tmp_path):
         "dying_wind",
         "--wind-direction",
         "prevailing",
+        "--mirror-chance",
+        "25",
+        "--hazard-chance",
+        "50",
         "--music",
         "nes_uk",
         "--mercy-point",
@@ -89,14 +96,15 @@ def test_every_generate_flag_lands_in_the_settings(tmp_path):
     settings = load(path).settings
     assert settings == Settings(
         prng_seed="flags",
-        par=70,
         sources=frozenset({US_ROM}),
         include=frozenset({"derived", "community"}),
         exclude_tags=frozenset({"long", "scenic"}),
         allow_family_repeats=True,
-        constraints=standard_rules(70, 2),
+        constraints=mode_rules("natural_par", 2),
         wind_speed_profile="dying_wind",
         wind_direction_profile="prevailing",
+        mirror_chance=25,
+        hazard_chance=50,
         music="nes_uk",
         mercy_point=None,
         clubs=ClubRules(
@@ -105,16 +113,21 @@ def test_every_generate_flag_lands_in_the_settings(tmp_path):
             required_bag=frozenset({Club.W3, Club.PW}),
         ),
     )
-    assert load(path).course.par == 70
+    assert 68 <= load(path).course.par <= 76
 
 
 def test_the_expert_cap_flags_choose_the_cap(tmp_path):
     path = tmp_path / "seed.json"
     for args, constraints, cap in [
-        ([], None, 1),
-        (["--experts-per-nine", "1"], standard_rules(72, 1), 1),
-        (["--experts-per-nine", "0", "--par", "71"], standard_rules(71, 0), 0),
-        (["--no-expert-cap"], standard_rules(72, None), None),
+        ([], standard_rules(1), 1),
+        (["--experts-per-nine", "1"], standard_rules(1), 1),
+        (["--experts-per-nine", "0", "--mode", "par_3"], mode_rules("par_3", 0), 0),
+        (["--no-expert-cap"], standard_rules(None), None),
+        (
+            ["--mode", "vanilla_course", "--course", "nes_uk"],
+            mode_rules({"rule": "vanilla_course", "course": "nes_uk"}, None),
+            None,
+        ),
     ]:
         completed = run("generate", "--seed", "rule", "-o", path, *args)
         assert completed.returncode == 0, completed.stderr
@@ -126,7 +139,7 @@ def test_the_expert_cap_flags_choose_the_cap(tmp_path):
             for line in completed.stdout.splitlines()
             if line.startswith("rule: ")
         ]
-        assert shown == [str(rule) for rule in settings.rules], args
+        assert shown == [str(rule) for rule in settings.constraints], args
         assert len(shown) == (1 if cap is None else 2)
 
 
@@ -150,7 +163,7 @@ def test_show_reads_schema_one_but_build_refuses_it(tmp_path):
         generate(
             Catalog.load(),
             CurationSnapshot.load(),
-            Settings(prng_seed="schema-one", constraints=standard_rules(72, None)),
+            Settings(prng_seed="schema-one", constraints=standard_rules(None)),
         ).to_json(),
         1,
     )
@@ -185,10 +198,33 @@ def test_generate_refuses_settings_the_model_refuses(tmp_path):
     assert not path.exists()
 
 
-def test_argparse_refuses_an_unsupported_par(tmp_path):
-    completed = run("generate", "-o", tmp_path / "seed.json", "--par", "69")
+def test_argparse_refuses_a_mode_there_is_not(tmp_path):
+    completed = run("generate", "-o", tmp_path / "seed.json", "--mode", "par_6")
     assert completed.returncode == 2
     assert "invalid choice" in completed.stderr
+
+
+@pytest.mark.parametrize(
+    "args, message",
+    [
+        (["--mode", "vanilla_course"], "--course names the course"),
+        (["--course", "nes_us"], "--course names the course"),
+        (
+            [
+                "--mode",
+                "vanilla_course",
+                "--course",
+                "nes_us",
+                "--experts-per-nine",
+                "1",
+            ],
+            "takes no --experts-per-nine",
+        ),
+    ],
+)
+def test_generate_refuses_a_course_without_its_mode(tmp_path, args, message):
+    completed = run("generate", "-o", tmp_path / "seed.json", *args)
+    assert completed.returncode == 1 and message in completed.stderr
 
 
 def test_show_refuses_a_malformed_manifest(tmp_path):
@@ -229,6 +265,7 @@ def test_generate_takes_every_setting_from_a_request(tmp_path):
     ]
     assert "total: par 54" in completed.stdout
     assert 'rule: {"rule":"par_3"}' in completed.stdout
+    assert manifest.request == PAR_3
 
 
 def test_generate_takes_a_request_file(tmp_path):
@@ -285,4 +322,11 @@ def test_rules_lists_the_rules_a_request_may_use():
     completed = run("rules")
     assert completed.returncode == 0, completed.stderr
     listed = [line.split()[0] for line in completed.stdout.splitlines()]
-    assert listed == ["expert_cap", "par_3", "standard", "vanilla_course"]
+    assert listed == [
+        "executive",
+        "expert_cap",
+        "natural_par",
+        "par_3",
+        "standard",
+        "vanilla_course",
+    ]

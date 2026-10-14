@@ -32,6 +32,7 @@ from golf.randomizer.manifest import (
     Slot,
     StoredDrawRule,
     StoredManifest,
+    mode_rules,
     required_roms,
     standard_rules,
 )
@@ -82,8 +83,10 @@ def test_round_trips_through_json():
     value = manifest(
         settings=Settings(
             prng_seed="abc",
-            par=70,
+            constraints=mode_rules("natural_par", 0),
             sources=frozenset({JP_ROM}),
+            mirror_chance=25,
+            hazard_chance=100,
             exclude_tags=frozenset({"expert"}),
             allow_family_repeats=True,
             music="jp_hawaii",
@@ -111,9 +114,11 @@ def test_json_shape():
         "finish_abi_version",
         "catalog_version",
         "curation_stamp",
+        "request",
         "settings",
         "course",
     ]
+    assert data["request"] is None
     assert data["course"]["holes"][0] == {
         "id": "nes_us/01",
         "par": 4,
@@ -124,6 +129,21 @@ def test_json_shape():
     }
     assert data["settings"]["clubs"] == {"max": 14, "banned": [], "required_bag": None}
     assert data["settings"]["sources"] == [US_ROM, JP_ROM]
+
+
+def test_a_request_is_recorded_as_given_and_read_back():
+    request = {"mercy_point": {"one_of": [{"weight": 1, "value": None}]}}
+    value = manifest(request=request)
+    assert value.to_json()["request"] == request
+    assert round_trip(value) == value
+    assert StoredManifest.from_json(value.to_json()).request == request
+    assert StoredManifest.from_json(manifest().to_json()).request is None
+    with pytest.raises(ManifestError, match="request must be null or an object"):
+        manifest(request=["mercy_point"])  # type: ignore[arg-type]
+    data = manifest().to_json()
+    del data["request"]
+    with pytest.raises(ManifestError, match="missing fields \\['request'\\]"):
+        Manifest.from_json(data)
 
 
 def test_course_json_carries_the_sram_magic():
@@ -195,7 +215,7 @@ def test_rejects_bad_club_json(data):
 @pytest.mark.parametrize(
     "settings",
     [
-        dict(par=73),
+        dict(mirror_chance=101),
         dict(sources=set()),
         dict(sources={"nes_open_eu"}),
         dict(music="nes_mars"),
@@ -323,36 +343,64 @@ def test_the_current_schema_has_no_draw_rule():
         Manifest.from_json(data)
 
 
-def test_the_default_course_caps_expert_holes_at_one_a_nine():
-    assert Settings().constraints is None
-    assert Settings().experts_per_nine == DEFAULT_EXPERTS_PER_NINE == 1
-    assert Settings(par=70).rules == standard_rules(70, 1)
-    assert [rule.to_json() for rule in standard_rules(70, 1)] == [
-        {"rule": "standard", "par": 70},
+def test_the_default_course_is_a_standard_par_72_capped_at_one_a_nine():
+    assert Settings().constraints == standard_rules() == standard_rules(1)
+    assert [rule.to_json() for rule in Settings().constraints] == [
+        {"rule": "standard"},
         {"rule": "expert_cap", "per_nine": 1},
     ]
-    assert [rule.name for rule in standard_rules(72, None)] == ["standard"]
+    assert Settings().experts_per_nine == DEFAULT_EXPERTS_PER_NINE == 1
+    assert Settings().mode == Rule.parse({"rule": "standard"})
+    assert [rule.name for rule in standard_rules(None)] == ["standard"]
 
 
 def test_the_expert_cap_is_read_from_the_rules():
-    def cap(*rules: dict) -> int | None:
-        return Settings(constraints=parse_rules(list(rules))).experts_per_nine
-
-    assert cap({"rule": "par_3"}) is None
-    assert cap({"rule": "expert_cap", "per_nine": 3}) == 3
-    assert (
-        cap(
-            {"rule": "expert_cap", "per_nine": 3}, {"rule": "expert_cap", "per_nine": 2}
-        )
-        == 2
-    )
+    assert Settings(constraints=mode_rules("par_3", None)).experts_per_nine is None
+    assert Settings(constraints=mode_rules("executive", 2)).experts_per_nine == 2
+    vanilla = {"rule": "vanilla_course", "course": "jp_uk"}
+    settings = Settings(constraints=mode_rules(vanilla, None))
+    assert settings.mode.to_json() == vanilla and settings.experts_per_nine is None
 
 
-def test_standard_rules_refuse_a_par_or_a_cap_no_course_has():
-    with pytest.raises(ManifestError, match="par must be one of"):
-        standard_rules(73)
+@pytest.mark.parametrize(
+    "rules, message",
+    [
+        ([], "one course mode"),
+        ([{"rule": "expert_cap", "per_nine": 1}], "one course mode"),
+        ([{"rule": "standard"}, {"rule": "par_3"}], "one course mode"),
+        (
+            [
+                {"rule": "standard"},
+                {"rule": "expert_cap", "per_nine": 1},
+                {"rule": "expert_cap", "per_nine": 2},
+            ],
+            "at most one expert_cap",
+        ),
+        (
+            [
+                {"rule": "vanilla_course", "course": "nes_us"},
+                {"rule": "expert_cap", "per_nine": 1},
+            ],
+            "takes no cap",
+        ),
+        ([{"rule": "standard", "par": 71}], "unknown"),
+    ],
+)
+def test_settings_hold_one_mode_and_at_most_one_cap(rules, message):
+    with pytest.raises(ManifestError, match=message):
+        Settings(constraints=tuple(rules))
+
+
+def test_a_cap_no_course_has_is_refused():
     with pytest.raises(ManifestError, match="per_nine"):
-        standard_rules(72, 10)
+        standard_rules(10)
+
+
+@pytest.mark.parametrize("field", ["mirror_chance", "hazard_chance"])
+@pytest.mark.parametrize("chance", [-1, 101, 2.5, True, "50"])
+def test_a_transform_chance_is_a_whole_percent(field, chance):
+    with pytest.raises(ManifestError, match=f"{field} must be a whole percent"):
+        Settings(**{field: chance})
 
 
 @pytest.mark.parametrize("value", [None, 0, -1, True, "2"])
@@ -484,7 +532,10 @@ def test_constraints_are_checked_rules_and_round_trip():
     assert data["settings"]["constraints"] == rules
     assert Manifest.from_json(data) == value
     assert hash(value.settings) == hash(Manifest.from_json(data).settings)
-    assert manifest().to_json()["settings"]["constraints"] is None
+    assert manifest().to_json()["settings"]["constraints"] == [
+        {"rule": "standard"},
+        {"rule": "expert_cap", "per_nine": 1},
+    ]
 
 
 @pytest.mark.parametrize(
@@ -504,7 +555,7 @@ def test_a_rule_the_vocabulary_does_not_have_is_refused(constraints):
 
 # -- Stored manifests -----------------------------------------------------------------------
 
-UNIFORM_SETTINGS = Settings(prng_seed="abc", constraints=standard_rules(72, None))
+UNIFORM_SETTINGS = Settings(prng_seed="abc", constraints=standard_rules(None))
 
 
 def issued(schema: int, **overrides) -> dict:
@@ -530,7 +581,7 @@ def test_a_stored_manifest_of_any_schema_reads_as_its_seed_was_made(schema):
             made.finish_abi_version,
         )
     settings = stored.settings
-    assert (settings.prng_seed, settings.par) == ("abc", made.settings.par)
+    assert (settings.prng_seed, settings.par) == ("abc", None if schema == 5 else 72)
     assert settings.sources == made.settings.sources
     assert settings.include == frozenset()
     assert settings.draw_rule == StoredDrawRule("uniform")
@@ -564,7 +615,7 @@ def test_a_stored_manifest_reads_every_field_the_current_schema_has():
         include=frozenset({"derived"}),
         exclude_tags=frozenset({"short"}),
         allow_family_repeats=True,
-        constraints=standard_rules(72, 0),
+        constraints=standard_rules(0),
         wind_speed_profile="strong",
         wind_direction_profile="out_and_back",
     )
@@ -579,7 +630,7 @@ def test_a_stored_manifest_reads_every_field_the_current_schema_has():
     assert stored.settings.allow_family_repeats
     assert stored.settings.draw_rule == StoredDrawRule("expert_cap", 0)
     assert stored.settings.constraints == tuple(
-        rule.to_json() for rule in standard_rules(72, 0)
+        rule.to_json() for rule in standard_rules(0)
     )
     assert stored.settings.wind_speed_profile == "strong"
     assert stored.settings.wind_direction_profile == "out_and_back"
@@ -621,7 +672,7 @@ def test_a_stored_manifest_keeps_names_this_release_no_longer_has():
     "constraints, draw_rule",
     [
         (None, StoredDrawRule("expert_cap", DEFAULT_EXPERTS_PER_NINE)),
-        ([{"rule": "standard", "par": 72}], StoredDrawRule("uniform")),
+        ([{"rule": "standard"}], StoredDrawRule("uniform")),
         (
             [
                 {"rule": "expert_cap", "per_nine": 3},
@@ -654,7 +705,6 @@ def test_a_stored_manifest_keeps_transform_names_the_registry_lacks():
     [
         ("schema",),
         ("generator_version",),
-        ("settings", "par"),
         ("settings", "sources"),
         ("course", "sram_magic"),
         ("course", "clubs"),

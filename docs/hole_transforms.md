@@ -5,9 +5,10 @@
 
 A hole transform is a deterministic rewrite of a catalog hole, named in a manifest slot's
 `transforms` list (`docs/manifest.md`) and applied in order before `CoursePatch` packs
-the course (`unfinished_steps` in `golf/randomizer/build.py`). Generation adds none yet:
-only hand-written manifests carry them, and `golf-transform` applies them to hole JSON for
-inspection and for the editor.
+the course (`unfinished_steps` in `golf/randomizer/build.py`). Generation adds `mirror@1`
+and `hazards@1:<seed>` to each slot by the settings' `mirror_chance` and `hazard_chance`,
+each hole rolled on its own (`docs/manifest.md`, ADR 0025), and `golf-transform` applies
+any of them to hole JSON for inspection and for the editor.
 
 | Name | Effect |
 |------|--------|

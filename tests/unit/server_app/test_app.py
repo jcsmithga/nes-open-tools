@@ -29,7 +29,7 @@ from tests.unit.server_app.helpers import (
 class BrokenGenerate(FakeBuilder):
     """A builder with a bug that generating a seed runs into."""
 
-    def generate(self, settings):
+    def generate(self, settings, request=None):
         raise RuntimeError("bug")
 
 

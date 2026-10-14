@@ -15,10 +15,12 @@ ADR 0025 adopted the model and cut the spike down to what the site's course mode
   (`golf/randomizer/compose.py`), requests (`golf/randomizer/request.py`) and surveys
   (`golf/randomizer/survey.py`). Mixing is on: generation puts every course through
   `MIX_STEPS` steps of `Problem.mix`.
-- **Narrowed:** the vocabulary (`golf/randomizer/rules.py`). Settings may hold only the
-  modes (`standard`, `par_3`, `vanilla_course`, with `natural_par` and `executive` to
-  come) and `expert_cap`. `count`, `compare` and `limit` stay as what those are written
-  in, with `par_counts`, `balanced_nines`, `no_consecutive` and `slot`.
+- **Narrowed:** the vocabulary (`golf/randomizer/rules.py`). Settings hold one mode
+  (`standard`, `natural_par`, `executive`, `par_3`, `vanilla_course`) and at most one
+  `expert_cap`. `natural_par` and `executive` are rolled rules, whose par mix is drawn
+  per seed before the search. `count`, `compare` and `limit` stay as what the modes are
+  written in, with `par_counts`, `balanced_nines`, `no_consecutive` and `slot`.
+  `settings.par` and `layout.py` are gone with par 70 and 71.
 - **Removed:** `sum`, `step`, `gap`, `weight`, `total_par`, `highest`, `lowest`,
   `exclude`, `require` and `pin`; the selector fields and numbers only they read; the
   solver's sums, steps and gaps; the 35 requests in `data/presets/`; and the
@@ -530,33 +532,12 @@ unchanged.
 
 ## Open questions
 
-1. **Where do `par` and family repeats live?** Both are rules now. The expert cap is
-   in the list: a list holds what it says, and the default course is the one place a
-   cap comes from unasked. `par` is still a field, inert beside a list, and the family
-   rule is still added to every list.
-2. **Is the lean toward limits wanted?** It matches the old capped draw and suits the
-   per-nine ceiling. It is not what "every valid course equally likely" would mean.
-3. **How does ADR 0016 take this?** `request.py` is a stand-in for its unweighted half.
-   The `about` key and constraints inside `one_of` are both new to it.
-4. **Where does `over_par` come from?** The rules read `data/difficulty/holes.json`. A
-   hole with no row, which is every derived hole, cannot go where a rule sums it.
-5. **Which rules are public?** The general ones are powerful and easy to get wrong. The
-   named ones could be the whole of what a request may use.
-6. **What does a seed record?** Its constraints, as written. Not which preset they came
-   from, so "rounds on vanilla US" means recognizing the list until a request block
-   holds a name.
-
-Left alone on purpose:
-
-- **The site.** Its form sends a standard course with no expert cap or a cap of 0 or
-  1, and no other rule. Its select, its strings and the seed page's row are still named
-  for the draw rule. `server/builder.py` still builds every
-  layout at start-up, which generation no longer reads, and the seed page still shows
-  `settings.par` as the target.
-- **`legacy_draw.py` and `layout.py`.** The first exists for comparison. The second
-  still supplies the standard counts.
-- **`docs/randomizer.md`**, which is jdharms's own and describes the layout stage as
-  the design.
+The spike's six open questions were answered by ADR 0016 and ADR 0025: `par` is gone
+and the family rule is still added to every list; the lean is mixed out; requests are
+resolved with weighted fields and sets; no public rule sums `over_par`; only the modes
+and the expert cap are public; and a seed records its mode in its constraints and its
+request beside them. `docs/randomizer.md`, which is jdharms's own, still describes the
+layout stage as the design.
 
 ## Trying it
 

@@ -1,6 +1,7 @@
 """Generating a seed and what a seed serves: `/generate` and `/h/<id>`, with its manifest,
 its IPS download and its yardage book."""
 
+import json
 import logging
 
 from fastapi import APIRouter, Request
@@ -10,6 +11,8 @@ from starlette.concurrency import run_in_threadpool
 
 from golf.randomizer.build import credentials_for
 from golf.randomizer.generate import GenerationError
+from golf.randomizer.manifest import ManifestError
+from golf.randomizer.request import RequestError, check_request, resolve
 
 from ..auth import current_user
 from ..builder import BuilderUnavailableError, SeedBuilder
@@ -23,7 +26,7 @@ from ..forms import (
     SavedSettings,
     check_rom_hashes,
     player_options_from_state,
-    settings_from_state,
+    request_from_state,
     to_save,
 )
 from ..ratelimit import client_key
@@ -51,6 +54,14 @@ UNAVAILABLE = "unavailable"
 POOL_TOO_SMALL = "pool"
 #: a seed kept as a permalink but no longer distributed
 SEED_WITHDRAWN = "seed_withdrawn"
+
+#: mystery.html shows one notice per value, beside the generate ones above
+NO_FILE = "no_file"
+TOO_LARGE = "too_large"
+NOT_JSON = "not_json"
+BAD_REQUEST = "bad_request"
+#: the most bytes a request file may hold: a hand-written request is a few hundred
+MYSTERY_MAX_BYTES = 16 * 1024
 
 log = logging.getLogger(__name__)
 
@@ -96,11 +107,108 @@ def seed_router(templates: Jinja2Templates) -> APIRouter:
     def generate_form(request: Request):
         return generate_page(request, FormState.default())
 
+    def create_seed(request: Request, settings, asked: dict) -> str:
+        """Generate, build and store a seed; runs in the threadpool."""
+        seed_builder: SeedBuilder = request.app.state.builder
+        sample: Sample = request.state.sample
+        user = current_user(request)
+        with sample.phase("generate"):
+            manifest = seed_builder.generate(settings, asked)
+        built = seed_builder.build(manifest, sample)
+        with sample.phase("insert"):
+            return insert_seed(
+                request.app.state.db,
+                manifest,
+                built.unfinished_ips,
+                built.holes,
+                seed_builder.catalog,
+                creator_id=None if user is None else user.id,
+            )
+
+    def mystery_page(
+        request: Request,
+        error: str | None = None,
+        error_values: dict | None = None,
+        status_code: int = 200,
+    ):
+        return templates.TemplateResponse(
+            request,
+            "mystery.html",
+            {
+                "page": "generate",
+                "max_kb": MYSTERY_MAX_BYTES // 1024,
+                "error": error,
+                "error_values": error_values or {},
+            },
+            status_code=status_code,
+        )
+
+    @router.get("/mystery", response_class=HTMLResponse)
+    def mystery_form(request: Request):
+        return mystery_page(request)
+
+    @router.post("/mystery", response_class=HTMLResponse)
+    async def mystery_seed(request: Request):
+        """A seed from a request file a player uploads (ADR 0016). The file is
+        untrusted: its size is limited and it is parsed strictly."""
+        upload = (await request.form()).get("request")
+        if upload is None or isinstance(upload, str):
+            outcome(request, NO_FILE)
+            return mystery_page(request, NO_FILE, status_code=400)
+        data = await upload.read(MYSTERY_MAX_BYTES + 1)
+        if len(data) > MYSTERY_MAX_BYTES:
+            outcome(request, TOO_LARGE)
+            return mystery_page(request, TOO_LARGE, status_code=400)
+        try:
+            asked = json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            outcome(request, NOT_JSON)
+            return mystery_page(request, NOT_JSON, status_code=400)
+        try:
+            check_request(asked)
+            settings = resolve(asked)
+        except RequestError as problem:
+            outcome(request, BAD_REQUEST)
+            return mystery_page(
+                request, BAD_REQUEST, {"problem": str(problem)}, status_code=400
+            )
+
+        user = current_user(request)
+        if not request.app.state.rate_limiter.allow(
+            client_key(request, None if user is None else user.id)
+        ):
+            outcome(request, RATE_LIMITED)
+            return mystery_page(request, RATE_LIMITED, status_code=429)
+        try:
+            seed_id = await run_in_threadpool(create_seed, request, settings, asked)
+        except GenerationError as problem:
+            log.warning("a mystery request rolled no course: %s", problem)
+            outcome(request, POOL_TOO_SMALL)
+            return mystery_page(
+                request,
+                POOL_TOO_SMALL,
+                {
+                    "rolled": json.dumps(settings.to_json()),
+                    "problem": str(problem),
+                },
+                status_code=400,
+            )
+        except BuilderUnavailableError as problem:
+            log.error("cannot generate: %s", problem)
+            outcome(request, UNAVAILABLE)
+            return mystery_page(request, UNAVAILABLE, status_code=503)
+        outcome(request, OK)
+        return RedirectResponse(f"/h/{seed_id}", status_code=303)
+
     @router.post("/generate", response_class=HTMLResponse)
     async def generate_seed(request: Request):
         state = FormState.from_form(await request.form())
         try:
-            settings = settings_from_state(state)
+            asked = request_from_state(state)
+            try:
+                settings = resolve(asked)
+            except ManifestError:  # pragma: no cover - the form checks what it sends
+                raise FormError("invalid", field="settings") from None
         except FormError as problem:
             outcome(request, problem.reason)
             return generate_page(
@@ -114,27 +222,8 @@ def seed_router(templates: Jinja2Templates) -> APIRouter:
             outcome(request, RATE_LIMITED)
             return generate_page(request, state, RATE_LIMITED, status_code=429)
 
-        seed_builder: SeedBuilder = request.app.state.builder
-        db: Database = request.app.state.db
-
-        sample: Sample = request.state.sample
-
-        def create() -> str:
-            with sample.phase("generate"):
-                manifest = seed_builder.generate(settings)
-            built = seed_builder.build(manifest, sample)
-            with sample.phase("insert"):
-                return insert_seed(
-                    db,
-                    manifest,
-                    built.unfinished_ips,
-                    built.holes,
-                    seed_builder.catalog,
-                    creator_id=user_id,
-                )
-
         try:
-            seed_id = await run_in_threadpool(create)
+            seed_id = await run_in_threadpool(create_seed, request, settings, asked)
         except GenerationError as problem:
             log.warning(
                 "generation found no pool: %s", problem, extra={"settings": settings}

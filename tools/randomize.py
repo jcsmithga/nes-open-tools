@@ -43,7 +43,6 @@ from golf.randomizer.generate import (
     course_rules,
     generate,
 )
-from golf.randomizer.layout import COUNTS
 from golf.randomizer.manifest import (
     DEFAULT_EXPERTS_PER_NINE,
     EXPERT_CAP,
@@ -56,20 +55,23 @@ from golf.randomizer.manifest import (
     StoredDrawRule,
     StoredManifest,
     StoredSettings,
+    mode_rules,
     required_roms,
-    standard_rules,
 )
 from golf.randomizer.music import RANDOM, TRACKS
 from golf.randomizer.pool import build_pool
-from golf.randomizer.request import load_request
-from golf.randomizer.rules import RULES
-from golf.randomizer.survey import report, survey, uniform
+from golf.randomizer.request import is_weighted, load_request, resolve
+from golf.randomizer.rules import MODES, RULES, Rule, is_rolled
+from golf.randomizer.survey import report, survey_settings, uniform
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES, compass
+
+VANILLA_COURSE = "vanilla_course"
 
 EXAMPLES = """
 examples:
   golf-randomize generate --seed demo -o demo.json
-  golf-randomize generate --par 71 --sources nes_open_us --music nes_uk --mercy-point none
+  golf-randomize generate --mode natural_par --sources nes_open_us --music nes_uk --mercy-point none
+  golf-randomize generate --mode vanilla_course --course jp_uk
   golf-randomize generate --experts-per-nine 0
   golf-randomize generate --no-expert-cap
   golf-randomize generate --wind-speed storm_rolling_in --wind-direction out_and_back
@@ -99,14 +101,25 @@ def mercy_point(text: str) -> int | None:
         ) from None
 
 
-def constraints_from_args(args: argparse.Namespace):
-    """`--experts-per-nine` and `--no-expert-cap`: a standard course of `--par` under
-    that cap, or None, the default course, when neither is given."""
-    if args.experts_per_nine is None:
-        return standard_rules(args.par, None) if args.no_expert_cap else None
-    if args.no_expert_cap:
+def constraints_from_args(args: argparse.Namespace) -> tuple[Rule, ...]:
+    """`--mode` and `--course`, with `--experts-per-nine` or `--no-expert-cap`: a
+    course of that mode under that cap. A vanilla course takes no cap."""
+    if args.no_expert_cap and args.experts_per_nine is not None:
         raise ManifestError("--experts-per-nine does not apply with --no-expert-cap")
-    return standard_rules(args.par, args.experts_per_nine)
+    if (args.mode == VANILLA_COURSE) != (args.course is not None):
+        raise ManifestError("--course names the course of --mode vanilla_course")
+    if args.mode == VANILLA_COURSE:
+        if args.experts_per_nine is not None:
+            raise ManifestError("a vanilla course takes no --experts-per-nine")
+        return mode_rules({"rule": VANILLA_COURSE, "course": args.course}, None)
+    cap = (
+        None
+        if args.no_expert_cap
+        else DEFAULT_EXPERTS_PER_NINE
+        if args.experts_per_nine is None
+        else args.experts_per_nine
+    )
+    return mode_rules(args.mode, cap)
 
 
 def describe_draw_rule(rule: StoredDrawRule) -> str:
@@ -118,11 +131,18 @@ def describe_draw_rule(rule: StoredDrawRule) -> str:
     return f"at most {rule.per_nine} expert {holes} on each nine"
 
 
-def settings_from_args(args: argparse.Namespace) -> Settings:
-    """The settings the flags ask for, or a request's: a request stands in for every
-    settings flag but `--seed`."""
-    if args.request is not None:
-        return load_request(args.request, args.seed)
+def request_from_args(args: argparse.Namespace) -> dict | None:
+    """`--request`'s request, checked, or None when the flags give the settings."""
+    return None if args.request is None else load_request(args.request)
+
+
+def settings_from_args(
+    args: argparse.Namespace, request: dict | None = None
+) -> Settings:
+    """The settings the flags ask for, or what a request resolves to: a request stands
+    in for every settings flag but `--seed`."""
+    if request is not None:
+        return resolve(request, args.seed)
     defaults = Settings()
     rules = ClubRules(
         max=args.clubs_max if args.clubs_max is not None else defaults.clubs.max,
@@ -135,7 +155,6 @@ def settings_from_args(args: argparse.Namespace) -> Settings:
     )
     return Settings(
         prng_seed=args.seed,
-        par=args.par,
         sources=frozenset(comma_list(args.sources))
         if args.sources
         else defaults.sources,
@@ -147,6 +166,8 @@ def settings_from_args(args: argparse.Namespace) -> Settings:
         constraints=constraints_from_args(args),
         wind_speed_profile=args.wind_speed,
         wind_direction_profile=args.wind_direction,
+        mirror_chance=args.mirror_chance,
+        hazard_chance=args.hazard_chance,
         music=args.music,
         mercy_point=args.mercy_point,
         clubs=rules,
@@ -155,9 +176,9 @@ def settings_from_args(args: argparse.Namespace) -> Settings:
 
 def describe_rules(settings: Settings | StoredSettings) -> list[str]:
     """The course's rules, one a line: a stored seed's constraints as issued, or its draw
-    rule when its schema has none or they are the default course's."""
+    rule when its schema has none."""
     if isinstance(settings, Settings):
-        return [str(rule) for rule in settings.rules]
+        return [str(rule) for rule in settings.constraints]
     if settings.constraints is None:
         return [describe_draw_rule(settings.draw_rule)]
     return [
@@ -184,12 +205,9 @@ def summary(
     curation: CurationSnapshot | None,
 ) -> list[str]:
     course = manifest.course
-    asked = (
-        f"par {manifest.settings.par} target"
-        if manifest.settings.constraints is None
-        else "rules below"
-    )
-    lines = [f"seed {manifest.settings.prng_seed}  ({asked})"]
+    settings = manifest.settings
+    mode = settings.mode.name if isinstance(settings, Settings) else settings.mode
+    lines = [f"seed {settings.prng_seed}  ({mode})"]
     total_yards = 0
     for number, slot in enumerate(course.holes, start=1):
         entry = catalog[slot.id]
@@ -237,10 +255,11 @@ def curation_or_none(path: Path) -> CurationSnapshot | None:
 
 
 def cmd_generate(args: argparse.Namespace) -> int:
-    settings = settings_from_args(args)
+    request = request_from_args(args)
+    settings = settings_from_args(args, request)
     catalog = Catalog.load(args.catalog)
     curation = CurationSnapshot.load(args.curation)
-    manifest = generate(catalog, curation, settings)
+    manifest = generate(catalog, curation, settings, request)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(manifest.to_json(), indent=2) + "\n")
     for line in summary(manifest, catalog, curation):
@@ -250,17 +269,25 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
 
 def cmd_survey(args: argparse.Namespace) -> int:
-    settings = settings_from_args(args)
+    request = request_from_args(args)
+    if request is not None and is_weighted(request):
+        raise ManifestError(
+            "survey takes a request with nothing weighted; survey each choice alone"
+        )
+    settings = settings_from_args(args, request)
     catalog = Catalog.load(args.catalog)
     curation = CurationSnapshot.load(args.curation)
     pool = build_pool(catalog, curation, settings)
     if args.uniform:
+        if any(is_rolled(rule) for rule in settings.constraints):
+            raise ManifestError("--uniform takes a mode with no rolled par mix")
         problem = Problem(pool, course_rules(settings))
         result, dealt = uniform(problem, args.draws, args.seed or "survey")
         print(f"one random course in {dealt / args.draws:.0f} kept the rules")
     else:
-        problem = Problem(pool, course_rules(settings))
-        result = survey(problem, args.draws, args.seed or "survey", args.mix)
+        result = survey_settings(
+            pool, settings, args.draws, args.seed or "survey", args.mix
+        )
     for line in report(result, pool):
         print(line)
     return 0
@@ -356,7 +383,14 @@ def add_settings_arguments(gen: argparse.ArgumentParser) -> None:
         "--seed", help="the PRNG seed every random choice comes from (default: drawn)"
     )
     gen.add_argument(
-        "--par", type=int, choices=sorted(COUNTS, reverse=True), default=Settings().par
+        "--mode",
+        choices=MODES,
+        default="standard",
+        help="the course mode (default: %(default)s); see `golf-randomize rules`",
+    )
+    gen.add_argument(
+        "--course",
+        help="the vanilla course of --mode vanilla_course, such as nes_us or jp_uk",
     )
     gen.add_argument(
         "--sources", help=f"comma-separated source ROMs (default: {','.join(SOURCES)})"
@@ -388,6 +422,14 @@ def add_settings_arguments(gen: argparse.ArgumentParser) -> None:
         action="store_true",
         help="put no cap on the expert holes",
     )
+    for name, what in (("mirror", "mirrored"), ("hazard", "its hazards shuffled")):
+        gen.add_argument(
+            f"--{name}-chance",
+            type=int,
+            default=0,
+            metavar="PERCENT",
+            help=f"each hole's chance of being {what}, 0-100 (default: 0)",
+        )
     gen.add_argument(
         "--wind-speed",
         choices=SPEED_PROFILES,

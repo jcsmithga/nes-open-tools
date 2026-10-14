@@ -73,8 +73,10 @@ it takes no cap, and its preset sets `sources` to its course's ROM.
 
 ### The rules a request may use
 
-A seed's `constraints`, from the form or from a request a player uploads, may hold only
-the five mode rules and `expert_cap`. The rule that keeps families apart is added to
+A seed's `constraints`, from the form or from a request a player uploads, hold exactly
+one of the five mode rules and at most one `expert_cap`, and a vanilla course takes no
+cap. Settings that break this are refused when they are made, so a request is judged
+when it is submitted rather than failing as a seed. The rule that keeps families apart is added to
 every list, as now. Players combine modes, caps and the other settings; they do not
 write new shapes of course. The spike's format for that was opaque to anyone but a
 software engineer.
@@ -87,6 +89,10 @@ selector fields and numbers only they read, and the solver machinery that served
 them, are removed. So is `data/presets/`: "preset" means only the site's named
 choices, and a mode rule says in a line what a preset file said.
 
+A standard or natural par course never finishes on a par 3, which is rare on real
+courses. A par 3 course and an executive course are mostly par 3s, and a vanilla course
+plays its holes as they are, so neither takes the rule.
+
 ### Rolled rules
 
 `natural_par` and `executive` are **rolled rules**. Generation rolls each one's par mix
@@ -98,8 +104,10 @@ composes the course as it does for any list.
   keeps the layouts of par 68 to 76 with no two par 3s or par 5s in a row. The roll is
   over the mixes those layouts make, each as likely as the layouts that make it: 70
   mixes, par 72 on 20.3% of seeds and par 68 or 76 on 2.7% each, which share a slot 17%,
-  66% and 17% between the pars. The rule then stands for that mix's `par_counts` and
-  `{"rule": "no_consecutive", "pars": [3, 5]}`. The odds are computed from the rule's
+  66% and 17% between the pars. The rule then stands for that mix's `par_counts`,
+  `{"rule": "no_consecutive", "pars": [3, 5]}` and no par 3 on the 18th. Where the pars
+  go is not part of the odds: the 18th is kept off a par 3 when the course is laid out,
+  as a standard course's is, and every mix has room for it. The odds are computed from the rule's
   definition, not measured from the pool, so no change to the catalog moves them.
 - **`executive`** rolls a number of par 4s from 2 to 6, each as likely as the others,
   and stands for `par_counts` of that many par 4s, the rest par 3s and no par 5s, and
@@ -166,6 +174,10 @@ holes, and 1 in 180 transforms none.
   The words for each chance are in the strings catalog.
 - **A separate page** takes a request file a player uploads, for mystery seeds
   (ADR 0016). It is the only way to send a request the form cannot express.
+- **A par 3 course** from the form includes derived holes, the forward tees of longer
+  holes, since the par 3 course is the mode short of holes.
+- **The upload** is at most 16 KB and parsed strictly; a request that rolls settings no
+  course can be made from is refused with what was rolled, and not rolled again.
 - **Combinations that cannot be generated** are refused by generation, not by the form,
   such as a par 3 course from the NES Open holes alone. The holes that can fill a mode
   will grow with derived and community holes, and form logic would have to follow them.
@@ -201,8 +213,8 @@ holes, and 1 in 180 transforms none.
 
 - A player's request can name any mode in a line, with or without an expert cap.
 - New holes change which holes fill a mode's pars, never its mix.
-- A rolled rule beside rules that contradict its mix, such as `natural_par` with
-  `standard`, fails in generation with the error naming both.
+- Two modes in one list, such as `natural_par` with `standard`, are refused with the
+  settings, before generation.
 - Settings gain rules that are not fixed until generation, the second kind of
   randomness in settings after `music: "random"`.
 - A standard seed's expert holes spread out: fewer courses at the cap (51% at 2, not

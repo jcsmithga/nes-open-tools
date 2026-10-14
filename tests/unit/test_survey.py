@@ -7,11 +7,11 @@ from golf.randomizer.compose import Problem
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import course_rules
 from golf.randomizer.pool import build_pool
-from golf.randomizer.request import settings_from_request
+from golf.randomizer.request import resolve
 from golf.randomizer.survey import TooRareError, report, survey, uniform
 
 PAR_3 = {"include": ["derived"], "constraints": [{"rule": "par_3"}]}
-UNCAPPED = {"constraints": [{"rule": "standard", "par": 72}]}
+UNCAPPED = {"constraints": [{"rule": "standard"}]}
 
 
 @pytest.fixture(scope="module")
@@ -25,7 +25,7 @@ def curation() -> CurationSnapshot:
 
 
 def problem(request: dict, catalog, curation) -> Problem:
-    settings = settings_from_request(request)
+    settings = resolve(request)
     return Problem(build_pool(catalog, curation, settings), course_rules(settings))
 
 
@@ -63,7 +63,7 @@ def test_a_uniform_survey_keeps_only_random_courses_that_pass(catalog, curation)
 
 
 def test_a_survey_with_no_course_says_so(catalog, curation):
-    us_only = settings_from_request(PAR_3 | {"sources": ["nes_open_us"]})
+    us_only = resolve(PAR_3 | {"sources": ["nes_open_us"]})
     pool = build_pool(catalog, curation, us_only)
     result = survey(Problem(pool, course_rules(us_only)), 3)
     assert (result.draws, result.failures) == (0, 3)

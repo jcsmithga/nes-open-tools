@@ -6,7 +6,6 @@ import pytest
 
 from golf.randomizer.catalog import Catalog, HoleStore
 from golf.randomizer.curation import CurationSnapshot
-from golf.randomizer.layout import COUNTS, layouts
 from golf.randomizer.manifest import Settings
 from server.builder import BuilderUnavailableError, SeedBuilder
 from server.config import Config
@@ -60,10 +59,6 @@ def test_a_rom_that_is_not_vanilla_makes_the_builder_unavailable(
         seeds.vanilla()
 
 
-def test_warm_builds_every_layout_before_refusing_a_missing_rom(
-    catalog, curation, tmp_path
-):
-    layouts.cache_clear()
+def test_warm_refuses_a_missing_rom(catalog, curation, tmp_path):
     with pytest.raises(BuilderUnavailableError, match="cannot read"):
         builder(catalog, curation, tmp_path / "missing.nes").warm()
-    assert layouts.cache_info().currsize == len(COUNTS)

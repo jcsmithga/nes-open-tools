@@ -37,9 +37,8 @@ from .catalog import (
     CatalogError,
     HoleId,
 )
-from .layout import COUNTS
 from .music import RANDOM, TRACKS, track
-from .rules import Rule, RuleError, check_public, parse_rules
+from .rules import MODES, Rule, RuleError, check_public, parse_rules
 from .transforms import TransformError, parse_transform
 from .wind import DIRECTION_PROFILES, SPEED_PROFILES, VANILLA
 from .words import MagicWordsError, check_magic_words
@@ -54,7 +53,6 @@ SOURCES = (US_ROM, JP_ROM)
 #: the kinds of hole a seed's settings may add to its pool, which otherwise holds
 #: vanilla holes only (ADR 0023)
 INCLUDABLE = (DERIVED, COMMUNITY)
-DEFAULT_PAR = 72
 DEFAULT_MERCY_POINT = 9
 MERCY_POINTS = range(1, 256)
 HOLE_PARS = (3, 4, 5)
@@ -65,6 +63,8 @@ EXPERT_CAP = "expert_cap"
 UNIFORM = "uniform"
 DEFAULT_EXPERTS_PER_NINE = 1
 WIND_SEEDS = range(0x10000)
+#: a transform's chance on each hole, a whole-number percent (ADR 0025)
+CHANCES = range(101)
 
 
 class ManifestError(ValueError):
@@ -235,18 +235,14 @@ class ClubRules:
         )
 
 
-def _check_par(par: object) -> None:
-    if not _is_int(par) or par not in COUNTS:
-        raise ManifestError(f"par must be one of {sorted(COUNTS)}, got {par!r}")
-
-
-def standard_rules(
-    par: int, experts_per_nine: int | None = DEFAULT_EXPERTS_PER_NINE
+def mode_rules(
+    mode: str | dict = "standard",
+    experts_per_nine: int | None = DEFAULT_EXPERTS_PER_NINE,
 ) -> tuple[Rule, ...]:
-    """The rules of a standard course of `par` with at most `experts_per_nine` expert
-    holes on each nine, or with no cap when that is None."""
-    _check_par(par)
-    rules: list[dict] = [{"rule": "standard", "par": par}]
+    """The rules of a course mode, named or written out (`{"rule": "vanilla_course",
+    "course": ..}`), with at most `experts_per_nine` expert holes on each nine, or with
+    no cap when that is None."""
+    rules: list[dict] = [{"rule": mode} if isinstance(mode, str) else dict(mode)]
     if experts_per_nine is not None:
         rules.append({"rule": EXPERT_CAP, "per_nine": experts_per_nine})
     try:
@@ -255,10 +251,22 @@ def standard_rules(
         raise ManifestError(str(problem)) from None
 
 
+def standard_rules(
+    experts_per_nine: int | None = DEFAULT_EXPERTS_PER_NINE,
+) -> tuple[Rule, ...]:
+    """The rules of a standard par 72 with at most `experts_per_nine` expert holes on
+    each nine, or with no cap when that is None: the default course."""
+    return mode_rules("standard", experts_per_nine)
+
+
+def _check_chance(name: str, chance: object) -> None:
+    if not _is_int(chance) or chance not in CHANCES:
+        raise ManifestError(f"{name} must be a whole percent 0-100, got {chance!r}")
+
+
 _SLOT_KEYS = ("id", "par", "transforms", "wind_seed", "wind_direction", "wind_speed")
 _SETTINGS_KEYS = (
     "prng_seed",
-    "par",
     "sources",
     "include",
     "exclude_tags",
@@ -266,6 +274,8 @@ _SETTINGS_KEYS = (
     "constraints",
     "wind_speed_profile",
     "wind_direction_profile",
+    "mirror_chance",
+    "hazard_chance",
     "music",
     "mercy_point",
     "clubs",
@@ -277,21 +287,23 @@ class Settings:
     """What a seed is generated from. A `prng_seed` of None asks generation to draw one."""
 
     prng_seed: str | None = None
-    par: int = DEFAULT_PAR
     sources: frozenset[str] = frozenset(SOURCES)
     #: the kinds of hole added to the pool beside the vanilla ones, from `INCLUDABLE`
     include: frozenset[str] = frozenset()
     exclude_tags: frozenset[str] = frozenset()
     allow_family_repeats: bool = False
-    #: the course's rules (`golf/randomizer/rules.py`). None is the default course:
-    #: a standard one of `par` with at most `DEFAULT_EXPERTS_PER_NINE` expert holes on
-    #: each nine. A list is the whole of the rules, with nothing added but the family
-    #: rule, and `par` then says nothing.
-    constraints: tuple[Rule, ...] | None = None
+    #: the course's rules (`golf/randomizer/rules.py`): one course mode and at most one
+    #: expert cap (ADR 0025). Nothing is added to them but the family rule. The default
+    #: is a standard par 72 with at most `DEFAULT_EXPERTS_PER_NINE` expert holes a nine.
+    constraints: tuple[Rule, ...] = standard_rules()
     #: how the holes' wind speeds are chosen, one of `wind.SPEED_PROFILES`
     wind_speed_profile: str = VANILLA
     #: how the holes' wind directions are chosen, one of `wind.DIRECTION_PROFILES`
     wind_direction_profile: str = VANILLA
+    #: each hole's chance of being mirrored, and of having its hazards shuffled, as a
+    #: whole percent; each hole is rolled on its own
+    mirror_chance: int = 0
+    hazard_chance: int = 0
     #: a music slug, or "random"
     music: str = RANDOM
     #: the stroke a hole ends on with a tap-in; None leaves the patch out
@@ -308,7 +320,6 @@ class Settings:
             raise ManifestError(
                 f"prng_seed must be a non-empty string, got {self.prng_seed!r}"
             )
-        _check_par(self.par)
         if not self.sources or not self.sources <= set(SOURCES):
             raise ManifestError(
                 f"sources must be a non-empty selection of {list(SOURCES)}, got {list(self.sources)}"
@@ -323,13 +334,12 @@ class Settings:
             )
         if not isinstance(self.allow_family_repeats, bool):
             raise ManifestError("allow_family_repeats must be true or false")
-        if self.constraints is not None:
-            try:
-                rules = parse_rules(self.constraints)
-                check_public(rules)
-            except RuleError as problem:
-                raise ManifestError(f"constraints: {problem}") from None
-            object.__setattr__(self, "constraints", rules)
+        try:
+            rules = parse_rules(self.constraints)
+            check_public(rules)
+        except RuleError as problem:
+            raise ManifestError(f"constraints: {problem}") from None
+        object.__setattr__(self, "constraints", rules)
         if self.wind_speed_profile not in SPEED_PROFILES:
             raise ManifestError(
                 f"wind_speed_profile must be one of {', '.join(SPEED_PROFILES)}, "
@@ -344,39 +354,39 @@ class Settings:
             raise ManifestError(
                 f"music must be {RANDOM!r} or one of {', '.join(TRACKS)}, got {self.music!r}"
             )
+        _check_chance("mirror_chance", self.mirror_chance)
+        _check_chance("hazard_chance", self.hazard_chance)
         _check_mercy(self.mercy_point)
         if not isinstance(self.clubs, ClubRules):
             raise ManifestError(f"clubs must be ClubRules, got {self.clubs!r}")
 
     @property
-    def rules(self) -> tuple[Rule, ...]:
-        """The rules the settings ask for: their constraints, or the default course's."""
-        if self.constraints is None:
-            return standard_rules(self.par)
-        return self.constraints
+    def mode(self) -> Rule:
+        """The course mode among the rules."""
+        return next(rule for rule in self.constraints if rule.name in MODES)
 
     @property
     def experts_per_nine(self) -> int | None:
-        """The cap the rules' `expert_cap` sets, the lowest if there are several. None
-        when no rule of that name is among them."""
+        """The cap the rules' `expert_cap` sets. None when they have none."""
         caps = [
-            rule.to_json()["per_nine"] for rule in self.rules if rule.name == EXPERT_CAP
+            rule.to_json()["per_nine"]
+            for rule in self.constraints
+            if rule.name == EXPERT_CAP
         ]
         return min(caps, default=None)
 
     def to_json(self) -> dict:
         return {
             "prng_seed": self.prng_seed,
-            "par": self.par,
             "sources": [source for source in SOURCES if source in self.sources],
             "include": [kind for kind in INCLUDABLE if kind in self.include],
             "exclude_tags": sorted(self.exclude_tags),
             "allow_family_repeats": self.allow_family_repeats,
-            "constraints": None
-            if self.constraints is None
-            else [rule.to_json() for rule in self.constraints],
+            "constraints": [rule.to_json() for rule in self.constraints],
             "wind_speed_profile": self.wind_speed_profile,
             "wind_direction_profile": self.wind_direction_profile,
+            "mirror_chance": self.mirror_chance,
+            "hazard_chance": self.hazard_chance,
             "music": self.music,
             "mercy_point": self.mercy_point,
             "clubs": self.clubs.to_json(),
@@ -386,20 +396,21 @@ class Settings:
     def from_json(cls, data: object) -> "Settings":
         data = _fields(data, _SETTINGS_KEYS, "settings")
         constraints = data["constraints"]
-        if constraints is not None and not isinstance(constraints, list):
+        if not isinstance(constraints, list):
             raise ManifestError(
-                f"constraints must be null or a list of rules, got {constraints!r}"
+                f"constraints must be a list of rules, got {constraints!r}"
             )
         return cls(
             prng_seed=data["prng_seed"],
-            par=data["par"],
             sources=frozenset(_strings(data["sources"], "sources")),
             include=frozenset(_strings(data["include"], "include")),
             exclude_tags=frozenset(_strings(data["exclude_tags"], "exclude_tags")),
             allow_family_repeats=data["allow_family_repeats"],
-            constraints=None if constraints is None else tuple(constraints),
+            constraints=tuple(constraints),
             wind_speed_profile=data["wind_speed_profile"],
             wind_direction_profile=data["wind_direction_profile"],
+            mirror_chance=data["mirror_chance"],
+            hazard_chance=data["hazard_chance"],
             music=data["music"],
             mercy_point=data["mercy_point"],
             clubs=ClubRules.from_json(data["clubs"]),
@@ -572,6 +583,7 @@ _MANIFEST_KEYS = (
     "finish_abi_version",
     "catalog_version",
     "curation_stamp",
+    "request",
     "settings",
     "course",
 )
@@ -606,6 +618,9 @@ class Manifest:
     curation_stamp: str
     settings: Settings
     course: Course
+    #: the request the settings were resolved from, as submitted (ADR 0016); None for
+    #: settings given directly, such as by the CLI's flags
+    request: dict[str, Any] | None = None
 
     def __post_init__(self):
         if self.schema != SCHEMA:
@@ -618,6 +633,10 @@ class Manifest:
             raise ManifestError(
                 "a manifest's settings record the prng_seed generation used"
             )
+        if self.request is not None and not isinstance(self.request, dict):
+            raise ManifestError(
+                f"request must be null or an object, got {self.request!r}"
+            )
 
     def to_json(self) -> dict:
         return {
@@ -627,6 +646,7 @@ class Manifest:
             "finish_abi_version": self.finish_abi_version,
             "catalog_version": self.catalog_version,
             "curation_stamp": self.curation_stamp,
+            "request": self.request,
             "settings": self.settings.to_json(),
             "course": self.course.to_json(),
         }
@@ -649,6 +669,7 @@ class Manifest:
             curation_stamp=data["curation_stamp"],
             settings=Settings.from_json(data["settings"]),
             course=Course.from_json(data["course"]),
+            request=data["request"],
         )
 
 
@@ -758,7 +779,9 @@ class StoredSettings:
     """What a stored seed's page shows of the settings it was generated from."""
 
     prng_seed: str | None
-    par: int
+    #: the par of the standard course a schema 1 to 4 seed asked for; None in schema 5,
+    #: whose course mode says what it is
+    par: int | None
     sources: frozenset[str]
     include: frozenset[str] = frozenset()
     exclude_tags: frozenset[str] = frozenset()
@@ -770,6 +793,21 @@ class StoredSettings:
     constraints: tuple[dict[str, Any], ...] | None = None
     wind_speed_profile: str = VANILLA
     wind_direction_profile: str = VANILLA
+    mirror_chance: int = 0
+    hazard_chance: int = 0
+
+    @property
+    def mode(self) -> str:
+        """The name of the course mode: the constraints' rule that is not the expert
+        cap, or `standard` for a seed from before them."""
+        names = [rule["rule"] for rule in self.constraints or ()]
+        return next((name for name in names if name != EXPERT_CAP), "standard")
+
+    @property
+    def mode_rule(self) -> dict[str, Any] | None:
+        """The course mode's rule as issued, None for a seed from before constraints."""
+        rules = [r for r in self.constraints or () if r["rule"] != EXPERT_CAP]
+        return rules[0] if rules else None
 
     @classmethod
     def from_json(cls, data: object) -> "StoredSettings":
@@ -777,9 +815,15 @@ class StoredSettings:
         prng_seed = _field(data, "prng_seed", "settings")
         if prng_seed is not None and not isinstance(prng_seed, str):
             raise ManifestError(f"prng_seed must be a string, got {prng_seed!r}")
-        par = _field(data, "par", "settings")
-        if not _is_int(par):
+        par = data.get("par")
+        if par is not None and not _is_int(par):
             raise ManifestError(f"par must be an integer, got {par!r}")
+        chances = {
+            name: data.get(name, 0) for name in ("mirror_chance", "hazard_chance")
+        }
+        for name, chance in chances.items():
+            if not _is_int(chance):
+                raise ManifestError(f"{name} must be an integer, got {chance!r}")
         allow = data.get("allow_family_repeats", False)
         if not isinstance(allow, bool):
             raise ManifestError("allow_family_repeats must be true or false")
@@ -810,6 +854,7 @@ class StoredSettings:
             constraints=constraints,
             wind_speed_profile=speed,
             wind_direction_profile=direction,
+            **chances,
         )
 
 
@@ -909,6 +954,9 @@ class StoredManifest:
     curation_stamp: str
     settings: StoredSettings
     course: StoredCourse
+    #: the request the seed was resolved from, as issued; None before schema 5 or when
+    #: the settings were given directly
+    request: dict[str, Any] | None = None
 
     @classmethod
     def from_json(cls, data: object) -> "StoredManifest":
@@ -927,6 +975,7 @@ class StoredManifest:
             curation_stamp=_field(data, "curation_stamp", "manifest"),
             settings=StoredSettings.from_json(_field(data, "settings", "manifest")),
             course=StoredCourse.from_json(_field(data, "course", "manifest")),
+            request=data["request"] if isinstance(data.get("request"), dict) else None,
         )
         _check_versions(manifest)
         return manifest

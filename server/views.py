@@ -20,9 +20,11 @@ from golf.randomizer.roms import VanillaRom, vanilla_rom
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
 
 from .forms import (
+    CHANCE_CHOICES,
+    COURSE_CHOICES,
     DRAW_RULE_CHOICES,
+    MODE_CHOICES,
     MUSIC_CHOICES,
-    PARS,
     RULE_CLUBS,
     DownloadState,
     SavedSettings,
@@ -62,11 +64,16 @@ class MusicOption:
 class GenerateOptions:
     """The choices the generate form lists."""
 
-    pars: tuple[int, ...]
+    #: the mode select's values, each labeled by its own strings key in generate.html
+    modes: tuple[str, ...]
+    #: the vanilla courses, as music options name a course
+    courses: tuple[MusicOption, ...]
     sources: tuple[VanillaRom, ...]
     music: tuple[MusicOption, ...]
     #: the draw rule select's values, each labeled by its own strings key in generate.html
     draw_rules: tuple[str, ...]
+    #: the transform chance selects' values, each labeled by its own strings key
+    chances: tuple[str, ...]
     #: the wind selects' values, each named by `_wind.html`
     wind_speeds: tuple[str, ...]
     wind_directions: tuple[str, ...]
@@ -74,18 +81,20 @@ class GenerateOptions:
     clubs_max: int
 
 
+def _course_option(slug: str) -> MusicOption:
+    """A vanilla course by the slug its theme and its holes' lineages share."""
+    track = TRACKS[slug]
+    return MusicOption(slug, vanilla_rom(track.rom).title, track_course(track))
+
+
 def generate_options() -> GenerateOptions:
     return GenerateOptions(
-        pars=PARS,
+        modes=MODE_CHOICES,
+        courses=tuple(_course_option(slug) for slug in COURSE_CHOICES),
         sources=tuple(vanilla_rom(source) for source in SOURCES),
-        music=tuple(
-            MusicOption(
-                slug, vanilla_rom(TRACKS[slug].rom).title, track_course(TRACKS[slug])
-            )
-            for slug in MUSIC_CHOICES
-            if slug in TRACKS
-        ),
+        music=tuple(_course_option(slug) for slug in MUSIC_CHOICES if slug in TRACKS),
         draw_rules=tuple(DRAW_RULE_CHOICES),
+        chances=CHANCE_CHOICES,
         wind_speeds=SPEED_PROFILES,
         wind_directions=DIRECTION_PROFILES,
         club_labels=tuple(club.label for club in RULE_CLUBS),
@@ -105,6 +114,9 @@ class HoleView:
     rom_title: str | None
     course: str | None
     source_hole: int | None
+    #: whether the seed's build mirrored the hole, and shuffled its hazards
+    mirrored: bool = False
+    hazards_shuffled: bool = False
 
 
 #: every downloaded ROM's file name starts with this, so tools can recognize a randomizer ROM
@@ -214,7 +226,12 @@ class SeedView:
     total_par: int
     total_distance: int
     music: MusicOption
-    par_target: int
+    #: the par a seed from before course modes asked for; None for one with a mode
+    par_target: int | None
+    #: the course mode's name, as its rule names it, which a later release may retire
+    mode: str
+    #: a vanilla course's course, None for any other mode
+    mode_course: MusicOption | None
     sources: tuple[VanillaRom, ...]
     allow_family_repeats: bool
     #: the draw rule's name: `expert_cap` when the seed's rules cap the expert holes on a
@@ -224,6 +241,11 @@ class SeedView:
     experts_per_nine: int | None
     wind_speed_profile: str
     wind_direction_profile: str
+    #: each hole's chance of the transform, a whole percent, and how many it changed
+    mirror_chance: int
+    mirrored: int
+    hazard_chance: int
+    hazards_shuffled: int
     mercy_point: int | None
     clubs_max: int
     banned: tuple[str, ...]
@@ -233,7 +255,14 @@ class SeedView:
     download: DownloadView
 
 
-def _hole_view(hole: SeedHole, curation: CurationSnapshot) -> HoleView:
+#: what a slot's transforms start with when they mirror it, or shuffle its hazards
+MIRROR_PREFIX = "mirror@"
+HAZARDS_PREFIX = "hazards"
+
+
+def _hole_view(
+    hole: SeedHole, curation: CurationSnapshot, transforms: tuple[str, ...] = ()
+) -> HoleView:
     """A hole as the seed stored it. Its display name is the one curation gives it now."""
     rom, course = hole.source_rom, hole.source_course
     return HoleView(
@@ -248,7 +277,19 @@ def _hole_view(hole: SeedHole, curation: CurationSnapshot) -> HoleView:
         if rom is None or course is None
         else COURSE_NAMES.get((rom, course), course),
         source_hole=hole.source_hole,
+        mirrored=any(name.startswith(MIRROR_PREFIX) for name in transforms),
+        hazards_shuffled=any(name.startswith(HAZARDS_PREFIX) for name in transforms),
     )
+
+
+def _mode_course(rule: dict | None) -> MusicOption | None:
+    """A vanilla course's course, by its slug alone when this release lacks it."""
+    if rule is None or rule.get("rule") != "vanilla_course":
+        return None
+    slug = rule.get("course")
+    if not isinstance(slug, str):
+        return None
+    return _course_option(slug) if slug in TRACKS else MusicOption(slug, None, None)
 
 
 def seed_view(
@@ -261,7 +302,10 @@ def seed_view(
     manifest = row.manifest
     course = manifest.course
     settings = manifest.settings
-    holes = tuple(_hole_view(hole, curation) for hole in seed_holes)
+    holes = tuple(
+        _hole_view(hole, curation, slot.transforms)
+        for hole, slot in zip(seed_holes, course.holes, strict=True)
+    )
     theme = TRACKS.get(course.music)
     rules = course.clubs
     required = tuple(vanilla_rom(rom) for rom in row.required_roms)
@@ -300,6 +344,8 @@ def seed_view(
         if theme is None
         else MusicOption(theme.slug, vanilla_rom(theme.rom).title, track_course(theme)),
         par_target=settings.par,
+        mode=settings.mode,
+        mode_course=_mode_course(settings.mode_rule),
         sources=tuple(
             vanilla_rom(source) for source in SOURCES if source in settings.sources
         ),
@@ -308,6 +354,10 @@ def seed_view(
         experts_per_nine=settings.draw_rule.per_nine,
         wind_speed_profile=settings.wind_speed_profile,
         wind_direction_profile=settings.wind_direction_profile,
+        mirror_chance=settings.mirror_chance,
+        mirrored=sum(hole.mirrored for hole in holes),
+        hazard_chance=settings.hazard_chance,
+        hazards_shuffled=sum(hole.hazards_shuffled for hole in holes),
         mercy_point=course.mercy_point,
         clubs_max=course.clubs.max,
         banned=tuple(club.label for club in sorted(course.clubs.banned)),

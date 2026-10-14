@@ -23,7 +23,6 @@ from golf.randomizer.build import (
 from golf.randomizer.catalog import DEFAULT_INDEX, US_ROM, Catalog, HoleStore
 from golf.randomizer.curation import DEFAULT_CURATION, CurationSnapshot
 from golf.randomizer.generate import generate
-from golf.randomizer.layout import COUNTS, layouts
 from golf.randomizer.manifest import Manifest, Settings, StoredManifest
 from golf.randomizer.roms import vanilla_rom
 
@@ -89,16 +88,15 @@ class SeedBuilder:
             return self._vanilla
 
     def warm(self) -> None:
-        """Build every par's layouts and the signpost banner, both cached for later seeds.
+        """Build the signpost banner, cached for later seeds.
 
-        Raises BuilderUnavailableError, after the layouts, when the ROM is missing.
+        Raises BuilderUnavailableError when the ROM is missing.
         """
-        for par in COUNTS:
-            layouts(par)
         signpost_step(self.vanilla())
 
-    def generate(self, settings: Settings) -> Manifest:
-        return generate(self.catalog, self.curation, settings)
+    def generate(self, settings: Settings, request: dict | None = None) -> Manifest:
+        """A seed's manifest; `request` is what the settings were resolved from."""
+        return generate(self.catalog, self.curation, settings, request)
 
     def build(self, manifest: Manifest, sample: Sample | None = None) -> BuiltSeed:
         """The seed's unfinished IPS and built holes, what `insert_seed` stores.

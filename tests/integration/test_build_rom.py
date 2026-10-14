@@ -108,7 +108,7 @@ def jp_manifest(catalog, curation, vanilla_jp_courses):
     settings = Settings(
         prng_seed="build-stages-jp-1",
         music="jp_france",
-        constraints=standard_rules(72, None),
+        constraints=standard_rules(None),
     )
     return generate(catalog, curation, settings)
 
@@ -120,7 +120,7 @@ def nes_manifest(catalog, curation):
         sources=frozenset({US_ROM}),
         music="nes_us",
         mercy_point=None,
-        constraints=standard_rules(72, None),
+        constraints=standard_rules(None),
     )
     return generate(catalog, curation, settings)
 
@@ -181,7 +181,7 @@ def test_build_version_six_golden_unfinished_ips_hashes(
         "jp_france_18": hashlib.sha256(unfinished.ips).hexdigest(),
         "nes_only": hashlib.sha256(nes.ips).hexdigest(),
     } == {
-        "jp_france_18": "6f45b2a7508dee316cc7b71efe01b139c5f08a1a3d5e9cbe6f4d8c60089e9077",
+        "jp_france_18": "4bb0a92d80c28a5fc501dc685b02da79ef6408ab6ee348ab2509025d0a87cf23",
         "nes_only": "0191e20fb5595358f28bcf63ee5f38e83358ab848c7f832115745d7e15461ad1",
     }
 

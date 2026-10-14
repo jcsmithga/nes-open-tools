@@ -23,10 +23,10 @@ from golf.randomizer.catalog import (
 from golf.randomizer.compose import GenerationError, Problem, compose
 from golf.randomizer.curation import EXPERT_TAG, CurationSnapshot
 from golf.randomizer.generate import course_rules
-from golf.randomizer.layout import COUNTS, satisfies
-from golf.randomizer.manifest import Settings, standard_rules
+from golf.randomizer.manifest import Settings, mode_rules, standard_rules
 from golf.randomizer.pool import build_pool
-from golf.randomizer.request import settings_from_request
+from golf.randomizer.request import resolve
+from tests.standard_course import is_standard
 
 STANDARD = {"rule": "standard"}
 FAMILIES = {"rule": "distinct_families"}
@@ -53,7 +53,7 @@ def curation() -> CurationSnapshot:
 
 
 def problem_for(request: dict, catalog, curation) -> Problem:
-    settings = settings_from_request(request)
+    settings = resolve(request)
     return Problem(build_pool(catalog, curation, settings), course_rules(settings))
 
 
@@ -77,7 +77,7 @@ class Card:
 
     @property
     def standard(self) -> bool:
-        return satisfies(self.pars, COUNTS[72])
+        return is_standard(self.pars)
 
 
 def vanilla(course: str):
@@ -92,7 +92,7 @@ def capped(rules: list[dict], cap: int | None) -> list[dict]:
 MODES = {
     **{
         f"standard_cap_{cap}": (
-            {"constraints": capped([{"rule": "standard", "par": 72}], cap)},
+            {"constraints": capped([{"rule": "standard"}], cap)},
             Card.standard.fget,
         )
         for cap in (0, 1, 2, None)
@@ -117,7 +117,7 @@ MODES = {
 @pytest.mark.parametrize("name", sorted(MODES))
 def test_a_mode_draws_the_course_it_describes(name, catalog, curation):
     request, check = MODES[name]
-    settings = settings_from_request(request)
+    settings = resolve(request)
     pool = build_pool(catalog, curation, settings)
     problem = Problem(pool, course_rules(settings))
     family_of = {
@@ -198,16 +198,17 @@ def test_a_pin_outside_the_pool_is_named(catalog, curation):
 
 
 def test_rules_that_only_clash_together_are_named_together(catalog, curation):
-    # Mario Open's Hawaii course has more than one expert hole on a nine
-    message = explanation(
-        {
-            "constraints": [
+    # Mario Open's Hawaii course has more than one expert hole on a nine, which is why
+    # settings refuse a vanilla course with a cap
+    message = explained(
+        problem_of(
+            [
                 {"rule": "vanilla_course", "course": "jp_hawaii"},
                 {"rule": "expert_cap", "per_nine": 1},
-            ]
-        },
-        catalog,
-        curation,
+            ],
+            catalog,
+            curation,
+        )
     )
     assert "has no course that keeps these rules together" in message
     assert "vanilla_course" in message and "expert_cap" in message
@@ -337,7 +338,7 @@ def test_a_hole_with_a_twin_is_no_likelier_than_one_without():
 @pytest.mark.parametrize("name", ["standard_cap_0", "standard_cap_1", "par_3"])
 def test_a_mixed_course_keeps_every_rule(name, catalog, curation):
     request, check = MODES[name]
-    settings = settings_from_request(request)
+    settings = resolve(request)
     pool = build_pool(catalog, curation, settings)
     problem = Problem(pool, course_rules(settings))
     for seed in range(3):
@@ -356,7 +357,7 @@ def test_a_mixed_course_keeps_every_rule(name, catalog, curation):
 
 
 def test_mixing_leaves_a_course_with_one_answer_alone(catalog, curation):
-    settings = settings_from_request(MODES["vanilla_nes_uk"][0])
+    settings = resolve(MODES["vanilla_nes_uk"][0])
     problem = Problem(build_pool(catalog, curation, settings), course_rules(settings))
     found = problem.picks(random.Random(0))
     assert problem.mix(found, random.Random(0), 300) == found
@@ -395,13 +396,13 @@ def test_a_mixed_twin_is_no_likelier_than_a_hole_without_one():
 
 
 def test_only_the_family_rule_is_added_to_the_rules_settings_hold():
-    settings = settings_from_request({"constraints": [{"rule": "par_3"}]})
+    settings = resolve({"constraints": [{"rule": "par_3"}]})
     assert [rule.name for rule in course_rules(settings)] == [
         "par_3",
         "distinct_families",
     ]
     assert settings.experts_per_nine is None
-    uncapped = Settings(constraints=standard_rules(72, None))
+    uncapped = Settings(constraints=standard_rules(None))
     assert [rule.name for rule in course_rules(uncapped)] == [
         "standard",
         "distinct_families",
@@ -409,13 +410,28 @@ def test_only_the_family_rule_is_added_to_the_rules_settings_hold():
 
 
 def test_the_default_course_is_a_standard_one_with_the_default_expert_cap():
-    assert [rule.name for rule in course_rules(Settings(par=71))] == [
+    assert [rule.name for rule in course_rules(Settings())] == [
         "standard",
         "expert_cap",
         "distinct_families",
     ]
-    assert Settings(par=71).rules == standard_rules(71, 1)
+    assert Settings().constraints == standard_rules(1)
     assert Settings().experts_per_nine == 1
+
+
+def test_a_rolled_rule_is_rolled_before_the_course_is_composed():
+    settings = Settings(constraints=mode_rules("natural_par", 1))
+    with pytest.raises(ValueError, match="need a generator"):
+        course_rules(settings)
+    rules = course_rules(settings, random.Random(0))
+    assert [rule.name for rule in rules] == [
+        "par_counts",
+        "no_consecutive",
+        "count",
+        "expert_cap",
+        "distinct_families",
+    ]
+    assert rules == course_rules(settings, random.Random(0))
 
 
 # -- Proofs the search does not have to find -----------------------------------------------------

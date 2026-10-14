@@ -18,7 +18,7 @@ from golf.randomizer.catalog import JP_ROM, US_ROM, Catalog, HoleStore
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate
 from golf.randomizer.manifest import required_roms
-from golf.randomizer.request import settings_from_request
+from golf.randomizer.request import resolve
 
 ROOT = Path(__file__).resolve().parents[2]
 ROM_PATH = ROOT / "nes_open_us.nes"
@@ -65,7 +65,7 @@ def store(vanilla_courses, vanilla_jp_courses) -> HoleStore:
 @pytest.mark.parametrize("name", sorted(BUILT))
 def test_a_mode_seed_builds_and_carries_its_course(name, vanilla, catalog, store):
     request, par = BUILT[name]
-    settings = settings_from_request(request, f"rom-{name}")
+    settings = resolve(request, f"rom-{name}")
     manifest = generate(catalog, CurationSnapshot.load(), settings)
     course = manifest.course
     assert course.par == par
@@ -96,7 +96,7 @@ def test_a_vanilla_course_needs_only_its_own_rom(catalog):
         ("nes_japan", US_ROM, (US_ROM,)),
         ("jp_hawaii", JP_ROM, (US_ROM, JP_ROM)),
     ):
-        settings = settings_from_request(vanilla_course(course, rom), "roms")
+        settings = resolve(vanilla_course(course, rom), "roms")
         manifest = generate(catalog, curation, settings)
         if rom == US_ROM:
             assert manifest.course.music.startswith("nes_")

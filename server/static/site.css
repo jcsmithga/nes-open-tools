@@ -227,6 +227,22 @@ article.rom:not([data-state="stored"]) > footer {
     0 0 0 2px var(--pico-del-color);
 }
 
+/* The course select is for a vanilla course alone, and a vanilla course ignores the
+   sources and the expert cap. Without :has() every field shows, and the server ignores
+   what a vanilla course does not read. */
+#generate-form .vanilla-only {
+  display: none;
+}
+
+#generate-form:has(#generate-mode option[value="vanilla_course"]:checked)
+  .vanilla-only {
+  display: block;
+}
+
+#generate-form:has(#generate-mode option[value="vanilla_course"]:checked) .not-vanilla {
+  display: none;
+}
+
 /* Club rules: a card inside the form, set apart from the everyday settings because they
    are for special events. */
 form article.club-rules {

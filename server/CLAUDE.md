@@ -23,8 +23,9 @@ in this package.
   includes:
   - `server/routes/site.py` (`site_router`): `/`, `/rom`, `/rangefinder`, the Markdown
     pages under `/pages/`, `/favicon.ico` and `/healthz`
-  - `server/routes/seed_pages.py` (`seed_router`): `/generate` and `/h/<id>`, with its
-    manifest, its IPS download and its yardage book
+  - `server/routes/seed_pages.py` (`seed_router`): `/generate`, `/mystery` (a seed from
+    an uploaded request file, ADR 0016) and `/h/<id>`, with its manifest, its IPS
+    download and its yardage book
   - `server/routes/round_pages.py` (`round_router`): `/s/<scan>` and `/r/<id>`
   - `server/routes/account.py` (`account_router`): `/me` and `/auth/`
   - `server/routes/admin_pages.py` (`admin_router`): `/admin/` (see "Admin" below)
@@ -40,13 +41,12 @@ in this package.
   `server.routes.<module>`.
 - `server/builder.py`'s `SeedBuilder` is the only thing a route calls to generate, build or
   finish. It holds the catalog and curation the seed page also reads. The lifespan calls
-  its `warm`, which reads the server's ROM and builds what every seed shares (each par's
-  layouts, the signpost banner), so the first seed after a restart is as quick as the
-  rest; a missing ROM is logged and the site starts anyway, refusing builds. `finish`
+  its `warm`, which reads the server's ROM and builds what every seed shares (the
+  signpost banner), so the first seed after a restart is as quick as the rest; a missing ROM is logged and the site starts anyway, refusing builds. `finish`
   takes credentials for a signed-in download and none for a guest. Builds run in the threadpool (`run_in_threadpool`), never on the event
   loop.
 - Route helpers with no web types live beside the app: `server/forms.py` (the generate
-  form to `Settings`, the download form to `PlayerOptions` and ROM hashes, and a player's
+  form to a request, which the route resolves into `Settings`, the download form to `PlayerOptions` and ROM hashes, and a player's
   `SavedSettings`, with `fit` to start a seed's form from them and `to_save` for what a
   download remembers),
   `server/views.py` (what a page shows, as dataclasses, and the download file name),
@@ -304,7 +304,7 @@ strings catalog.
   Proper nouns and data are not strings: ROM titles, hole ids, magic words.
 - The catalog is the TOML files under `server/strings/`: `common.toml` for the elements on
   every page (`base.html`), and one file per template named for it - `home.toml`,
-  `rom.toml`, `generate.toml`, `seed.toml`, `me.toml`, `not_found.toml`, `server_error.toml`, `sign_in_failed.toml`,
+  `rom.toml`, `generate.toml`, `mystery.toml`, `seed.toml`, `me.toml`, `not_found.toml`, `server_error.toml`, `sign_in_failed.toml`,
   `round.toml`, `scan_rejected.toml`, `round_voided.toml`, `yardage_book.toml`, and `wind.toml` for the profile
   names `_wind.html`'s macros give both the generate form and the seed page. Every file under the
   directory is loaded and merged, subdirectories included. Entries carry their full dotted

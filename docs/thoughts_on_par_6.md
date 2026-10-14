@@ -13,7 +13,8 @@ of holes no longer matches the traditional four-par-3, ten-par-4, four-par-5 cou
 is only the first plausible way to expose that issue. Community holes, alternate tees and
 future transformations can expose it too.
 
-Code under discussion: `golf/randomizer/layout.py`, `golf/randomizer/pool.py`.
+Code under discussion: `golf/randomizer/pool.py`, and `golf/randomizer/layout.py`, since
+removed with par 70 and 71 (ADR 0025).
 Background: [randomizer.md](randomizer.md),
 [catalog.md](catalog.md), [manifest.md](manifest.md).
 

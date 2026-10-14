@@ -124,7 +124,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 | Command | Description |
 |---------|-------------|
 | `golf-patch <rom> [recipe.json] [-p ID[:key=value,...]]` | Build a ROM or IPS patch from a recipe and/or inline patch steps; `--list` shows every patch type; see `docs/patch_stack.md` |
-| `golf-randomize generate [-o manifest.json] [--seed S] [settings \| --request FILE]` | Generate a randomizer seed manifest from settings flags or a request file; see `docs/manifest.md` |
+| `golf-randomize generate [-o manifest.json] [--seed S] [settings \| --request FILE]` | Generate a randomizer seed manifest from settings flags (`--mode`, `--course`, the expert cap, the transform chances, ...) or a request file; see `docs/manifest.md` |
 | `golf-randomize survey [settings] [-n N] [--uniform] [--mix STEPS]` | Roll settings many times and report what they give: course pars, yardage, predicted strokes over par, and how often each hole appears; see `docs/generation_rewrite.md` |
 | `golf-randomize rules` | List the course rules a request's `constraints` may use |
 | `golf-randomize build <rom> <manifest.json> [-o out.nes] [--ips out.ips]` | Build a seed's ROM or IPS when this release implements the manifest's unfinished `build_version`: a finished guest ROM by default, `--unfinished` or `--credentials keys.json` for the other stages |

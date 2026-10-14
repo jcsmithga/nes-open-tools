@@ -26,8 +26,10 @@ from statistics import mean, pstdev
 
 from .catalog import REPO_ROOT, CatalogEntry, HoleId
 from .compose import GenerationError, Problem
+from .generate import course_rules
+from .manifest import Settings
 from .pool import Pool
-from .rules import HOLES, NINE
+from .rules import HOLES, NINE, Rule
 
 DEFAULT_DIFFICULTY = REPO_ROOT / "data" / "difficulty" / "holes.json"
 
@@ -107,6 +109,24 @@ def survey(problem: Problem, draws: int, seed: str = "survey", mix: int = 0) -> 
         problem.pool,
         draws,
     )
+
+
+def survey_settings(
+    pool: Pool, settings: Settings, draws: int, seed: str = "survey", mix: int = 0
+) -> Survey:
+    """`draws` courses for settings, each rolling the settings' rolled rules afresh,
+    as generation does for each seed."""
+    problems: dict[tuple[Rule, ...], Problem] = {}
+
+    def draw(number: int) -> Sequence[CatalogEntry]:
+        rules = tuple(
+            course_rules(settings, random.Random(f"par_mix\0{seed}\0{number}"))
+        )
+        if rules not in problems:
+            problems[rules] = Problem(pool, rules)
+        return problems[rules].draw(random.Random(f"{seed}\0{number}"), mix)
+
+    return run(draw, pool, draws)
 
 
 class TooRareError(GenerationError):

@@ -190,6 +190,8 @@
                   <td>
                     {% if hole.display_name %}{{ hole.display_name }}<br>{% endif %}
                     <code>{{ hole.id }}</code>
+                    {% if hole.mirrored %}<br><small data-transform="mirror">{{ t("seed.holes.mirrored") }}</small>{% endif %}
+                    {% if hole.hazards_shuffled %}<br><small data-transform="hazards">{{ t("seed.holes.hazards_shuffled") }}</small>{% endif %}
                   </td>
                   <td>
                     {% if hole.rom_title %}
@@ -229,10 +231,25 @@
                 <th scope="row">{{ t("seed.details.music") }}</th>
                 <td data-music="{{ seed.music.slug }}">{% if seed.music.course is none %}{{ seed.music.slug }}{% else %}{{ t("seed.details.music_value", course=seed.music.course, rom=seed.music.rom_title) }}{% endif %}</td>
               </tr>
-              <tr>
-                <th scope="row">{{ t("seed.details.par_target") }}</th>
-                <td>{{ seed.par_target }}</td>
-              </tr>
+              {% if seed.par_target is not none %}
+                <tr>
+                  <th scope="row">{{ t("seed.details.par_target") }}</th>
+                  <td>{{ seed.par_target }}</td>
+                </tr>
+              {% else %}
+                <tr>
+                  <th scope="row">{{ t("seed.details.mode") }}</th>
+                  <td data-mode="{{ seed.mode }}">
+                    {% if seed.mode == "standard" %}{{ t("seed.details.mode_standard") }}
+                    {% elif seed.mode == "natural_par" %}{{ t("seed.details.mode_natural_par") }}
+                    {% elif seed.mode == "executive" %}{{ t("seed.details.mode_executive") }}
+                    {% elif seed.mode == "par_3" %}{{ t("seed.details.mode_par_3") }}
+                    {% elif seed.mode == "vanilla_course" and seed.mode_course and seed.mode_course.course %}{{ t("seed.details.mode_vanilla_course", course=seed.mode_course.course, rom=seed.mode_course.rom_title) }}
+                    {% elif seed.mode == "vanilla_course" and seed.mode_course %}{{ seed.mode_course.slug }}
+              {% else %}{{ seed.mode }}{% endif %}
+                </td>
+                </tr>
+              {% endif %}
               <tr>
                 <th scope="row">{{ t("seed.details.sources") }}</th>
                 <td>{% for rom in seed.sources %}<cite>{{ rom.title }}</cite>{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
@@ -250,6 +267,24 @@
                   {% elif seed.experts_per_nine == 0 %}{{ t("seed.details.draw_rule_no_experts") }}
 {% else %}{{ t("seed.details.draw_rule_expert_cap", count=seed.experts_per_nine) }}{% endif %}
   </td>
+  </tr>
+  {% macro chance(percent, count) %}
+    {% if percent == 0 %}{{ t("seed.details.chance_p0") }}
+    {% elif percent == 25 %}{{ t("seed.details.chance_p25", holes=count) }}
+    {% elif percent == 50 %}{{ t("seed.details.chance_p50", holes=count) }}
+    {% elif percent == 75 %}{{ t("seed.details.chance_p75", holes=count) }}
+    {% elif percent == 100 %}{{ t("seed.details.chance_p100", holes=count) }}
+  {% else %}{{ t("seed.details.chance_percent", percent=percent, holes=count) }}{% endif %}
+{% endmacro %}
+<tr>
+  <th scope="row">{{ t("seed.details.mirror_chance") }}</th>
+  <td data-mirror-chance="{{ seed.mirror_chance }}"
+      data-mirrored="{{ seed.mirrored }}">{{ chance(seed.mirror_chance, seed.mirrored) }}</td>
+  </tr>
+  <tr>
+    <th scope="row">{{ t("seed.details.hazard_chance") }}</th>
+    <td data-hazard-chance="{{ seed.hazard_chance }}"
+        data-hazards-shuffled="{{ seed.hazards_shuffled }}">{{ chance(seed.hazard_chance, seed.hazards_shuffled) }}</td>
   </tr>
   <tr>
     <th scope="row">{{ t("seed.details.wind_speed") }}</th>

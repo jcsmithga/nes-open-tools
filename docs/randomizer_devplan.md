@@ -234,7 +234,8 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `GET /` | What this is, links to ROM setup and generate |
 | `GET /pages/<slug>` | A checked-in Markdown page, or a collection page with one card per entry file; enabled unlisted pages remain available by direct URL, while disabled pages answer 404. Each enabled page is registered as a route of its own, so its timings are too |
 | `GET /rom` | ROM setup, pure client-side: pick files, hash, store in IndexedDB, show verified status |
-| `GET /generate`, `POST /generate` | Settings form: par target, source ROMs, music or random, and club rules in a collapsed section of their own, open when a returned form has them set. The mercy point and tag filters take their defaults. POST redirects to the seed page |
+| `GET /generate`, `POST /generate` | Settings form: course mode (and the course, for a vanilla course), source ROMs, the expert cap, the mirror and hazard chances, wind, music or random, and club rules in a collapsed section of their own, open when a returned form has them set. The mercy point and tag filters take their defaults. POST makes a request (ADR 0016), resolves it and redirects to the seed page |
+| `GET /mystery`, `POST /mystery` | A request file a player uploads, weighted choices and sets allowed, at most 16 KB, checked and resolved like the form's (ADR 0016). POST redirects to the seed page |
 | `GET /h/<id>` | Seed page: the magic words, hole list with source, par and yards, totals, music, settings, required ROMs, recorded rounds (collapsed until the viewer has recorded one of their own), and either the download form or a withdrawn notice |
 | `GET /h/<id>.json` | The manifest |
 | `GET /h/<id>/book` | The seed's yardage book: the rangefinder for its 18 holes as built, each at the seed's pin, with its tee-shot wind. Stays up for a withdrawn seed (`docs/yardage_book.md`) |
@@ -274,7 +275,8 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
 1. **Catalog.** Done: `golf/randomizer/catalog.py` and `golf/randomizer/curation.py`, the
    index at `data/catalog/holes.json`, the curation file, and `golf-catalog-sync`, which
    adds and verifies vanilla entries without ever rewriting one. See `docs/catalog.md`.
-2. **Layout generation.** Done: `golf/randomizer/layout.py`. Distinct permutations of
+2. **Layout generation.** Done, and since replaced: `golf/randomizer/layout.py` was
+   removed with par 70 and 71 (ADR 0025). Distinct permutations of
    par counts, built a nine at a time and joined, filtered by the predicates in
    `randomizer.md`. Par 72 is four par 3s, ten par 4s and four par 5s; par 71 and 70 drop
    par 5s. Each par value splits evenly across the nines, an odd count putting its extra

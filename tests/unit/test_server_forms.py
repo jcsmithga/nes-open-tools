@@ -11,19 +11,22 @@ from golf.randomizer.manifest import (
     DEFAULT_MERCY_POINT,
     ClubRules,
     Settings,
+    mode_rules,
     standard_rules,
 )
 from golf.randomizer.roms import vanilla_rom
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
 from server.forms import (
+    CHANCE_CHOICES,
     CLUBS_BANNED,
     CLUBS_OVER_MAX,
+    COURSE_CHOICES,
     DRAW_RULE_CHOICES,
     INVALID,
     INVALID_NAME,
+    MODE_CHOICES,
     MUSIC_CHOICES,
     NO_SOURCES,
-    PARS,
     REQUIRED_BAG_BANNED,
     REQUIRED_BAG_OVER_MAX,
     ROMS_MISSING,
@@ -35,13 +38,17 @@ from server.forms import (
     check_rom_hashes,
     fit,
     player_options_from_state,
+    request_from_state,
     settings_from_state,
     to_save,
 )
 
+#: the PRNG seed the submissions here resolve with
+SEED = "form"
+
 
 def submit(**changes) -> Settings:
-    return settings_from_state(state(**changes))
+    return settings_from_state(state(**changes), SEED)
 
 
 def state(**changes) -> FormState:
@@ -59,9 +66,11 @@ def refusal(**changes) -> FormError:
 
 def test_the_default_form_submits_the_default_settings():
     settings = settings_from_state(
-        FormState.from_form(FormData([*FormState.default().to_pairs()]))
+        FormState.from_form(FormData([*FormState.default().to_pairs()])), SEED
     )
-    assert settings == Settings()
+    assert settings == Settings(prng_seed=SEED)
+    drawn = settings_from_state(FormState.default())
+    assert drawn.prng_seed and drawn == Settings(prng_seed=drawn.prng_seed)
 
 
 def test_both_vanilla_sources_are_enabled():
@@ -69,8 +78,16 @@ def test_both_vanilla_sources_are_enabled():
     assert submit(sources={US_ROM, JP_ROM}).sources == frozenset({US_ROM, JP_ROM})
 
 
-def test_the_form_lists_every_par_music_and_club_but_the_putter():
-    assert PARS == (72, 71, 70)
+def test_the_form_lists_every_mode_course_chance_music_and_club_but_the_putter():
+    assert MODE_CHOICES == (
+        "standard",
+        "natural_par",
+        "executive",
+        "par_3",
+        "vanilla_course",
+    )
+    assert len(COURSE_CHOICES) == 8
+    assert CHANCE_CHOICES == ("0", "25", "50", "75", "100")
     assert MUSIC_CHOICES[0] == "random" and len(MUSIC_CHOICES) == 9
     assert Club.PT not in RULE_CLUBS and len(RULE_CLUBS) == 15
 
@@ -78,17 +95,19 @@ def test_the_form_lists_every_par_music_and_club_but_the_putter():
 def test_the_mercy_point_is_always_the_default_whatever_is_sent():
     form = FormData([*FormState.default().to_pairs(), ("mercy_point", "3")])
     assert (
-        settings_from_state(FormState.from_form(form)).mercy_point
+        settings_from_state(FormState.from_form(form), SEED).mercy_point
         == DEFAULT_MERCY_POINT
     )
 
 
 def test_every_field_reaches_the_settings():
     settings = submit(
-        par="70",
+        mode="natural_par",
         sources={US_ROM},
         allow_family_repeats=True,
         draw_rule="experts_0",
+        mirror_chance="25",
+        hazard_chance="100",
         wind_speed="storm_passing",
         wind_direction="tailwind_out",
         music="jp_france",
@@ -97,10 +116,12 @@ def test_every_field_reaches_the_settings():
         required_bag={"3W", "5I", "PW"},
     )
     assert settings == Settings(
-        par=70,
+        prng_seed=SEED,
         sources=frozenset({US_ROM}),
         allow_family_repeats=True,
-        constraints=standard_rules(70, 0),
+        constraints=mode_rules("natural_par", 0),
+        mirror_chance=25,
+        hazard_chance=100,
         wind_speed_profile="storm_passing",
         wind_direction_profile="tailwind_out",
         music="jp_france",
@@ -114,7 +135,9 @@ def test_every_field_reaches_the_settings():
 
 def test_a_submission_round_trips_through_its_pairs():
     submitted = state(
-        par="71",
+        mode="vanilla_course",
+        course="jp_hawaii",
+        mirror_chance="50",
         sources={JP_ROM},
         allow_family_repeats=True,
         draw_rule="uniform",
@@ -126,19 +149,52 @@ def test_a_submission_round_trips_through_its_pairs():
     assert FormState.from_form(FormData([*submitted.to_pairs()])) == submitted
 
 
-def test_the_form_offers_three_expert_caps_and_starts_on_the_default():
-    assert DRAW_RULE_CHOICES == {"experts_0": 0, "experts_1": 1, "uniform": None}
+def test_the_form_offers_four_expert_caps_and_starts_on_the_default():
+    assert DRAW_RULE_CHOICES == {
+        "experts_0": 0,
+        "experts_1": 1,
+        "experts_2": 2,
+        "uniform": None,
+    }
     assert (
         DRAW_RULE_CHOICES[FormState.default().draw_rule] == Settings().experts_per_nine
     )
-    for name, cap in DRAW_RULE_CHOICES.items():
-        settings = submit(draw_rule=name, par="71")
-        assert settings.experts_per_nine == cap
-        assert settings.rules == standard_rules(71, cap)
-    assert submit(draw_rule="experts_1").constraints is None
+    for mode in ("standard", "natural_par", "executive", "par_3"):
+        for name, cap in DRAW_RULE_CHOICES.items():
+            settings = submit(draw_rule=name, mode=mode)
+            assert settings.experts_per_nine == cap
+            assert settings.constraints == mode_rules(mode, cap)
+    assert submit(draw_rule="experts_1").constraints == standard_rules(1)
 
 
-@pytest.mark.parametrize("value", ["", "experts_2", "expert_cap", "ceiling"])
+def test_a_vanilla_course_takes_its_own_rom_and_no_cap():
+    request = request_from_state(
+        state(
+            mode="vanilla_course",
+            course="jp_uk",
+            sources={US_ROM},
+            draw_rule="experts_0",
+        )
+    )
+    assert request["sources"] == [JP_ROM]
+    assert request["constraints"] == [{"rule": "vanilla_course", "course": "jp_uk"}]
+    settings = submit(mode="vanilla_course", course="nes_us", sources=set())
+    assert settings.sources == {US_ROM} and settings.experts_per_nine is None
+
+
+def test_a_par_3_course_draws_on_derived_holes_too():
+    assert request_from_state(state(mode="par_3"))["include"] == ["derived"]
+    assert "include" not in request_from_state(state())
+
+
+def test_the_form_sends_a_request_with_nothing_weighted():
+    request = request_from_state(state(mirror_chance="75", required_bag={"1W"}))
+    assert request["mirror_chance"] == 75
+    assert request["clubs"]["required_bag"] == ["1W"]
+    assert "one_of" not in str(request) and "sets" not in request
+
+
+@pytest.mark.parametrize("value", ["", "experts_3", "expert_cap", "ceiling"])
 def test_an_expert_cap_the_form_does_not_offer_is_refused(value):
     problem = refusal(draw_rule=value)
     assert (problem.reason, problem.values) == (INVALID, {"field": "draw_rule"})
@@ -165,7 +221,11 @@ def test_a_wind_profile_the_form_does_not_offer_is_refused(field, value):
 def test_unknown_fields_and_blank_space_are_ignored():
     form = FormData(
         [
-            ("par", " 72 "),
+            ("mode", " standard "),
+            ("course", "nes_us"),
+            ("mirror_chance", "0"),
+            ("hazard_chance", "0"),
+            ("par", "70"),
             ("sources", US_ROM),
             ("draw_rule", " experts_1 "),
             ("wind_speed", "vanilla"),
@@ -175,8 +235,8 @@ def test_unknown_fields_and_blank_space_are_ignored():
             ("prng_seed", "x"),
         ]
     )
-    assert settings_from_state(FormState.from_form(form)) == Settings(
-        sources=frozenset({US_ROM})
+    assert settings_from_state(FormState.from_form(form), SEED) == Settings(
+        prng_seed=SEED, sources=frozenset({US_ROM})
     )
 
 
@@ -191,8 +251,11 @@ def test_no_sources_is_refused():
 @pytest.mark.parametrize(
     "changes, field",
     [
-        ({"par": ""}, "par"),
-        ({"par": "73"}, "par"),
+        ({"mode": ""}, "mode"),
+        ({"mode": "par_6"}, "mode"),
+        ({"mode": "vanilla_course", "course": "nes_mars"}, "course"),
+        ({"mirror_chance": "30"}, "mirror_chance"),
+        ({"hazard_chance": ""}, "hazard_chance"),
         ({"sources": {US_ROM, "nes_open_jp"}}, "sources"),
         ({"music": "nes_mars"}, "music"),
         ({"music": ""}, "music"),

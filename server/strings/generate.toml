@@ -13,13 +13,41 @@ text = "Randomizer"
 note = "line under the h1; choose settings, get a seed page to share"
 text = "Roll a new seed from given settings"
 
-[generate.par.legend]
-note = "legend over the course par radio buttons"
-text = "Total Par"
+[generate.mode.label]
+note = "label over the course mode select (options follow); what shape of course to roll"
+text = "Course Mode"
 
-[generate.par.option]
-note = "one par radio button's label; {par} is 72, 71 or 70"
-text = "{par}"
+[generate.mode.standard]
+note = "plain: mode option, the default; a standard par 72: four par 3s, ten par 4s, four par 5s"
+text = "Standard (Par 72)"
+
+[generate.mode.natural_par]
+note = "plain: mode option; par rolled per seed, 68-76, mostly near 72; each par as common as on a standard course"
+text = "Natural Par (Par 68-76, mostly near 72)"
+
+[generate.mode.executive]
+note = "plain: mode option; short course of par 3s and two to six par 4s (rolled), no par 5s; par 56-60"
+text = "Executive Course (Short course, no par 5s)"
+
+[generate.mode.par_3]
+note = "plain: mode option; eighteen par 3s, par 54"
+text = "Par 3 Course (Par 54)"
+
+[generate.mode.vanilla_course]
+note = "plain: mode option; one cartridge course, holes 1-18 in order; pick which below"
+text = "Vanilla Course"
+
+[generate.mode.help]
+note = "small line under the mode select; vanilla course ignores sources and expert limit"
+text = """Mode is the general "Shape" of the course and its distribution of pars."""
+
+[generate.course.label]
+note = "label over the vanilla course select, shown only for the vanilla course mode"
+text = "Vanilla Game / Course"
+
+[generate.course.option]
+note = "plain: one vanilla course option; {course} the course name, {rom} its ROM title"
+text = "{rom}: {course}"
 
 [generate.sources.legend]
 note = "legend over the source ROM checkboxes (ROM titles beside them); holes come from the checked ROMs; at least one"
@@ -45,6 +73,10 @@ text = "Zero (None allowed)"
 note = "plain: draw rule option, the default; at most one expert hole on each nine"
 text = "One per Nine"
 
+[generate.draw_rule.experts_2]
+note = "plain: draw rule option; at most two expert holes on each nine"
+text = "Two per Nine"
+
 [generate.draw_rule.uniform]
 note = "plain: draw rule option; no limit, every hole equally likely, expert holes included"
 text = "No limit"
@@ -55,6 +87,38 @@ text = """
 An "Expert Hole" is any hole from Mario Open that's been determined to play harder relative to par
 than any hole from NES Open.  There are around 20 such holes.
 """
+
+[generate.mirror_chance.label]
+note = "label over the select for each hole's chance of being mirrored (flipped left to right); rolled per hole"
+text = "Each hole mirrored:"
+
+[generate.hazard_chance.label]
+note = "label over the select for each hole's chance of its bunkers and water being reshuffled; rolled per hole"
+text = "Each hole hazards shuffled:"
+
+[generate.chance.p0]
+note = "plain: transform chance option, the default; 0%, no hole changed"
+text = "Off"
+
+[generate.chance.p25]
+note = "plain: transform chance option; 25% each hole, on its own; usually 2-8 holes, can be none"
+text = "Unlikely"
+
+[generate.chance.p50]
+note = "plain: transform chance option; 50% each hole, on its own; usually 6-12 holes"
+text = "Coin flip"
+
+[generate.chance.p75]
+note = "plain: transform chance option; 75% each hole, on its own; usually 10-16 holes, can be all"
+text = "Likely"
+
+[generate.chance.p100]
+note = "plain: transform chance option; every hole"
+text = "Always"
+
+[generate.chance.help]
+note = "small line under the two transform selects; each hole rolled on its own, so a count isn't promised; the seed page shows which holes changed"
+text = "Each hole in the course will be rolled for all transforms, so no specific count is guaranteed."
 
 [generate.wind_speed.label]
 note = "label over the wind speed select; how strong the wind is across the round (profile names follow)"
@@ -107,6 +171,10 @@ the checked clubs, as well as a putter.  You will not have access to any
 unchecked clubs.  The limit is 14 clubs, plus the putter.
 """
 
+[generate.mystery_link]
+note = "link under the form to the mystery seed page, which rolls a seed from an uploaded request file"
+text = "mystery"
+
 [generate.submit]
 note = "form submit button; generates the seed and goes to its page"
 text = "Randomize"
@@ -135,7 +203,7 @@ Received an error on form submission.  A refresh might fix it.  If not, ask for 
 mention: <code>generate.error.invalid {field}</code>"""
 
 [generate.error.pool]
-note = "the chosen sources can't fill a course with this par; try more sources or allowing repeats"
+note = "the chosen sources can't fill a course of this mode (e.g. a par 3 course from NES Open alone, or a vanilla course with its ROM unchecked); try more sources or allowing repeats"
 text = """
 Unable to fill out the course with these sources and this Total Par.  Add more sources or
 allow multiple holes in the same family."""

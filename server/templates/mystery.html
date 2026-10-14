@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ t_plain("mystery.page_title") }}{% endblock %}
+{% block content %}
+  <hgroup>
+    <h1>{{ t("mystery.heading") }}</h1>
+    <p>{{ t("mystery.tagline") }}</p>
+  </hgroup>
+
+  {% if error %}
+    <article class="form-error" role="alert">
+      {% if error == "no_file" %}{{ t("mystery.error.no_file") }}
+      {% elif error == "too_large" %}{{ t("mystery.error.too_large", max_kb=max_kb) }}
+      {% elif error == "not_json" %}{{ t("mystery.error.not_json") }}
+      {% elif error == "bad_request" %}{{ t("mystery.error.bad_request", problem=error_values.problem) }}
+      {% elif error == "pool" %}{{ t("mystery.error.pool", rolled=error_values.rolled, problem=error_values.problem) }}
+      {% elif error == "rate_limited" %}{{ t("mystery.error.rate_limited") }}
+  {% else %}{{ t("mystery.error.unavailable") }}{% endif %}
+    </article>
+  {% endif %}
+
+  <p>{{ t("mystery.lead") }}</p>
+
+  <form method="post"
+        action="/mystery"
+        enctype="multipart/form-data"
+        id="mystery-form">
+    <label for="mystery-request">{{ t("mystery.file_label") }}</label>
+    <input type="file"
+           id="mystery-request"
+           name="request"
+           accept=".json,application/json"
+           aria-describedby="mystery-request-help"
+           required>
+    <small id="mystery-request-help">{{ t("mystery.file_help", max_kb=max_kb) }}</small>
+    <button type="submit">{{ t("mystery.submit") }}</button>
+  </form>
+{% endblock %}
