@@ -3,8 +3,11 @@
 import re
 from html import unescape
 
+import pytest
 from fastapi.testclient import TestClient
 
+from golf.randomizer.catalog import JP_ROM
+from golf.randomizer.roms import vanilla_rom
 from server.app import create_app
 from server.config import Config
 from server.static_files import LOGO_SIZE
@@ -14,7 +17,9 @@ from tests.unit.server_app.helpers import (
     dev_client,
     entered_seed,
     generate_seed,
+    legacy_seed,
     scan_path,
+    seed_form,
 )
 
 BASE_URL = "http://127.0.0.1:8000"
@@ -24,7 +29,12 @@ CARD_TEXT = {
     "site.card_name": "name",
     "site.card_description": "site",
     "seed.card.title": "{words}",
-    "seed.card.description": "{par}|{yards}",
+    "seed.card.description": "{par}|{yards}|{mode}",
+    "seed.card.mode_standard": "standard",
+    "seed.card.mode_natural_par": "natural_par",
+    "seed.card.mode_executive": "executive",
+    "seed.card.mode_par_3": "par_3",
+    "seed.card.mode_vanilla_course": '{rom}|"{course}"',
     "round.card.title": "{words}",
     "round.card.player_one": "one|{name}",
     "round.card.player_two": "two|{name}",
@@ -98,7 +108,34 @@ def test_a_seeds_card_names_its_words_par_and_length(fake_builder):
     )
     assert tags["url"] == f"{BASE_URL}/h/{seed_id}"
     assert tags["title"] == " ".join(course["magic_words"])
-    assert tags["description"] == f"{par}|{yards}"
+    assert tags["description"] == f"{par}|{yards}|standard"
+
+
+@pytest.mark.parametrize("mode", ["standard", "natural_par", "executive", "par_3"])
+def test_a_seeds_card_names_its_mode(fake_builder, mode):
+    with dev_client(fake_builder, strings=card_strings()) as test_client:
+        seed_id = generate_seed(test_client, seed_form(mode=mode))
+        tags = card(test_client.get(f"/h/{seed_id}").text)
+    assert tags["description"].endswith(f"|{mode}")
+
+
+def test_a_vanilla_seeds_card_names_its_course_and_rom(fake_builder):
+    with dev_client(fake_builder, strings=card_strings()) as test_client:
+        seed_id = generate_seed(
+            test_client, seed_form(mode="vanilla_course", course="jp_australia")
+        )
+        tags = card(test_client.get(f"/h/{seed_id}").text)
+    rom = vanilla_rom(JP_ROM).title
+    # the card's quotes reach the tag escaped once, not twice
+    assert tags["description"].endswith(f'|{rom}|"Australia"')
+
+
+def test_a_seed_from_before_modes_names_no_mode(fake_builder):
+    """Its par may be 70 or 71, which `standard` would misname."""
+    with dev_client(fake_builder, strings=card_strings()) as test_client:
+        seed_id = legacy_seed(test_client)
+        tags = card(test_client.get(f"/h/{seed_id}").text)
+    assert tags["description"].endswith("|")
 
 
 def test_a_seeds_card_stays_the_same_once_rounds_are_recorded(fake_builder):

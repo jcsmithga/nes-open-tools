@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from golf.qr.payload import URL_PREFIX, HoleRecord, RoundPayload
 from golf.randomizer.catalog import US_ROM
-from golf.randomizer.manifest import Manifest
+from golf.randomizer.manifest import Manifest, Settings, standard_rules
 from golf.randomizer.roms import VANILLA_ROMS
 from server.app import create_app
 from server.builder import BuiltSeed, SeedBuilder
@@ -14,6 +14,7 @@ from server.config import Config
 from server.forms import FormState
 from server.strings import Entry, Strings
 from tests.app_state import app_state
+from tests.stored_seeds import store_seed
 from tests.synthetic_holes import built_holes
 
 IPS = b"PATCH\x00\x00\x10\x00\x01\xeaEOF"
@@ -179,3 +180,11 @@ def summary_values(article: str) -> dict[str, list[str]]:
     ):
         values.setdefault(field, []).append(text)
     return values
+
+
+def legacy_seed(client) -> str:
+    """A seed stored as the randomizer 1.0 site stored them: schema 1, finish ABI 1,
+    drawn uniformly with the wind its seeds deal."""
+    state = app_state(client)
+    manifest = state.builder.generate(Settings(constraints=standard_rules(None)))
+    return store_seed(state.db, manifest, schema=1, catalog=state.builder.catalog)

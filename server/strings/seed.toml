@@ -17,11 +17,33 @@ note = "plain: title of the seed page's link preview card; {words} the seed's th
 text = "Seed: {words}"
 
 [seed.card.description]
-note = "plain: body of the seed page's link preview card; what following the link gets a player; {par} the course's par, {yards} its length in yards"
+note = "plain: body of the seed page's link preview card; what following the link gets a player; {par} the course's par, {yards} its length in yards, {mode} the course mode's name (a seed.card.mode_* string; empty for a seed from before course modes, which named a Total Par instead)"
 text = """
 Par: {par}
 Distance: {yards}
 """
+
+# The course mode's name on the seed page's card, which the description shows as {mode}.
+
+[seed.card.mode_standard]
+note = "plain: {mode} in the card's description; a standard par 72"
+text = "Standard"
+
+[seed.card.mode_natural_par]
+note = "plain: {mode} in the card's description; par rolled per seed, 68-76"
+text = "Natural Par"
+
+[seed.card.mode_executive]
+note = "plain: {mode} in the card's description; par 3s and two to six par 4s"
+text = "Executive Course"
+
+[seed.card.mode_par_3]
+note = "plain: {mode} in the card's description; eighteen par 3s"
+text = "Par 3 Course"
+
+[seed.card.mode_vanilla_course]
+note = "plain: {mode} in the card's description; one cartridge course as it is; {course} its name, {rom} its ROM title"
+text = "Vanilla: {rom} \"{course}\""
 
 # Download form. The downloaded file's name is data, not a string (server/views.py).
 

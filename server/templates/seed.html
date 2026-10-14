@@ -14,7 +14,22 @@
 {% block title %}{{ t_plain("seed.page_title", words=seed.magic_words|join(" ")) }}{% endblock %}
 {# the course and never its rounds: scores are a spoiler, and a chat keeps a card long after #}
 {% block card_title %}{{ t_plain("seed.card.title", words=seed.magic_words|join(" ")) }}{% endblock %}
-{% block card_description %}{{ t_plain("seed.card.description", par=seed.total_par, yards=seed.total_distance) }}{% endblock %}
+{# a seed from before course modes named a Total Par, which the card's {par} already
+   shows. Plain assignments, not a captured block: a capture is escaped once there and
+   again in the tag. #}
+{% block card_description %}
+  {%- set mode = seed.mode -%}
+  {%- if seed.par_target is not none -%}{%- set mode = "" -%}
+  {%- elif seed.mode == "standard" -%}{%- set mode = t_plain("seed.card.mode_standard") -%}
+  {%- elif seed.mode == "natural_par" -%}{%- set mode = t_plain("seed.card.mode_natural_par") -%}
+  {%- elif seed.mode == "executive" -%}{%- set mode = t_plain("seed.card.mode_executive") -%}
+  {%- elif seed.mode == "par_3" -%}{%- set mode = t_plain("seed.card.mode_par_3") -%}
+  {%- elif seed.mode == "vanilla_course" and seed.mode_course and seed.mode_course.course -%}
+    {%- set mode = t_plain("seed.card.mode_vanilla_course", course=seed.mode_course.course, rom=seed.mode_course.rom_title) -%}
+  {%- elif seed.mode == "vanilla_course" and seed.mode_course -%}{%- set mode = seed.mode_course.slug -%}
+  {%- endif -%}
+  {{- t_plain("seed.card.description", par=seed.total_par, yards=seed.total_distance, mode=mode) -}}
+{% endblock %}
 {% block content %}
   <hgroup>
     <h1 class="magic-words">{{ seed.magic_words|join(" ") }}</h1>

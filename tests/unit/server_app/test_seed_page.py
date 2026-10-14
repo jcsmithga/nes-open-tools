@@ -6,11 +6,10 @@ import re
 import pytest
 
 from golf.randomizer.catalog import US_ROM, HoleStore
-from golf.randomizer.manifest import Manifest, Settings, standard_rules
+from golf.randomizer.manifest import Manifest
 from golf.randomizer.roms import vanilla_rom
 from server.forms import FormState
 from tests.app_state import app_state
-from tests.stored_seeds import store_seed
 from tests.unit.server_app.helpers import (
     UNWRITTEN,
     US_ONLY,
@@ -20,6 +19,7 @@ from tests.unit.server_app.helpers import (
     download_article,
     entered_seed,
     generate_seed,
+    legacy_seed,
     post_download,
     scan_path,
     seed_form,
@@ -368,14 +368,6 @@ def test_the_seed_page_marks_each_hole_against_par(fake_builder):
         '<td class="num strokes under-par"><span class="score-mark circle score-depth-0"><span class="score-digit">4</span></span></td>'
     ) == pars.count(5)
     assert rounds.count('<td class="num strokes">4</td>') == pars.count(4)
-
-
-def legacy_seed(client) -> str:
-    """A seed stored as the randomizer 1.0 site stored them: schema 1, finish ABI 1,
-    drawn uniformly with the wind its seeds deal."""
-    state = app_state(client)
-    manifest = state.builder.generate(Settings(constraints=standard_rules(None)))
-    return store_seed(state.db, manifest, schema=1, catalog=state.builder.catalog)
 
 
 def settings_tag(article: str) -> str:
