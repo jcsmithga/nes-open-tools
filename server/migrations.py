@@ -257,4 +257,31 @@ MIGRATIONS: list[str] = [
     ALTER TABLE seed_holes ADD COLUMN source_course TEXT;
     ALTER TABLE seed_holes ADD COLUMN source_hole INTEGER;
     """,
+    # 8: hosted ROMs, a seed's ROM a host builds for the players who claim its two slots
+    # (docs/planning/hosted_roms.md). `options` is the hosted `SavedSettings` JSON, NULL
+    # until the host saves them; `downloaded_at` is set by a download and cleared by a
+    # release.
+    """
+    CREATE TABLE hosted_roms (
+        id INTEGER PRIMARY KEY,
+        public_id TEXT NOT NULL UNIQUE CHECK (length(public_id) = 10),
+        seed_id TEXT NOT NULL REFERENCES seeds (id),
+        host_id INTEGER NOT NULL REFERENCES users (id),
+        token TEXT NOT NULL UNIQUE,
+        options TEXT CHECK (options IS NULL OR json_valid(options)),
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        downloaded_at TEXT
+    );
+    CREATE INDEX hosted_roms_by_host ON hosted_roms (host_id);
+
+    CREATE TABLE hosted_rom_slots (
+        hosted_rom_id INTEGER NOT NULL REFERENCES hosted_roms (id),
+        slot INTEGER NOT NULL CHECK (slot IN (0, 1)),
+        user_id INTEGER REFERENCES users (id),
+        claimed_at TEXT,
+        CHECK ((user_id IS NULL) = (claimed_at IS NULL)),
+        PRIMARY KEY (hosted_rom_id, slot)
+    );
+    """,
 ]

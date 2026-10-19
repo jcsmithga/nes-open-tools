@@ -130,7 +130,7 @@ scan, behind the scan rate limit. Ordinary ROMs are unchanged.
   options as any download's does.
 - **Hosted file names tell pairs apart.** A hosted ROM downloads as
   `<NAME>_<public_id>_<download_stem>.nes`, e.g.
-  `ALICE_7fK2pQ_notgr_par72_4np03ChsZL.nes`: the player 1 name of the hosted options
+  `ALICE_7fK2pQx9Lm_notgr_par72_4np03ChsZL.nes`: the player 1 name of the hosted options
   (A-Z, `.` and space, spaces as `_`), the hosted ROM's public ID, then the seed's usual
   name. The parts that differ between pairs come first, so they survive an Everdrive
   N8's file list cutting long names short; the N8's bottom bar shows the whole name of the
@@ -255,7 +255,7 @@ Each item is about one pull request and ends with tests passing.
    positions; for `submit_scan`, a position 1 payload under `key_slot1` (round slot 1, as
    today), under `key_slot0` (round slot 0), a position 0 payload under `key_slot1`
    (refused, as today), and a position 1 own round arriving after a position 0 round on
-   the same entry (refused by the first-submission rule). An integration test finishing a
+   the same entry (answered with the first, which the first-submission rule keeps). An integration test finishing a
    ROM with two players and checking each position's credential bytes are in it. Update
    the module docstrings of `server/submissions.py`, `server/rounds.py` and
    `server/entries.py`: round slot is whose round it is, read from the column and never
@@ -265,11 +265,13 @@ Each item is about one pull request and ends with tests passing.
    on a full hosted ROM (refused), releasing slot 0 with slot 1 held (the next claim takes
    slot 0), a download setting `downloaded_at` and a release clearing it, two hosted ROMs
    of one seed kept apart, `hosted_roms_for_host` listing only its host's, expiry, a
-   withdrawn seed, and that a token is absent from every `repr`.
+   withdrawn seed, the audit rows for creating, releasing and downloading, and that a
+   token is absent from every `repr`.
 3. **Host pages.** `Config.host_users` and `is_host`; `server/routes/host_pages.py` with
    `require_host`; `server/templates/host/index.html` and `hosted.html` with their
    English written directly; `hosted_download_stem`; the QR SVG function (with a test
-   decoding its output through `golf/qr/decode.py` or `zxing-cpp`); the audit actions;
+   decoding its output through `golf/qr/decode.py` or `zxing-cpp`); the admin
+   audit log's labels for the hosting actions and its link to a hosted ROM;
    and the download. Tests in `tests/unit/test_server_host.py`: `GOLF_HOST_USERS` parsed
    and its `dev:` rule enforced; a signed-out user and a signed-in non-host get 404 on
    every host route; a host who is not an admin gets 404 on `/admin`; an admin is a host;

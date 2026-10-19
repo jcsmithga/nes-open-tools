@@ -1,7 +1,10 @@
 """Rounds: the only code that writes `rounds`, `round_holes` and `voided_rounds`.
 
 A round is a scan that `server/submissions.py` accepted: its payload (which carries every
-hole), recorded against (entry, slot), one round per pair. A protocol version 2 payload also
+hole), recorded against (entry, slot), one round per pair. The slot says whose round it is:
+0 the entry owner's own, 1 a teammate's on the owner's ROM. It is the key that verified the
+payload, not the payload's position byte, which a hosted ROM's player 2 sets to 1 for an own
+round; code reads the slot from the column, never from the payload. A protocol version 2 payload also
 carries fairways hit and penalty strokes; a version 1 round has neither, which is stored as
 NULL rather than as a miss or a zero. Each round is drawn a
 `public_id` when it is recorded, the base62 id its `/r/<id>` permalink names it by

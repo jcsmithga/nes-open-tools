@@ -18,6 +18,10 @@ UNFLAG = "unflag"
 VOID = "void"
 RESTORE = "restore"
 WITHDRAW = "withdraw"
+#: a host's actions on a hosted ROM (`server/hosting.py`); a host need not be an admin
+HOST = "host"
+RELEASE = "release"
+HOSTED_DOWNLOAD = "hosted_download"
 
 #: target types, and what target_id holds for each
 #: a seed's URL id
@@ -25,6 +29,8 @@ SEED = "seed"
 #: a round's public id, which a void and a restore carry, so a round's history is one list
 #: whether it is recorded or voided
 ROUND = "round"
+#: a hosted ROM's public id
+HOSTED_ROM = "hosted_rom"
 
 
 def record(

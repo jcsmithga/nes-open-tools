@@ -187,19 +187,25 @@ def player_id_bytes(player_id: int) -> bytes:
     return player_id.to_bytes(payload.PLAYER_ID_LEN, "big")
 
 
+def credentials_for_slots(
+    qr_seed_id: int, slot0: tuple[int, bytes], slot1: tuple[int, bytes]
+) -> QrCredentials:
+    """Credentials naming a (player ID, MAC key) pair for each ROM slot."""
+    try:
+        return QrCredentials(
+            seed_id=seed_id_bytes(qr_seed_id),
+            player_ids=(player_id_bytes(slot0[0]), player_id_bytes(slot1[0])),
+            keys=(slot0[1], slot1[1]),
+        )
+    except ValueError as problem:
+        raise BuildError(str(problem)) from None
+
+
 def credentials_for(
     qr_seed_id: int, player_id: int, keys: tuple[bytes, bytes]
 ) -> QrCredentials:
     """A signed-in player's credentials: their player ID in both slots, one key per slot."""
-    player = player_id_bytes(player_id)
-    try:
-        return QrCredentials(
-            seed_id=seed_id_bytes(qr_seed_id),
-            player_ids=(player, player),
-            keys=keys,
-        )
-    except ValueError as problem:
-        raise BuildError(str(problem)) from None
+    return credentials_for_slots(qr_seed_id, (player_id, keys[0]), (player_id, keys[1]))
 
 
 # -- Unfinished -----------------------------------------------------------------------------

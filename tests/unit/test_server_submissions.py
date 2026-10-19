@@ -184,10 +184,45 @@ def test_player_two_records_against_the_same_entry_under_its_own_key(db, alice):
     assert len(round_rows(db)) == 2
 
 
-def test_a_slot_signed_with_the_other_slots_key_is_not_recognized(db, alice):
+def test_player_one_signed_with_the_teammate_key_is_not_recognized(db, alice):
     with pytest.raises(ScanError) as rejected:
-        submit_scan(db, alice.scan(slot=1, key=alice.entry.keys[0]))
+        submit_scan(db, alice.scan(slot=0, key=alice.entry.keys[1]))
     assert rejected.value.reason == UNRECOGNIZED
+
+
+def test_player_two_signed_with_the_owners_key_is_the_owners_own_round(db, alice):
+    """A hosted ROM's player 2 signs with the claimant's slot 0 key: their own round."""
+    result = submit_scan(db, alice.scan(slot=1, key=alice.entry.keys[0]))
+    assert result.new
+    assert result.round.slot == 0
+    [row] = round_rows(db)
+    assert row["slot"] == 0
+    assert RoundPayload.from_bytes(row["payload"])[0].player_slot == 1
+
+
+def test_an_own_round_from_player_two_after_one_from_player_one_keeps_the_first(
+    db, alice
+):
+    """A player's own ROM and a hosted one both aim at round slot 0; the first stays."""
+    first = submit_scan(db, alice.scan(slot=0))
+    hosted = submit_scan(
+        db,
+        alice.scan(slot=1, key=alice.entry.keys[0], holes=(HoleRecord(5, 2),) * 18),
+    )
+    assert not hosted.new
+    assert hosted.round == first.round
+    assert len(round_rows(db)) == 1
+
+
+def test_a_teammate_round_and_an_own_round_from_player_two_are_both_recorded(db, alice):
+    teammate = submit_scan(db, alice.scan(slot=1))
+    own = submit_scan(
+        db,
+        alice.scan(slot=1, key=alice.entry.keys[0], holes=(HoleRecord(5, 2),) * 18),
+    )
+    assert (teammate.round.slot, own.round.slot) == (1, 0)
+    assert own.new
+    assert len(round_rows(db)) == 2
 
 
 @pytest.mark.parametrize(

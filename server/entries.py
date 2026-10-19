@@ -2,9 +2,10 @@
 
 An entry is the record that a signed-in player has entered a seed. A signed-in download
 creates it, or updates its choices when it exists and has no recorded round; once a round is
-recorded, downloads leave the entry as it is. Its two MAC keys, one per ROM slot, are drawn
-when it is created and never change, so every ROM a player downloads for a seed submits
-under the same keys. The name and clubs are the new-save defaults of the latest download
+recorded, downloads leave the entry as it is. Its two MAC keys are drawn when it is created
+and never change, so every ROM made for a player on a seed submits under the same keys. The
+slot 0 key signs the player's own rounds and the slot 1 key a teammate's on their ROM
+(`server/submissions.py`). The name and clubs are the new-save defaults of the latest download
 before the first round, not a record of the bag a round was played with. See
 docs/randomizer_devplan.md, "Data model".
 """

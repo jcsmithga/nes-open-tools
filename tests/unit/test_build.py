@@ -33,6 +33,7 @@ from golf.randomizer.build import (
     build_unfinished,
     clubs_from_labels,
     credentials_for,
+    credentials_for_slots,
     finish,
     finishing_steps,
     music_step,
@@ -300,6 +301,24 @@ class TestCredentials:
     def test_rejects_bad_keys(self):
         with pytest.raises(BuildError, match="key"):
             credentials_for(1, 1, (b"short", KEYS[1]))
+
+    def test_each_slot_carries_its_own_player_and_key(self):
+        credentials = credentials_for_slots(7, (0x0A, KEYS[0]), (0x0B, KEYS[1]))
+        assert credentials.seed_id == (7).to_bytes(8, "big")
+        assert credentials.player_ids == (
+            (0x0A).to_bytes(4, "big"),
+            (0x0B).to_bytes(4, "big"),
+        )
+        assert credentials.keys == KEYS
+
+    def test_one_player_in_both_slots_is_their_own_download(self):
+        assert credentials_for_slots(
+            7, (0x0A, KEYS[0]), (0x0A, KEYS[1])
+        ) == credentials_for(7, 0x0A, KEYS)
+
+    def test_rejects_a_bad_player_in_either_slot(self):
+        with pytest.raises(BuildError, match="player_id"):
+            credentials_for_slots(1, (1, KEYS[0]), (0, KEYS[1]))
 
 
 class TestMusicStep:

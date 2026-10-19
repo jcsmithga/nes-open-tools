@@ -4,13 +4,22 @@ A scan of a finished ROM's scorecard QR code carries the round's payload
 (`golf/qr/payload.py`): 39 bytes in protocol version 2, which adds fairways hit and penalty
 strokes, or 36 in version 1, which ROMs built before it still send and which is accepted for
 good. `submit_scan` resolves it to the entry it belongs to: the seed ID
-names the seed, the player ID the user, the pair their entry, and the payload's slot the
-MAC key. A payload that verifies is recorded as the round for (entry, slot), and the first
-one recorded stays: a later scan for the same entry and slot that also verifies, identical
-or not, stores nothing and answers with the round already recorded. A voided round's
-payload is refused. Both ROM slots carry the downloader's player ID, so a player 2 round
-(slot 1) counts toward the same entry as slot 0. See docs/randomizer_devplan.md, "Data
-model", and docs/scorecard_qr.md, "Server contract".
+names the seed, the player ID the user, and the pair their entry.
+
+The key that verifies the MAC names the round slot: whose round it is on the entry. Slot 0
+is the entry owner's own round, slot 1 a teammate's who played player 2 on the owner's ROM.
+A ROM a player downloads carries their player ID in both positions, their slot 0 key in
+position 0 and their slot 1 key in position 1. A hosted ROM carries each claimant's slot 0
+key in whichever position they hold, so a position 1 payload verifying under the slot 0 key
+is the owner's own round (docs/planning/hosted_roms.md). The payload's position byte
+(`player_slot`) is only the controller the round was played from: what a round is to its
+entry is the `rounds.slot` column, never the payload.
+
+A payload that verifies is recorded as the round for (entry, round slot), and the first one
+recorded stays: a later scan for the same entry and round slot that also verifies,
+identical or not, stores nothing and answers with the round already recorded. A voided
+round's payload is refused. See docs/randomizer_devplan.md, "Data model", and
+docs/scorecard_qr.md, "Server contract".
 
 A rejected scan is stored nowhere. It logs its exact cause, which the page never shows.
 """
@@ -143,15 +152,33 @@ def submit_scan(db: Database, text: str, now: str | None = None) -> ScanResult:
             raise _rejected(
                 UNRECOGNIZED, _missing_entry_cause(conn, qr_seed_id, player_id), **ids
             )
-        key = bytes(entry["key_slot0"] if slot == 0 else entry["key_slot1"])
-        if not payload.verify(data, key):
+        round_slot = _round_slot(
+            data, slot, bytes(entry["key_slot0"]), bytes(entry["key_slot1"])
+        )
+        if round_slot is None:
             raise _rejected(UNRECOGNIZED, "MAC does not verify", **ids)
         if is_voided(conn, data):
             raise _rejected(UNRECOGNIZED, "voided round", **ids)
 
-        recorded = round_in_slot(conn, entry["id"], slot)
+        recorded = round_in_slot(conn, entry["id"], round_slot)
         if recorded is not None:
             return ScanResult(recorded, new=False)
         return ScanResult(
-            record_round(conn, entry["id"], slot, data, received_at), new=True
+            record_round(conn, entry["id"], round_slot, data, received_at), new=True
         )
+
+
+def _round_slot(data: bytes, position: int, key0: bytes, key1: bytes) -> int | None:
+    """The entry's round slot a payload played from `position` records into, or None.
+
+    A position 0 payload verifies under the slot 0 key only. A position 1 payload under
+    the slot 1 key is a teammate's round, and under the slot 0 key the owner's own round
+    from a hosted ROM's player 2.
+    """
+    if position == 0:
+        return 0 if payload.verify(data, key0) else None
+    if payload.verify(data, key1):
+        return 1
+    if payload.verify(data, key0):
+        return 0
+    return None
