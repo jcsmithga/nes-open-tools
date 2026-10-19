@@ -206,14 +206,15 @@ One migration, appended to `server/migrations.py`:
 
 `server/hosting.py` is the only code that writes them and the only place tokens are drawn:
 `create_hosted_rom`, `load_hosted_rom`, `load_by_token`, `claim_slot`, `release_slot`,
-`save_hosted_options`, `mark_downloaded`, and `hosted_roms_for_host` for `/host`. Tokens
+`save_hosted_options`, `mark_downloaded`, and `hosted_roms_for_host` and `recent_seeds` for
+`/host`. Tokens
 never go in a log or a `repr`.
 
 ## Routes
 
 | Route | Who | What |
 |---|---|---|
-| `GET /host` | host | A form taking a seed's link or ID, and the host's hosted ROMs, newest first: seed, claimants, expiry (expired ones marked) |
+| `GET /host` | host | A form taking a seed's link or ID; the site's 10 newest seeds that are not withdrawn, whoever generated them, each with a Host button; and the host's hosted ROMs, newest first: seed, claimants, status |
 | `POST /host` | host | Create a hosted ROM for the seed the form names; redirect to it. An unknown or withdrawn seed goes back to `/host` saying so |
 | `GET /host/<public_id>` | its host, or an admin | The hosting page: the club-rule warning when it applies, each slot's claimant and a release button, the claim QR code and link while a slot is free and no download has followed the last release, a reload link, player 1's name, the file name, the download button (once a slot is claimed), and Host this seed again |
 | `POST /host/<public_id>/slots/<slot>/release` | its host, or an admin | Release a slot |
@@ -233,8 +234,8 @@ cookie.
 
 ## Running it at the event
 
-1. The host rolls or finds the seed, copies its link, opens `/host` from a bookmark,
-   pastes the link and presses Host.
+1. The host rolls or finds the seed, opens `/host` from a bookmark, and presses Host
+   beside it in the recent seeds, or pastes its link.
 2. Each player scans the QR code, signs in with Discord if they are not already, and
    confirms. Players who care who is player 1 scan in that order, the host reloading
    between them.

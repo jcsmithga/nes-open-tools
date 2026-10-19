@@ -115,6 +115,11 @@ localhost.
   `GOLF_ADMIN_USERS` lists (`dev:<name>` under the bypass), checked on every request.
   Anyone else gets the not-found page, and nothing links to them. Admin actions are POSTs,
   which a cross-site form cannot make signed in under the SameSite=lax cookie.
+- The host pages under `/host` admit the users `GOLF_HOST_USERS` lists and every admin, in
+  the same way. A host builds ROMs for players at an in-person event and manages only
+  their own hosted ROMs; an admin, any (ADR 0026, `docs/planning/hosted_roms.md`).
+- A claim page, `/claim/<token>`, shows anyone the hosted ROM its token names; claiming a
+  slot of it needs a signed-in player.
 
 Generation is rate limited, since it is the one request a stranger can use to make the
 server do work and store bytes. A token bucket in process memory on `POST /generate`,
@@ -142,9 +147,11 @@ cannot submit.
 | `seeds` | A 10-character base62 id for URLs and the same value as an integer, `qr_seed_id`, both unique; manifest JSON, generator, unfinished-build, finish-ABI and catalog versions, curation stamp, the immutable unfinished IPS blob, the vanilla ROMs a download needs (`required_roms`, a JSON list), nullable creator, created_at and nullable withdrawn_at |
 | `seed_holes` | seed, position 1-18, catalog hole id, transforms, par, wind seed, pin index, wind direction anchor, wind speed anchor; `data_hash`, the `hole_data` row holding the hole as built; and what the seed page shows of the hole, kept from the catalog when the seed was made: distance, author, and for a vanilla hole its source ROM, course and hole number (NULL for any other kind). The manifest columns are denormalization for SQL stats, which a migration can always backfill; the rest is what the seed was, which only its build and the catalog of the day could give (ADR 0024) |
 | `hole_data` | A hole as a seed's build made it: its content hash, and the zlib-compressed canonical JSON the hash is taken over. Written once, with the first seed that holds it, and shared by any other (ADR 0021, ADR 0024) |
-| `entries` | One per (seed, user), unique. The player's choices at their latest download (name, clubs), one MAC key per slot, created_at, updated_at |
+| `entries` | One per (seed, user), unique. The player's choices at their latest download (name, clubs), two MAC keys (`key_slot0` signs the player's own rounds, `key_slot1` a teammate's on their ROM), created_at, updated_at |
 | `download_settings` | One per user: the player's saved download settings as a JSON `SavedSettings` record, and updated_at. Written by a signed-in download under the saving rule and by `/me`; deleted by "forget my settings" (`docs/planning/download_settings.md`) |
-| `rounds` | A scan the server accepted: a unique `public_id`, the base62 id of its `/r/<id>` permalink; entry, slot, raw payload (36 bytes for QR protocol version 1, 39 for version 2), total strokes, total putts, penalty strokes (NULL for a version 1 round, which did not record them), received_at, flagged, with an admin-only flag note. Unique on (entry, slot), which is the first-submission rule |
+| `hosted_roms` | A seed's ROM a host builds for the players who claim it, one per pair: a base62 `public_id`, seed, host, the claim token (unique), the hosted options as a JSON `SavedSettings` record (player 1's name, NULL until saved), created_at, expires_at (12 hours on), downloaded_at (set by a download, cleared by a release) |
+| `hosted_rom_slots` | Two per hosted ROM, slot 0 (player 1) and 1 (player 2): the claimant's `users.id` and claimed_at, both NULL while free |
+| `rounds` | A scan the server accepted: a unique `public_id`, the base62 id of its `/r/<id>` permalink; entry, slot (whose round it is: 0 the entry owner's own, 1 a teammate's, by the key that verified it), raw payload (36 bytes for QR protocol version 1, 39 for version 2), total strokes, total putts, penalty strokes (NULL for a version 1 round, which did not record them), received_at, flagged, with an admin-only flag note. Unique on (entry, slot), which is the first-submission rule |
 | `round_holes` | round, position, strokes, putts, and whether the tee shot found the fairway: the ROM's bit, or a hole in one on a par 4 or longer (NULL for a version 1 round). Joins to `seed_holes` on (seed, position) |
 | `voided_rounds` | A round an admin voided: its `public_id`, entry, slot, the payload (unique, and holding every hole, so no hole rows), received_at, its flag and note, voided_at, an admin-only note. A scan of a voided payload is refused; restoring moves it back while its slot is empty |
 | `timings` | One row per request: created_at, request ID (indexed for lookup from `X-Request-Id`), the matched route template, method, status, total milliseconds, an outcome naming what a status cannot tell apart, and a JSON detail holding the phases inside the request. Written in batches by `server/timings.py`, kept 30 days |
@@ -171,11 +178,15 @@ filling a freed slot draws its own. It is the one id the site names a round by, 
 row id stays internal, since a void and restore changes it and SQLite can hand it to a
 later round.
 
-The player ID is the user's, written to both ROM slots. The payload's slot flag tells the
-two apart, so a slot 1 round is recorded against the same entry as the teammate's
-round. Keys are per (entry, slot) so a leaked key is good for one seed only, and they
-never appear in a manifest. Resolving a scan is: seed ID to seed, player ID to user, the
-entry for that pair, the key for that slot.
+A ROM a player downloads carries their player ID in both positions, `key_slot0` in
+position 0 and `key_slot1` in position 1, so a player 2 round on it is recorded against
+the same entry, as a teammate's. A hosted ROM carries each claimant's ID with their own
+`key_slot0`, in whichever position they hold (ADR 0026). A round's slot is the key that
+verified it, not the payload's position byte: a position 1 payload is tried under
+`key_slot1`, then `key_slot0`, so slot 0 is always the entry owner's own round. Keys are
+per (entry, slot) so a leaked key is good for one seed only, and they never appear in a
+manifest. Resolving a scan is: seed ID to seed, player ID to user, the entry for that
+pair, the key that verifies.
 
 #### The audit log
 
@@ -250,6 +261,11 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `GET /admin/...` | Counts, seeds, rounds (flagged filter), users, voided rounds, admin activity, and each seed, round and user. Admins only |
 | `POST /admin/rounds/<id>/flag`, `.../unflag`, `.../void`, `.../restore` | Flag with a note, clear the flag, void with a note, restore into an empty slot. `<id>` is the round's `public_id` |
 | `POST /admin/seeds/<id>/withdraw`, `.../restore` | Refuse or restore downloads without changing the seed's manifest, unfinished IPS, entries or rounds; withdrawal takes an admin-only note |
+| `GET /host`, `POST /host` | A host's hosted ROMs, the site's recent seeds each with a Host button, and a box taking a seed's link or id; POST creates a hosted ROM and redirects to it. Hosts and admins only |
+| `GET /host/<id>` | A hosted ROM: the club-rule warning, its claimants with release buttons, the claim QR code while a slot is free and no download has followed the last release, player 1's name, the download, and Host this seed again |
+| `POST /host/<id>/name`, `.../slots/<slot>/release` | Save player 1's name; free a slot and show the claim code again |
+| `POST /host/<id>/patch.ips` | ROM hashes in; upserts each claimant's entry and finishes with their credentials; the IPS out. Saves no settings and sets no cookie |
+| `GET /claim/<token>`, `POST /claim/<token>` | A player's claim page: sign in, confirm, and the slot they hold, or why none can be claimed. POST claims the lowest free slot and redirects back. Uncached, with no referrer |
 | `GET /favicon.ico` | The site's icon, for a browser or crawler that asks without reading a page's `<link>` |
 | `GET /healthz`, `HEAD /healthz` | For the reverse proxy and the uptime monitor, which checks with HEAD |
 
@@ -264,7 +280,7 @@ the file names in `golf/randomizer/roms.py` (`nes_open_us.nes`, `mario_open_jp.n
 base; the QR URL prefix is assembled into the port and fixed before the first public seed
 ships), the Discord client id and secret `GOLF_DISCORD_CLIENT_ID` and
 `GOLF_DISCORD_CLIENT_SECRET`, the session secret `GOLF_SESSION_SECRET`, the admin users
-`GOLF_ADMIN_USERS`, the development login bypass `GOLF_DEV_LOGIN`, the log level
+`GOLF_ADMIN_USERS`, the host users `GOLF_HOST_USERS`, the development login bypass `GOLF_DEV_LOGIN`, the log level
 `GOLF_LOG_LEVEL`, and `GOLF_MYSTERY_SEEDS`, which turns on the mystery seed page.
 
 ## Development plan
@@ -449,11 +465,14 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
 16. **Polish.** The guest menu marker once its wording is settled, difficulty filters,
     generating seeds with hole transforms (`docs/hole_transforms.md`) and the transforms
     column, hole thumbnails, multi-course generation.
-    - **Player 2's account.** Both ROM slots carry the downloader's `player_id`, so a
-      player 2 round counts toward the downloader's entry. Crediting it to a second
-      account is undecided; candidates are a share code shown on `/me` that the teammate
-      gives the downloader, and an invite link the teammate opens signed in to join the
-      entry.
+    - **Player 2's account.** A ROM a player downloads carries their `player_id` in both
+      positions, so a player 2 round counts as a teammate's on the downloader's entry.
+      Hosted ROMs (ADR 0026) credit each claimant's own round to their own entry, and are
+      the model for invites: a route open to every signed-in user that creates a hosted
+      ROM with slot 0 pre-claimed by its creator, who shares the claim link with their
+      teammate. Per-slot bags, each claimant choosing their own, are the follow-up: a
+      second default bag table that `InitializeSram` copies to `Player2ClubBag`, and a
+      finish ABI bump.
     - **Entry bag is the bag played.** A seed with club rules has no CHOOSE CLUBS, so a
       save keeps the bag it was created with. SRAM magic derived from the player's
       choices, and keys that change when the choices do, would make an entry's bag the

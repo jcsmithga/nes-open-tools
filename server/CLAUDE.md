@@ -29,6 +29,9 @@ in this package.
   - `server/routes/round_pages.py` (`round_router`): `/s/<scan>` and `/r/<id>`
   - `server/routes/account.py` (`account_router`): `/me` and `/auth/`
   - `server/routes/admin_pages.py` (`admin_router`): `/admin/` (see "Admin" below)
+  - `server/routes/host_pages.py` (`host_router`): `/host/` (see "Hosting" below)
+  - `server/routes/claim_pages.py` (`claim_router`): `/claim/<token>`, where a player
+    claims a slot of a hosted ROM
   - `server/routes/common.py`: what more than one of them needs - `outcome`, `not_found`,
     `json_refusal` and the download cookie
 
@@ -140,6 +143,11 @@ in this package.
   `record` takes the caller's connection, so an action and its log row commit together. A
   new admin action adds its name there and records a row; nothing needs a migration, and no
   table carries a "who did this" column of its own.
+- `server/hosting.py` is the only code that writes `hosted_roms` and `hosted_rom_slots`,
+  and the only place claim tokens are drawn. `HostedRom.token` stays out of `repr`, and
+  tokens never go in a log. Creating, releasing and downloading log themselves through
+  `server/audit.py` under the host's `users.id`, who need not be an admin; claims are kept
+  on the slot instead.
 - `server/submissions.py` is the only place a scan is decoded and verified. It writes
   nothing itself: an accepted scan becomes a round through `server/rounds.py`, and a
   rejected one is stored nowhere. Its rejection reasons deliberately do not say which lookup
@@ -174,6 +182,21 @@ in this package.
   same stored IPS.
 - Templates live in `server/templates/admin/`, extend `base.html`, and share the macros in
   `server/templates/admin/_admin.html`.
+
+## Hosting
+
+- The `/host` pages admit the signed-in users `Config.host_users` (`GOLF_HOST_USERS`) lists
+  and every admin (`Config.is_host`), behind `require_host`, a 404 for anyone else. A host
+  who is not an admin gets a 404 on `/admin`. A hosted ROM's routes answer 404 to a host
+  who did not create it, unless they are an admin. No page links to `/host`.
+- A host builds a seed's ROM for the players who claim it from their phones
+  (`docs/planning/hosted_roms.md`, ADR 0026). The hosted download writes each claimant
+  with their own `key_slot0` (`credentials_for_slots`), upserts their entries, and never
+  saves settings or sets the download cookie. Its options are player 1's name, saved on
+  the hosted ROM, and the defaults fitted to the seed.
+- Templates live in `server/templates/host/` and, like the admin pages', hold their English
+  directly (see "Player-facing text"). The claim page, `claim.html`, is a player's page
+  and takes its strings from `claim.toml`.
 
 ## Pages
 
@@ -262,7 +285,9 @@ in this package.
   retries a mismatched file with the catalog ROM's iNES header (`golf/randomizer/roms.py`)
   and stores the result when that matches.
 - A downloaded ROM is named `notgr_par<par>_<id>.nes` by `download_stem` in
-  `server/views.py`, and reaches the script as a data attribute. A file name is data, never
+  `server/views.py`, and a hosted one `<NAME>_<hosted id>_notgr_par<par>_<id>.nes` by
+  `hosted_download_stem`, its parts that differ between pairs first; either reaches the
+  script as a data attribute. A file name is data, never
   a strings entry.
 
 ## Logging
@@ -288,9 +313,11 @@ in this package.
 A human composes every English word a player sees, and Claude
 writes none of it, not even as a draft to be rewritten.
 
-The admin pages are the one exception: only admins see them, so their English is written in
-`server/templates/admin/` directly, and they call no `t()`. A string an admin action puts on
-a public page, such as the flagged marker, is still a catalog key.
+The admin and host pages are the one exception: only admins and hosts see them, so their
+English is written in `server/templates/admin/` and `server/templates/host/` directly, and
+they call no `t()`. A string an admin action puts on a public page, such as the flagged
+marker, is still a catalog key. The hosting page embeds `download.js`'s catalog strings
+(`DOWNLOAD_SCRIPT_STRINGS`) for the script's status messages, as the seed page does.
 
 The checked-in Markdown pages under `server/content/pages/` are the other exception: their
 frontmatter titles and bodies are human-authored editorial content, not interface strings.
@@ -305,7 +332,7 @@ strings catalog.
 - The catalog is the TOML files under `server/strings/`: `common.toml` for the elements on
   every page (`base.html`), and one file per template named for it - `home.toml`,
   `rom.toml`, `generate.toml`, `mystery.toml`, `seed.toml`, `me.toml`, `not_found.toml`, `server_error.toml`, `sign_in_failed.toml`,
-  `round.toml`, `scan_rejected.toml`, `round_voided.toml`, `yardage_book.toml`, and `wind.toml` for the profile
+  `round.toml`, `scan_rejected.toml`, `round_voided.toml`, `yardage_book.toml`, `claim.toml`, and `wind.toml` for the profile
   names `_wind.html`'s macros give both the generate form and the seed page. Every file under the
   directory is loaded and merged, subdirectories included. Entries carry their full dotted
   key (`[home.about]`), so a file name is organization only and a key still greps to its
@@ -328,7 +355,7 @@ strings catalog.
   can find them. Script strings may hold inline HTML like any other: `t()` escapes the values it inserts and
   returns HTML, which the script sets with `innerHTML`.
 - `tests/unit/test_server_strings.py` checks that every key a template or script uses is
-  in the catalog, that every entry is used, and that the admin templates use none.
+  in the catalog, that every entry is used, and that the admin and host templates use none.
 - `golf-site-strings` (`tools/site_strings.py`) lists the entries whose text is still empty,
   by file; `--notes` adds what each has to say.
 - `golf-site --reload` restarts on changes to the catalog, since the app loads it once.
@@ -381,6 +408,7 @@ directly.
   page, the download and `/me`
 - `test_rounds.py`: `server/routes/round_pages.py`
 - `test_account.py`: `server/routes/account.py`
+- `test_claim.py`: `server/routes/claim_pages.py`
 - `conftest.py`: the fixtures they share (`client`, `unwritten_client`, `fake_builder`)
 - `helpers.py`: what more than one of them needs, and `tests/unit/test_server_admin.py`
   too - `FakeBuilder`, `UNWRITTEN`, `app_client`, `dev_client`, `generate_seed`,
@@ -414,7 +442,9 @@ until then. `tests/unit/test_server_timings.py` winds the sink's `now` by hand t
 `test_server_ratelimit.py` winds the rate limiter's `clock`.
 
 Admin tests (`tests/unit/test_server_admin.py`) build the app with `dev_login=True` and
-`admin_users={"dev:admin"}`, and sign in as `admin`.
+`admin_users={"dev:admin"}`, and sign in as `admin`. Host tests
+(`tests/unit/test_server_host.py`) add `host_users={"dev:host", "dev:other"}` and sign in
+as `host`.
 
 A test that checks *which* refusal notice a page shows names it by string key and builds the
 app with `strings=UNWRITTEN`, a catalog with nothing written, in which every string renders

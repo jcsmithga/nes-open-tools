@@ -654,9 +654,9 @@ top of what was written.
 ## Server contract
 
 - `GET /s/<52 chars>` (protocol version 2) or `GET /s/<48 chars>` (version 1) decodes the
-  payload, recomputes the MAC with the key stored for
-  the entry that (seed, player) resolves to and the payload's slot, and records the round
-  (`server/submissions.py`, which hands it to `server/rounds.py`). It answers 303 to the
+  payload, recomputes the MAC with the keys stored for
+  the entry that (seed, player) resolves to, and records the round in the slot the key
+  that verifies names (`server/submissions.py`, which hands it to `server/rounds.py`). It answers 303 to the
   round's own permalink, `/r/<id>`, which is where the round is shown and what a player
   shares. A rejection has no round to point at, so it renders at `/s/` itself, and nothing
   of it is stored.
@@ -674,9 +674,12 @@ top of what was written.
   unrecognized until an admin restores it.
 - Every rejection logs its exact cause (which check or lookup failed) with the decoded ids
   at WARNING, while the page stays as vague as above.
-- Two players on one cart are treated as teammates. Both slots carry the downloader's
-  player ID, and a slot 1 submission is recorded against the same entry as slot 0, under
-  the slot 1 key.
+- A round's slot says whose round it is, by key, not the payload's player slot. A
+  player 1 payload verifies under the entry's slot 0 key only. A player 2 payload under
+  the slot 1 key is a teammate's round: a downloaded ROM carries the downloader's player
+  ID in both positions, so it is recorded against the downloader's entry, in slot 1.
+  Under the slot 0 key it is the entry owner's own round, recorded in slot 0: a hosted ROM
+  carries each claimant's slot 0 key in whichever position they hold (ADR 0026).
 
 The MAC's purpose is to stop a player submitting a scorecard *as someone else*, which a
 per-(seed, player) key does. It is not a defense against a player forging their own
