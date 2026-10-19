@@ -138,6 +138,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 | `golf-site-screenshot [pages] [-o dir] [--viewports ...] [--schemes ...] [--rom ID=PATH] [--generate] [--login NAME] [--expand]` | Render site pages to PNG in headless Chromium at desktop and phone widths, light and dark, and with `--generate` the seed page the generate form lands on, with `--rom` loading the ROMs first so its download form is ready, with `--login` signed in as a development user, and with `--expand` again with collapsed sections open; needs `uv run playwright install chromium` |
 | `golf-site-new-page TITLE [--entry PAGE] [--slug SLUG] [--dir DIR]` | Create a Markdown page stub under `server/content/pages/` with the frontmatter defaults written out, or with `--entry` an entry of the collection page `PAGE`, dated today; `--slug` overrides the file name derived from the title |
 | `golf-site-strings [--notes] [--dir DIR]` | List the site's unwritten strings (entries in `server/strings/` with empty text), grouped by file, with `--notes` printing what each one has to say |
+| `golf-best-ball CSV` | Pair players from a seed's scores CSV (the admin seed page's download) at a prompt, then print each pair's best-ball scorecard and a leaderboard |
 
 ### Reverse-engineering research
 

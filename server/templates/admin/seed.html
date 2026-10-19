@@ -86,6 +86,8 @@
 
   <section>
     <h2>Rounds</h2>
+    <p><a href="/admin/seeds/{{ seed.id }}/scores.csv"
+   download>Download scores (CSV)</a></p>
     {% if detail.rounds %}{{ admin.rounds_table(detail.rounds, show_seed=false) }}{% else %}<p>No rounds.</p>{% endif %}
   </section>
 

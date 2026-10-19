@@ -365,6 +365,83 @@ class SeedDetail:
     history: list[AdminAction]
 
 
+@dataclass(frozen=True)
+class ScoreRow:
+    public_id: str
+    user_name: str
+    username: str
+    slot: int
+    received_at: str
+    flagged: bool
+    strokes: tuple[int, ...]
+    total_putts: int
+
+
+@dataclass(frozen=True)
+class SeedScores:
+    """Every recorded round on a seed, hole by hole, for the admin's CSV export."""
+
+    pars: tuple[int, ...]
+    rounds: list[ScoreRow]
+
+
+def seed_scores(db: Database, seed_id: str) -> SeedScores | None:
+    """The seed's pars and its recorded rounds, earliest first; None for a missing seed.
+
+    Voided rounds are not recorded rounds, so they are left out.
+    """
+    with db.transaction() as conn:
+        pars = tuple(
+            row["par"]
+            for row in conn.execute(
+                "SELECT par FROM seed_holes WHERE seed_id = ? ORDER BY position",
+                (seed_id,),
+            )
+        )
+        if not pars:
+            return None
+        rows = conn.execute(
+            f"""
+            SELECT rounds.id, rounds.public_id, {_USER_NAME} AS user_name, users.username,
+                   rounds.slot, rounds.received_at, rounds.flagged, rounds.total_putts
+            FROM rounds
+            JOIN entries ON entries.id = rounds.entry_id
+            JOIN users ON users.id = entries.user_id
+            WHERE entries.seed_id = ?
+            ORDER BY rounds.received_at, rounds.id
+            """,
+            (seed_id,),
+        ).fetchall()
+        strokes: dict[int, list[int]] = {row["id"]: [] for row in rows}
+        for hole in conn.execute(
+            """
+            SELECT round_holes.round_id, round_holes.strokes FROM round_holes
+            JOIN rounds ON rounds.id = round_holes.round_id
+            JOIN entries ON entries.id = rounds.entry_id
+            WHERE entries.seed_id = ?
+            ORDER BY round_holes.round_id, round_holes.position
+            """,
+            (seed_id,),
+        ):
+            strokes[hole["round_id"]].append(hole["strokes"])
+    return SeedScores(
+        pars=pars,
+        rounds=[
+            ScoreRow(
+                public_id=row["public_id"],
+                user_name=row["user_name"],
+                username=row["username"],
+                slot=row["slot"],
+                received_at=row["received_at"],
+                flagged=bool(row["flagged"]),
+                strokes=tuple(strokes[row["id"]]),
+                total_putts=row["total_putts"],
+            )
+            for row in rows
+        ],
+    )
+
+
 def seed_detail(db: Database, seed_id: str, catalog: Catalog) -> SeedDetail | None:
     seed = load_seed(db, seed_id)
     if seed is None:

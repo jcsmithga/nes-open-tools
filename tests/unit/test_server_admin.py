@@ -1,5 +1,7 @@
 """The admin pages: who they admit, what they list, and flag, void and restore actions."""
 
+import csv
+import io
 import re
 
 import pytest
@@ -488,3 +490,76 @@ def test_the_metrics_page_counts_the_outcomes_a_status_cannot_tell_apart(fake_bu
         page = client.get("/admin/metrics").text
     assert "<td>ok</td>" in page
     assert "<code>/generate</code>" in page
+
+
+# -- Scores CSV -----------------------------------------------------------------------------
+
+
+def scores(client: TestClient, seed_id: str) -> list[list[str]]:
+    response = client.get(f"/admin/seeds/{seed_id}/scores.csv")
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/csv")
+    assert response.headers["content-disposition"] == (
+        f'attachment; filename="scores_{seed_id}.csv"'
+    )
+    return list(csv.reader(io.StringIO(response.text)))
+
+
+def test_the_scores_csv_has_par_then_each_recorded_round(fake_builder):
+    with admin_client(fake_builder, strings=UNWRITTEN) as client:
+        seed_id = entered_seed(client, "alice", "bob")
+        client.get(scan_path(client, seed_id, "alice", strokes=5))
+        client.get(scan_path(client, seed_id, "bob", strokes=3, putts=1))
+        client.get(scan_path(client, seed_id, "bob", slot=1, strokes=6))
+        sign_in(client, "admin")
+        assert (
+            f'href="/admin/seeds/{seed_id}/scores.csv"'
+            in client.get(f"/admin/seeds/{seed_id}").text
+        )
+        header, par, *rounds = scores(client, seed_id)
+        with app_state(client).db.transaction() as conn:
+            pars = [
+                row["par"]
+                for row in conn.execute(
+                    "SELECT par FROM seed_holes WHERE seed_id = ? ORDER BY position",
+                    (seed_id,),
+                )
+            ]
+    assert header == (
+        ["round", "player", "username", "kind", "received_at", "flagged"]
+        + [str(number) for number in range(1, 19)]
+        + ["out", "in", "total", "putts"]
+    )
+    assert par[0] == "par"
+    assert [int(value) for value in par[6:24]] == pars
+    assert [int(value) for value in par[24:27]] == [
+        sum(pars[:9]),
+        sum(pars[9:]),
+        sum(pars),
+    ]
+    assert [(row[1], row[3]) for row in rounds] == [
+        ("alice", "own"),
+        ("bob", "own"),
+        ("bob", "teammate"),
+    ]
+    alice, bob, _teammate = rounds
+    assert alice[6:24] == ["5"] * 18
+    assert alice[24:] == ["45", "45", "90", "36"]
+    assert bob[24:] == ["27", "27", "54", "18"]
+    assert all(re.fullmatch(r"[0-9A-Za-z]{10}", row[0]) for row in rounds)
+
+
+def test_a_voided_round_is_not_in_the_scores_csv(fake_builder):
+    with admin_client(fake_builder, strings=UNWRITTEN) as client:
+        seed_id, round_id = played_seed(client)
+        post(client, f"/admin/rounds/{round_id}/void", note="")
+        _header, _par, *rounds = scores(client, seed_id)
+    assert rounds == []
+
+
+def test_the_scores_csv_is_for_admins_only(fake_builder):
+    with admin_client(fake_builder, strings=UNWRITTEN) as client:
+        seed_id, _round_id = played_seed(client)
+        assert client.get("/admin/seeds/0000000000/scores.csv").status_code == 404
+        sign_in(client, "alice")
+        assert client.get(f"/admin/seeds/{seed_id}/scores.csv").status_code == 404

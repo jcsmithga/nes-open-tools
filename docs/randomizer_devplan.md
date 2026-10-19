@@ -260,6 +260,7 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `POST /me/download-settings/forget` | Deletes the account's saved settings, expires this browser's cookie and redirects back with `?result=`. Signed out, 404 |
 | `GET /admin/...` | Counts, seeds, rounds (flagged filter), users, voided rounds, admin activity, and each seed, round and user. Admins only |
 | `POST /admin/rounds/<id>/flag`, `.../unflag`, `.../void`, `.../restore` | Flag with a note, clear the flag, void with a note, restore into an empty slot. `<id>` is the round's `public_id` |
+| `GET /admin/seeds/<id>/scores.csv` | Every recorded round on the seed as CSV: a par row, then one row per round with its hole scores, for working out team formats such as best ball in a spreadsheet. Computes nothing and stores nothing |
 | `POST /admin/seeds/<id>/withdraw`, `.../restore` | Refuse or restore downloads without changing the seed's manifest, unfinished IPS, entries or rounds; withdrawal takes an admin-only note |
 | `GET /host`, `POST /host` | A host's hosted ROMs, the site's recent seeds each with a Host button, and a box taking a seed's link or id; POST creates a hosted ROM and redirects to it. Hosts and admins only |
 | `GET /host/<id>` | A hosted ROM: the club-rule warning, its claimants with release buttons, the claim QR code while a slot is free and no download has followed the last release, player 1's name, the download, and Host this seed again |

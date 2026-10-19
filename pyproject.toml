@@ -61,6 +61,7 @@ golf-site = "tools.site:main"
 golf-site-screenshot = "tools.site_screenshot:main"
 golf-site-strings = "tools.site_strings:main"
 golf-site-new-page = "tools.new_page:main"
+golf-best-ball = "tools.best_ball:main"
 
 # Reverse-engineering research
 golf-rom-peek = "tools.research.rom_peek:main"

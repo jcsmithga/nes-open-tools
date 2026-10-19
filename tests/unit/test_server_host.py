@@ -234,6 +234,12 @@ def test_a_download_hides_the_code_until_a_release(client, hosted):
     page = client.get(f"/host/{hosted}").text
     assert "data-claim-code" not in page
     assert "data-code-hidden" in page
+    hidden = page[
+        page.index("data-code-hidden") : page.index(
+            "</p>", page.index("data-code-hidden")
+        )
+    ]
+    assert "Host this seed again" in hidden
     assert 'data-status="downloaded"' in client.get("/host").text
     response = post(client, f"/host/{hosted}/slots/1/release")
     assert response.headers["location"] == f"/host/{hosted}?result=released"

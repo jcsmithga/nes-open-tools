@@ -121,7 +121,11 @@ scan, behind the scan rate limit. Ordinary ROMs are unchanged.
   clears it. The hosting page shows the QR code only while a slot is free and
   `downloaded_at` is NULL, so a ROM already on a cartridge does not quietly fall behind a
   later claim; releasing a slot, even a free one, shows the code again. The claim link
-  itself keeps working, and each download builds from the slots as they are then.
+  itself keeps working, and each download builds from the slots as they are then. After
+  a download the page points the host to Host this seed again rather than a release: a
+  new hosted ROM has a new id, so its file name differs from the ROM already downloaded,
+  which a release and a second download would repeat. Releases are for fixing claims
+  before a download.
 - **Hosting never changes anyone's saved settings.** Unlike `seed_patch`, the hosted
   download saves nothing to the host's or a claimant's account and sets no download
   cookie, and the hosting page neither reads nor writes saved settings. The host sets

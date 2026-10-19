@@ -7,22 +7,27 @@ is SameSite=lax, so a cross-site POST arrives signed out and is not found. See
 docs/randomizer_devplan.md, "Users and access".
 """
 
+import csv
+import io
+from collections.abc import Sequence
 from typing import Annotated
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from ..admin import (
     METRICS_DAYS,
     TREND_DAYS,
+    SeedScores,
     actions_page,
     counts,
     metrics_view,
     round_detail,
     rounds_page,
     seed_detail,
+    seed_scores,
     seeds_page,
     user_detail,
     users_page,
@@ -65,6 +70,48 @@ Note = Annotated[str, Form()]
 
 def _redirect(path: str, result: str) -> RedirectResponse:
     return RedirectResponse(f"{path}?{urlencode({'result': result})}", status_code=303)
+
+
+#: the hole columns of a scores CSV
+HOLE_COLUMNS = tuple(str(number) for number in range(1, 19))
+
+
+def scores_csv_text(scores: SeedScores) -> str:
+    """A seed's scores as CSV: a par row, then one row per round, its holes as columns.
+
+    Made for a spreadsheet: a best-ball score is a MIN over two players' hole columns.
+    `kind` is `own` for a player's own round and `teammate` for one played as player 2
+    on their ROM, whose player the site does not know.
+    """
+
+    def nines(holes: Sequence[int]) -> list[int]:
+        return [sum(holes[:9]), sum(holes[9:]), sum(holes)]
+
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(
+        ["round", "player", "username", "kind", "received_at", "flagged"]
+        + list(HOLE_COLUMNS)
+        + ["out", "in", "total", "putts"]
+    )
+    writer.writerow(
+        ["par", "", "", "", "", ""] + list(scores.pars) + nines(scores.pars) + [""]
+    )
+    for row in scores.rounds:
+        writer.writerow(
+            [
+                row.public_id,
+                row.user_name,
+                row.username,
+                "own" if row.slot == 0 else "teammate",
+                row.received_at,
+                "yes" if row.flagged else "",
+            ]
+            + list(row.strokes)
+            + nines(row.strokes)
+            + [row.total_putts]
+        )
+    return out.getvalue()
 
 
 def admin_router(templates: Jinja2Templates) -> APIRouter:
@@ -113,6 +160,20 @@ def admin_router(templates: Jinja2Templates) -> APIRouter:
     @router.get("/seeds/{seed_id}", response_class=HTMLResponse)
     def seed(request: Request, seed_id: str):
         return seed_page(request, seed_id)
+
+    @router.get("/seeds/{seed_id}/scores.csv")
+    def scores_csv(request: Request, seed_id: str):
+        scores = seed_scores(db_of(request), seed_id)
+        if scores is None:
+            raise not_found()
+        return Response(
+            scores_csv_text(scores),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="scores_{seed_id}.csv"',
+                "Cache-Control": "no-store",
+            },
+        )
 
     @router.post("/seeds/{seed_id}/withdraw")
     def withdraw(request: Request, seed_id: str, admin: Admin, note: Note = ""):

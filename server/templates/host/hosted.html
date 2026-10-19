@@ -70,7 +70,10 @@
   {% elif hosted.downloaded_at and not expired and not seed.withdrawn %}
     <p data-code-hidden>
       A ROM was downloaded {{ hosted.downloaded_at|timestamp }}, so the claim code is hidden.
-      Release a slot to show it again, then download again.
+      To change the players now, use <strong>Host this seed again</strong> below: a new
+      hosted ROM gets a new file name, so the ROM already downloaded can't be mistaken for
+      the new one. Releasing a slot here shows the code again, but a new download would
+      have the same file name as the old.
     </p>
   {% endif %}
 
