@@ -10,6 +10,8 @@ The end-of-round submission QR code. Full design and rationale: `docs/scorecard_
 - `encoder.py`, `galois.py` - a version 5-M QR encoder hard-wired to that one version
 - `nes.py` - the NES tile/nametable pipeline
 - `render.py` - PNG rendering
+- `svg.py` - SVG rendering for the site's pages (the hosting page's claim link); not the
+  ROM's pipeline, and free to pick the spec's mask
 - `capture.py`, `decode.py` - simulated capture conditions and decoders
 - `tables.py` - the ROM table export (`golf-qr-tables`, checked-in output in `data/qr/`)
 

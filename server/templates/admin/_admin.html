@@ -159,6 +159,9 @@
   {%- elif entry.action == "void" %}voided
   {%- elif entry.action == "restore" %}restored
   {%- elif entry.action == "withdraw" %}withdrawn
+  {%- elif entry.action == "host" %}hosted
+  {%- elif entry.action == "release" %}slot released
+  {%- elif entry.action == "hosted_download" %}hosted ROM downloaded
 {%- else %}{{ entry.action }}{% endif %}
 {%- endmacro %}
 

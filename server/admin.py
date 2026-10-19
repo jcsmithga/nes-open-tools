@@ -159,6 +159,21 @@ def _resolve(conn: sqlite3.Connection, entry: AdminAction) -> ActionTarget:
         return ActionTarget(
             f"/admin/seeds/{entry.target_id}", " ".join(_magic_words(row["manifest"]))
         )
+    if entry.target_type == audit.HOSTED_ROM:
+        row = conn.execute(
+            """
+            SELECT seeds.manifest FROM hosted_roms
+            JOIN seeds ON seeds.id = hosted_roms.seed_id
+            WHERE hosted_roms.public_id = ?
+            """,
+            (entry.target_id,),
+        ).fetchone()
+        if row is None:  # pragma: no cover - hosted ROMs are never deleted
+            return ActionTarget(None, entry.target_id)
+        return ActionTarget(
+            f"/host/{entry.target_id}",
+            "hosted " + " ".join(_magic_words(row["manifest"])),
+        )
     if entry.target_type == audit.ROUND:
         for table, path in (
             ("rounds", f"/admin/rounds/{entry.target_id}"),

@@ -36,6 +36,8 @@ SLOTS = (0, 1)
 ID_ATTEMPTS = 10
 #: bytes of randomness in a claim token
 TOKEN_BYTES = 16
+#: characters in a claim token: TOKEN_BYTES in unpadded base64url
+TOKEN_LENGTH = -(-TOKEN_BYTES * 4 // 3)
 
 #: HostingError reasons
 #: no hosted ROM has the token, or no seed the id

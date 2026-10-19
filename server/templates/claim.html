@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ t_plain("claim.page_title") }}{% endblock %}
+{% block content %}
+  <article class="claim" data-claim-state="{{ state }}">
+    {% if state == "unknown" %}
+      <h1>{{ t("claim.unknown.heading") }}</h1>
+      <p>{{ t("claim.unknown.body") }}</p>
+    {% else %}
+      <hgroup>
+        <h1>{{ t("claim.heading") }}</h1>
+        <p>
+          {{ t("claim.seed", words=seed.manifest.course.magic_words|join(" "), par=seed.manifest.course.par, host=host_name) }}
+        </p>
+      </hgroup>
+      {% if state == "claimed" %}
+        <p data-claimed-slot="{{ slot }}">
+          <ins>
+            {% if slot == 0 %}{{ t("claim.claimed.player_one") }}{% else %}{{ t("claim.claimed.player_two") }}{% endif %}
+          </ins>
+        </p>
+        <p>{{ t("claim.claimed.next") }}</p>
+      {% elif state == "withdrawn" %}
+        <p><mark>{{ t("claim.withdrawn") }}</mark></p>
+      {% elif state == "expired" %}
+        <p><mark>{{ t("claim.expired") }}</mark></p>
+      {% elif state == "full" %}
+        <p><mark>{{ t("claim.full") }}</mark></p>
+      {% elif state == "sign_in" %}
+        <p>{{ t("claim.sign_in.lead") }}</p>
+        <a href="/auth/login?next={{ return_path | urlencode }}"
+           role="button">{{ t("claim.sign_in.link") }}</a>
+      {% else %}
+        <p>{{ t("claim.confirm.lead") }}</p>
+        <form method="post" action="{{ return_path }}">
+          <button type="submit">{{ t("claim.confirm.button") }}</button>
+        </form>
+      {% endif %}
+    {% endif %}
+  </article>
+{% endblock %}

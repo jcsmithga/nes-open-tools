@@ -153,6 +153,17 @@ def download_stem(row: SeedRow) -> str:
     return f"{DOWNLOAD_PREFIX}_par{row.manifest.course.par}_{row.id}"
 
 
+def hosted_download_stem(row: SeedRow, player_name: str, hosted_id: str) -> str:
+    """A hosted ROM's download file name without its extension, e.g.
+    `ALICE_7fK2pQx9Lm_notgr_par72_4np03ChsZL`.
+
+    One seed is hosted once per pair, so what tells the files apart comes first: player 1's
+    name, spaces as underscores, then the hosted ROM's id. An Everdrive's file list cuts long
+    names short from the end. Like `download_stem`, never a strings entry.
+    """
+    return f"{player_name.replace(' ', '_')}_{hosted_id}_{download_stem(row)}"
+
+
 @dataclass(frozen=True)
 class DownloadView:
     """The seed page's download form, started from the player's saved settings."""

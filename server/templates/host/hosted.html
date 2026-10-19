@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Hosting {{ seed.manifest.course.magic_words|join(" ") }}{% endblock %}
+{% block content %}
+  <p><a href="/host">All hosted ROMs</a></p>
+  <h1>Hosting {{ seed.manifest.course.magic_words|join(" ") }}</h1>
+  <p>
+    Seed <a href="/h/{{ seed.id }}">{{ seed.id }}</a>, par {{ seed.manifest.course.par }}.
+    Expires {{ hosted.expires_at|timestamp }}.
+  </p>
+
+  {% if result == "released" %}
+    <p class="admin-result"><ins>Slot released.</ins></p>
+  {% elif result == "name_saved" %}
+    <p class="admin-result"><ins>Name saved.</ins></p>
+  {% elif result == "invalid_name" %}
+    <p class="admin-result"><del>Not saved: a name is 1 to {{ name_max }} letters, spaces or periods.</del></p>
+  {% endif %}
+
+  {% if club_warning %}
+    <article class="host-warning" data-club-warning>
+      <p>
+        <strong>WARNING: this seed has club rules that are not a locked bag.</strong>
+        Host only seeds with no club rules or a locked bag. Here both players get the
+        standard bag less any banned clubs, and a download over the club max is refused.
+      </p>
+    </article>
+  {% endif %}
+  {% if seed.withdrawn %}
+    <p><mark>This seed is withdrawn. It takes no claims and cannot be downloaded.</mark></p>
+  {% elif expired %}
+    <p><mark>This hosted ROM has expired. Host the seed again for a new one.</mark></p>
+  {% endif %}
+
+  <h2>Players</h2>
+  <div class="overflow-auto">
+    <table>
+      <tbody>
+        {% for slot in hosted.slots %}
+          <tr data-slot="{{ slot.slot }}"
+              data-claimed="{{ 'true' if slot.claimed else 'false' }}">
+            <th scope="row">Player {{ slot.slot + 1 }}</th>
+            <td>
+              {% if slot.claimed %}
+                {{ slot.user_name }} <small>{{ slot.claimed_at|timestamp }}</small>
+              {% else %}
+                Free
+              {% endif %}
+            </td>
+            <td>
+              <form method="post"
+                    action="/host/{{ hosted.public_id }}/slots/{{ slot.slot }}/release">
+                <button type="submit" class="secondary outline">Release</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p><a href="/host/{{ hosted.public_id }}"
+   role="button"
+   class="secondary">Reload</a></p>
+
+  {% if show_code %}
+    <section class="host-claim" data-claim-code>
+      <h2>Scan to claim</h2>
+      <div class="host-claim-code">{{ claim_svg }}</div>
+      <p><small>{{ claim_url }}</small></p>
+    </section>
+  {% elif hosted.downloaded_at and not expired and not seed.withdrawn %}
+    <p data-code-hidden>
+      A ROM was downloaded {{ hosted.downloaded_at|timestamp }}, so the claim code is hidden.
+      Release a slot to show it again, then download again.
+    </p>
+  {% endif %}
+
+  <h2>Player 1's name</h2>
+  <form method="post" action="/host/{{ hosted.public_id }}/name">
+    <label for="host-name">Name in the game, up to {{ name_max }} letters</label>
+    <fieldset role="group">
+      <input type="text"
+             id="host-name"
+             name="player_name"
+             value="{{ player_name }}"
+             maxlength="{{ name_max }}"
+             autocomplete="off"
+             autocapitalize="characters"
+             spellcheck="false"
+             required>
+      <button type="submit" class="secondary">Save</button>
+    </fieldset>
+  </form>
+
+  <h2>Download</h2>
+  {% if can_download %}
+    <article class="download"
+             data-state="checking"
+             data-required-roms="{{ required_roms | map(attribute='id') | join(' ') }}"
+             data-filename="{{ filename }}">
+      <p>Downloads as <code data-filename>{{ filename }}</code></p>
+      <noscript>
+        <p><mark>Downloading needs JavaScript.</mark></p>
+      </noscript>
+      <form method="post"
+            action="/host/{{ hosted.public_id }}/patch.ips"
+            id="download-form">
+        <p class="download-status" role="status" aria-live="polite"></p>
+        <p class="download-rom-setup"><a href="/rom">Set up ROMs</a></p>
+        <button type="submit" disabled>Download ROM</button>
+      </form>
+    </article>
+  {% elif not expired and not seed.withdrawn %}
+    <p>A download needs at least one claimed player.</p>
+  {% endif %}
+
+  <form method="post" action="/host">
+    <input type="hidden" name="seed" value="{{ seed.id }}">
+    <button type="submit" class="outline">Host this seed again</button>
+  </form>
+{% endblock %}
+{% block scripts %}
+  {% if can_download %}
+    <script type="application/json"
+            id="download-strings">{{ download_strings | tojson }}</script>
+    <script type="application/json"
+            id="download-roms">{{ rom_details | tojson }}</script>
+    <script src="{{ static_url('romstore.js') }}" defer></script>
+    <script src="{{ static_url('download.js') }}" defer></script>
+  {% endif %}
+{% endblock %}

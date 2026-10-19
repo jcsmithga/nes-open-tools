@@ -117,3 +117,23 @@ def test_development_admins_need_the_bypass():
     with pytest.raises(ConfigError, match="dev:alice"):
         Config(admin_users=frozenset({"1234", "dev:alice"})).validate()
     Config(admin_users=frozenset({"dev:alice"}), dev_login=True).validate()
+
+
+def test_host_users_are_read_like_admin_users():
+    config = Config.from_env({"GOLF_HOST_USERS": "1234, 5678"})
+    assert config.host_users == {"1234", "5678"}
+    assert config.admin_users == frozenset()
+
+
+def test_hosts_are_the_listed_users_and_every_admin():
+    config = Config(host_users=frozenset({"1234"}), admin_users=frozenset({"9999"}))
+    assert config.is_host("1234")
+    assert config.is_host("9999")
+    assert not config.is_host("5678")
+    assert not config.is_admin("1234")
+
+
+def test_development_hosts_need_the_bypass():
+    with pytest.raises(ConfigError, match="dev:bob"):
+        Config(host_users=frozenset({"dev:bob"})).validate()
+    Config(host_users=frozenset({"dev:bob"}), dev_login=True).validate()

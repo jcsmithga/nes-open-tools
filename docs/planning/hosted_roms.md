@@ -124,10 +124,12 @@ scan, behind the scan rate limit. Ordinary ROMs are unchanged.
   itself keeps working, and each download builds from the slots as they are then.
 - **Hosting never changes anyone's saved settings.** Unlike `seed_patch`, the hosted
   download saves nothing to the host's or a claimant's account and sets no download
-  cookie, and the settings form neither reads nor writes saved settings. The hosted
-  options are stored on the hosted ROM, starting from the defaults; the host sets the
-  name and bag. A claimant's entry, which is not saved settings, still records the hosted
-  options as any download's does.
+  cookie, and the hosting page neither reads nor writes saved settings. The host sets
+  only player 1's name, saved on the hosted ROM as its options (the defaults until then);
+  everything else is the defaults fitted to the seed (`fit`): a locked bag replaces the
+  vanilla bag and banned clubs leave it. The download posts only the ROM hashes, so the
+  name is saved first and the page's file name always matches it. A claimant's entry,
+  which is not saved settings, still records the hosted options as any download's does.
 - **Hosted file names tell pairs apart.** A hosted ROM downloads as
   `<NAME>_<public_id>_<download_stem>.nes`, e.g.
   `ALICE_7fK2pQx9Lm_notgr_par72_4np03ChsZL.nes`: the player 1 name of the hosted options
@@ -178,13 +180,15 @@ nothing else writes either bag. So:
 
 - **No club rules**: both players start with the hosted bag and change it in game.
 - **Required bag**: both players carry it, whatever max or bans come with it.
-- **A max or banned clubs without a required bag**: both players are held to the one
-  bag the host chooses.
+- **Banned clubs without a required bag**: both players carry the vanilla bag less the
+  banned clubs.
+- **A max without a required bag**: the vanilla bag is over it, so the download is
+  refused with the seed page's over-max notice.
 
 The event's rule is that a hosted seed has either no club rules or a required bag. The
 hosting page shows a prominent warning for any other seed (club rules that are not
 `ClubRules()` and have no `required_bag`), from creation on and whatever the claims. It
-warns and does not refuse.
+warns; only a bag over a club max is refused, at download.
 
 Per-slot bags are a follow-up: a second default bag table that `InitializeSram` copies
 to `Player2ClubBag` ($6035), each claimant choosing on the claim page. It changes what
@@ -211,9 +215,9 @@ never go in a log or a `repr`.
 |---|---|---|
 | `GET /host` | host | A form taking a seed's link or ID, and the host's hosted ROMs, newest first: seed, claimants, expiry (expired ones marked) |
 | `POST /host` | host | Create a hosted ROM for the seed the form names; redirect to it. An unknown or withdrawn seed goes back to `/host` saying so |
-| `GET /host/<public_id>` | its host, or an admin | The hosting page: the club-rule warning when it applies, each slot's claimant and a release button, the claim QR code and link while a slot is free and no download has followed the last release, a reload link, the settings form, the file name, the download button, and Host this seed again |
+| `GET /host/<public_id>` | its host, or an admin | The hosting page: the club-rule warning when it applies, each slot's claimant and a release button, the claim QR code and link while a slot is free and no download has followed the last release, a reload link, player 1's name, the file name, the download button (once a slot is claimed), and Host this seed again |
 | `POST /host/<public_id>/slots/<slot>/release` | its host, or an admin | Release a slot |
-| `POST /host/<public_id>/settings` | its host, or an admin | Save the hosted options |
+| `POST /host/<public_id>/name` | its host, or an admin | Save player 1's name as the hosted options |
 | `POST /host/<public_id>/patch.ips` | its host, or an admin | Upsert claimants' entries, finish with their credentials, record the download, return the IPS |
 | `GET /claim/<token>` | anyone | Signed out: a sign-in link returning here. Signed in: the seed and a confirm button; or the slot they hold, or that the hosted ROM is full, expired or its seed withdrawn |
 | `POST /claim/<token>` | signed in | Claim the lowest free slot; redirect back to the GET showing it |
@@ -234,8 +238,8 @@ cookie.
 2. Each player scans the QR code, signs in with Discord if they are not already, and
    confirms. Players who care who is player 1 scan in that order, the host reloading
    between them.
-3. The host reloads, checks both names against player 1 and player 2, sets player 1's
-   name (and the bag, on a seed without club rules), and downloads the ROM. For one
+3. The host reloads, checks both names against player 1 and player 2, saves player
+   1's name, and downloads the ROM. For one
    player, the host downloads after one claim.
 4. The host copies the file, named for player 1 and the hosted ROM, to the pair's
    cartridge, then presses Host this seed again for the next pair.
@@ -279,7 +283,7 @@ Each item is about one pull request and ends with tests passing.
    seed link and from a bare ID, and refused for an unknown or withdrawn seed; Host this
    seed again; the download's credentials for two claims, one claim and none (refused);
    entries upserted for each claimant; no saved settings changed for the host or either
-   claimant and no download cookie set; the settings form starting from the defaults; the
+   claimant and no download cookie set; the name starting from the defaults; the
    file name, with a space in the name; the QR code hidden once both slots are claimed,
    hidden after a download with a slot free and shown again after a release; the
    club-rule warning (shown for a max or bans without a required bag; absent with no club

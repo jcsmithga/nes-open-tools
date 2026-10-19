@@ -8,8 +8,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from golf.core import ips
-from golf.core.patches.sram_defaults import Club
-from golf.randomizer.build import PlayerOptions, credentials_for, finish
+from golf.core.patches.sram_defaults import VANILLA_CLUBS, Club
+from golf.randomizer.build import (
+    PlayerOptions,
+    credentials_for,
+    credentials_for_slots,
+    finish,
+)
 from golf.randomizer.catalog import JP_ROM, US_ROM
 from golf.randomizer.manifest import Manifest
 from golf.randomizer.roms import VANILLA_ROMS, vanilla_rom
@@ -17,6 +22,7 @@ from server.app import create_app
 from server.config import Config
 from server.entries import load_entry
 from server.forms import FormState
+from server.hosting import claim_slot, load_hosted_rom
 from tests.app_state import app_state
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -132,3 +138,66 @@ def test_a_seed_playing_a_mario_open_theme_needs_the_jp_rom(client):
         "error": "roms_missing",
         "values": {"roms": vanilla_rom(JP_ROM).title},
     }
+
+
+def test_a_hosted_download_is_finished_with_both_claimants_credentials(
+    vanilla_courses,
+):
+    config = Config(
+        database=":memory:",
+        rom_dir=ROOT,
+        holes_dir=vanilla_courses,
+        dev_login=True,
+        host_users=frozenset({"dev:host"}),
+    )
+    with TestClient(create_app(config)) as hosting_client:
+        seed_id = generate(hosting_client, music="nes_us", sources={US_ROM})
+        db = app_state(hosting_client).db
+        players = {}
+        for name in ("alice", "bob", "host"):
+            hosting_client.get("/auth/login", params={"as": name})
+            with db.transaction() as conn:
+                players[name] = conn.execute(
+                    "SELECT id, player_id FROM users WHERE username = ?", (name,)
+                ).fetchone()
+        created = hosting_client.post(
+            "/host", data={"seed": seed_id}, follow_redirects=False
+        )
+        assert created.status_code == 303, created.text
+        public_id = created.headers["location"].removeprefix("/host/")
+        hosted = load_hosted_rom(db, public_id)
+        assert hosted is not None
+        for name in ("alice", "bob"):
+            claim_slot(db, hosted.token, players[name]["id"])
+        hosting_client.post(f"/host/{public_id}/name", data={"player_name": "alice"})
+        response = hosting_client.post(
+            f"/host/{public_id}/patch.ips",
+            data={f"rom_{US_ROM}": vanilla_rom(US_ROM).sha1},
+        )
+        assert response.status_code == 200, response.text
+        with db.transaction() as conn:
+            row = conn.execute(
+                "SELECT manifest, qr_seed_id, unfinished_ips FROM seeds WHERE id = ?",
+                (seed_id,),
+            ).fetchone()
+        entries = [
+            load_entry(db, seed_id, players[name]["id"]) for name in ("alice", "bob")
+        ]
+    alice, bob = entries
+    assert alice is not None and bob is not None
+
+    manifest = Manifest.from_json(json.loads(row["manifest"]))
+    vanilla = ROM_PATH.read_bytes()
+    credentials = credentials_for_slots(
+        row["qr_seed_id"],
+        (players["alice"]["player_id"], alice.keys[0]),
+        (players["bob"]["player_id"], bob.keys[0]),
+    )
+    expected = finish(
+        manifest,
+        vanilla,
+        row["unfinished_ips"],
+        PlayerOptions("ALICE", frozenset(VANILLA_CLUBS)),
+        credentials,
+    )
+    assert response.content == expected.ips

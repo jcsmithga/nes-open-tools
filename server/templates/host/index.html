@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Host{% endblock %}
+{% block content %}
+  <h1>Host</h1>
+  {% if result == "unknown_seed" %}
+    <p class="admin-result"><del>No seed has that link or id.</del></p>
+  {% elif result == "withdrawn_seed" %}
+    <p class="admin-result"><del>That seed is withdrawn, so it cannot be hosted.</del></p>
+  {% elif result == "base_url_too_long" %}
+    <p class="admin-result"><del>The site's base URL is too long for a claim code. Shorten GOLF_BASE_URL.</del></p>
+  {% endif %}
+  <form method="post" action="/host">
+    <label for="host-seed">Seed link or id</label>
+    <fieldset role="group">
+      <input type="text"
+             id="host-seed"
+             name="seed"
+             placeholder="https://.../h/4np03ChsZL"
+             autocomplete="off"
+             required>
+      <button type="submit">Host</button>
+    </fieldset>
+  </form>
+
+  <h2>Your hosted ROMs</h2>
+  {% if listed %}
+    <div class="overflow-auto">
+      <table class="striped">
+        <thead>
+          <tr>
+            <th scope="col">Created</th>
+            <th scope="col">Seed</th>
+            <th scope="col">Player 1</th>
+            <th scope="col">Player 2</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for hosted, seed in listed %}
+            <tr>
+              <td><a href="/host/{{ hosted.public_id }}">{{ hosted.created_at|timestamp }}</a></td>
+              <td>{{ seed.manifest.course.magic_words|join(" ") }}</td>
+              {% for slot in hosted.slots %}
+                <td>{{ slot.user_name or "-" }}</td>
+              {% endfor %}
+              {% if seed.withdrawn %}
+                {% set status = "withdrawn" %}
+              {% elif hosted.expired() %}
+                {% set status = "expired" %}
+              {% elif hosted.downloaded_at %}
+                {% set status = "downloaded" %}
+              {% else %}
+                {% set status = "open" %}
+              {% endif %}
+              <td data-status="{{ status }}">{{ status }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>None yet.</p>
+  {% endif %}
+{% endblock %}

@@ -21,6 +21,11 @@ TRUE_WORDS = frozenset({"1", "true", "yes", "on"})
 LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
+def _ids(value: str | None) -> frozenset[str]:
+    """Discord ids separated by commas or whitespace."""
+    return frozenset((value or "").replace(",", " ").split())
+
+
 class ConfigError(ValueError):
     """Settings the site refuses to start with."""
 
@@ -42,6 +47,9 @@ class Config:
     session_secret: str | None = None
     #: the Discord ids (`dev:<name>` under the bypass) of the users the admin pages admit
     admin_users: frozenset[str] = frozenset()
+    #: the Discord ids (`dev:<name>` under the bypass) of the users the host pages admit
+    #: besides the admins, who are hosts too
+    host_users: frozenset[str] = frozenset()
     #: the development-only login bypass
     dev_login: bool = False
     #: the level the site logs at, as a `logging` level name
@@ -69,7 +77,8 @@ class Config:
             discord_client_id=get("discord_client_id"),
             discord_client_secret=get("discord_client_secret"),
             session_secret=get("session_secret"),
-            admin_users=frozenset((get("admin_users") or "").replace(",", " ").split()),
+            admin_users=_ids(get("admin_users")),
+            host_users=_ids(get("host_users")),
             dev_login=(get("dev_login") or "").strip().lower() in TRUE_WORDS,
             log_level=get("log_level") or defaults.log_level,
             mystery_seeds=(get("mystery_seeds") or "").strip().lower() in TRUE_WORDS,
@@ -86,6 +95,9 @@ class Config:
 
     def is_admin(self, discord_id: str) -> bool:
         return discord_id in self.admin_users
+
+    def is_host(self, discord_id: str) -> bool:
+        return discord_id in self.host_users or self.is_admin(discord_id)
 
     def validate(self) -> None:
         """Refuse settings that would be unsafe to serve. Raises ConfigError."""
@@ -105,4 +117,9 @@ class Config:
         if dev_admins and not self.dev_login:
             raise ConfigError(
                 f"development users can only be admins with the login bypass on: {dev_admins}"
+            )
+        dev_hosts = sorted(user for user in self.host_users if user.startswith("dev:"))
+        if dev_hosts and not self.dev_login:
+            raise ConfigError(
+                f"development users can only be hosts with the login bypass on: {dev_hosts}"
             )

@@ -30,6 +30,8 @@ from .pages import PageCatalog
 from .ratelimit import GENERATE_CAPACITY, GENERATE_REFILL_SECONDS, RateLimiter
 from .routes.account import account_router
 from .routes.admin_pages import admin_router
+from .routes.claim_pages import claim_router
+from .routes.host_pages import host_router
 from .routes.round_pages import round_router
 from .routes.seed_pages import seed_router
 from .routes.site import RANGEFINDER_DATA_URL, site_router
@@ -261,6 +263,8 @@ def create_app(
         name="rangefinder_data",
     )
     app.include_router(admin_router(templates))
+    app.include_router(host_router(templates))
+    app.include_router(claim_router(templates))
     app.include_router(site_router(templates, pages))
     app.include_router(seed_router(templates, mystery_seeds=config.mystery_seeds))
     app.include_router(round_router(templates))

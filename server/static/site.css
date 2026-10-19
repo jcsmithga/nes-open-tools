@@ -359,6 +359,27 @@ article.download:not([data-state="missing"]) .download-rom-setup {
   display: none;
 }
 
+/* Hosting page (/host/<id>): the club-rule warning and the claim code. The code stays
+   black on white in dark mode too, so a phone can read it. */
+article.host-warning {
+  border-left: 0.5rem solid var(--pico-del-color);
+}
+
+.host-claim-code {
+  width: min(100%, 22rem);
+}
+
+.host-claim-code svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* A hosted ROM's file name is one long word; let it wrap on a phone. */
+article.download code[data-filename] {
+  overflow-wrap: anywhere;
+}
+
 /* Scan page: one table per nine, side by side while both fit and stacked when they don't.
    Fixed layout and set column widths make the two tables line up either way. */
 .nines {

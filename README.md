@@ -219,6 +219,7 @@ variables:
 | `GOLF_DISCORD_CLIENT_ID`, `GOLF_DISCORD_CLIENT_SECRET` | unset | Discord sign-in |
 | `GOLF_SESSION_SECRET` | unset | Signs the session cookie |
 | `GOLF_ADMIN_USERS` | unset | Discord ids, separated by commas or spaces, of the users the `/admin` pages admit; `dev:<name>` ids only with `GOLF_DEV_LOGIN` |
+| `GOLF_HOST_USERS` | unset | Discord ids, as for `GOLF_ADMIN_USERS`, of the users the `/host` pages admit besides the admins, who are hosts too |
 | `GOLF_DEV_LOGIN` | off | Development-only sign-in bypass (`1`, `true`, `yes` or `on`) |
 | `GOLF_LOG_LEVEL` | `INFO` | The level the site logs at, as a `logging` level name; the log is JSON lines on stderr |
 | `GOLF_MYSTERY_SEEDS` | off | The mystery seed page, `/mystery`, and the generate page's link to it (`1`, `true`, `yes` or `on`); off, `/mystery` is not found |

@@ -1,0 +1,65 @@
+# Claim page strings (claim.html): `/claim/<token>`, the page a player's phone opens from the
+# QR code on a host's hosting page, at an in-person event. The player signs in and confirms
+# to take player 1 or player 2 on the ROM the host is building for them, so their round is
+# recorded on their own account. Read on a phone, at a table, usually in a hurry.
+# Format: see common.toml, and server/CLAUDE.md "Player-facing text".
+
+[claim.page_title]
+note = "plain: browser tab title, the claim page"
+text = "Claim a Spot - NES Open Randomizer"
+
+[claim.heading]
+note = "h1: taking a player spot on a ROM someone is hosting for you"
+text = "Claim a Spot"
+
+[claim.seed]
+note = "line under the h1 naming what is being claimed; {words} the seed's three magic words, {par} the course's par, {host} the hosting person's Discord display name"
+text = "{words} (par {par}), hosted by {host}"
+
+[claim.sign_in.lead]
+note = "signed out: the player must sign in with Discord before claiming, so the round counts on their account; they come straight back here"
+text = "Sign in with Discord to claim your spot. You'll come right back here."
+
+[claim.sign_in.link]
+note = "button-styled link to Discord sign-in, which returns to this page"
+text = "Sign In to Claim"
+
+[claim.confirm.lead]
+note = "signed in, a spot is free: confirming puts the player's account on the host's ROM; the host's page assigns player 1 to the first claim and player 2 to the second"
+text = "Confirm to put your account on this ROM. The first to claim plays player 1, the second player 2."
+
+[claim.confirm.button]
+note = "submit button that claims the spot"
+text = "Claim My Spot"
+
+[claim.claimed.player_one]
+note = "the player holds player 1 on this ROM; shown as a success notice"
+text = "You're player 1."
+
+[claim.claimed.player_two]
+note = "the player holds player 2 on this ROM; shown as a success notice"
+text = "You're player 2."
+
+[claim.claimed.next]
+note = "after claiming: nothing more to do here; let the host know, play, and scan the end-of-round QR code as usual to record the round"
+text = "Let your host know you're in. After your round, scan the QR code on the scorecard screen as usual."
+
+[claim.full]
+note = "both spots on this ROM are taken by other players; ask the host"
+text = "Both spots on this ROM are taken. Ask your host."
+
+[claim.expired]
+note = "the hosted ROM is too old to claim (it expires some hours after the host made it); ask the host for a new code"
+text = "This code has expired. Ask your host for a new one."
+
+[claim.withdrawn]
+note = "the seed has been withdrawn by the site's admins, so no ROM can be built from it"
+text = "This seed has been withdrawn, so it can't be claimed."
+
+[claim.unknown.heading]
+note = "h1: the claim link matches nothing (mistyped, or not a real code)"
+text = "Code Not Found"
+
+[claim.unknown.body]
+note = "the link doesn't match any hosted ROM; scan the code on the host's screen again"
+text = "This claim link doesn't match anything. Try scanning the code on your host's screen again."

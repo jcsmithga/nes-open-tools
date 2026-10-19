@@ -24,15 +24,21 @@ def used(pattern: re.Pattern, paths) -> set[str]:
     return {key for path in paths for key in pattern.findall(path.read_text())}
 
 
-#: admin pages are for admins only and hold their English themselves (server/CLAUDE.md)
-ADMIN_TEMPLATES = SERVER / "templates" / "admin"
+#: admin and host pages are for admins and hosts only and hold their English themselves
+#: (server/CLAUDE.md)
+STAFF_TEMPLATES = (SERVER / "templates" / "admin", SERVER / "templates" / "host")
 
 
 def template_keys() -> set[str]:
-    """The keys the player-facing templates use: every template outside `ADMIN_TEMPLATES`."""
+    """The keys the player-facing templates use: every template outside `STAFF_TEMPLATES`."""
     paths = (SERVER / "templates").rglob("*.html")
     return used(
-        TEMPLATE_USE, (path for path in paths if ADMIN_TEMPLATES not in path.parents)
+        TEMPLATE_USE,
+        (
+            path
+            for path in paths
+            if not any(staff in path.parents for staff in STAFF_TEMPLATES)
+        ),
     )
 
 
@@ -55,9 +61,10 @@ def test_the_scans_find_keys():
     assert "rom.status.stored" in script_keys()
 
 
-def test_admin_templates_use_no_strings():
-    """The carve-out runs one way: an admin page's text is its own, never half in the catalog."""
-    paths = list(ADMIN_TEMPLATES.rglob("*.html"))
+@pytest.mark.parametrize("directory", STAFF_TEMPLATES, ids=lambda path: path.name)
+def test_staff_templates_use_no_strings(directory):
+    """The carve-out runs one way: a staff page's text is its own, never half in the catalog."""
+    paths = list(directory.rglob("*.html"))
     assert paths
     assert not used(TEMPLATE_USE, paths)
 

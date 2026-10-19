@@ -15,6 +15,7 @@ from server.forms import SavedSettings
 from server.hosting import (
     EXPIRED,
     FULL,
+    TOKEN_LENGTH,
     UNKNOWN,
     WITHDRAWN,
     Claim,
@@ -90,7 +91,7 @@ def test_a_new_hosted_rom_has_both_slots_free_and_expires_later(
     assert hosted.options is None
     assert hosted.downloaded_at is None
     assert not hosted.withdrawn
-    assert len(hosted.token) >= 22
+    assert len(hosted.token) == TOKEN_LENGTH == 22
     assert load_hosted_rom(db, hosted.public_id) == hosted
     assert load_by_token(db, hosted.token) == hosted
     assert actions(db) == [
