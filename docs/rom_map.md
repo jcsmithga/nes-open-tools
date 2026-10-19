@@ -168,6 +168,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 |---|---|---|---|
 | SRAM init and magic | 9 | `$ACBC` `InitializeSram` (via `$D932` `CallInitializeSram`); `SramMagic` "5S" at `$6001` | |
 | Saved state | SRAM | `PlayerName` (`$6004`), `TotalMoney` (`$600E`), `CurrentWager` (`$6014`), `Player1ClubBag` (`$6027`) | `prize_money.md` |
+| Club bags in play | 13 | `$8ADF` `RunClubSelectPanel`, `$8A47` `AutoSelectClub`: read `Player1ClubBag` + 14 × `CurrentPlayerIndex` (`$99`), so player 2 uses `Player2ClubBag` (`$6035`); `InitializeSram` fills both from `DefaultClubBagTable` (bank 9 `$AE23`) | |
 
 ## Commonly read RAM
 
