@@ -72,8 +72,10 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Metasprite renderers | 15, 13 | `$FEBD` `RenderMetasprite`, `$FDCE` `RenderMetaspriteClipped`, `$FF38` `RenderMetaspriteWithAttr`; bank 13 `$9492` `RenderGreenViewMetasprite`; `$FF7E` `HideUnusedSprites` | `rom_disassembly.md` (four formats) |
 | Golfer and club sprites | 8 | `$8000` `RenderGolferAndClub` (per frame from bank 13 `$AAA2`); `...BodyMetaspriteData`, `ClubMetaspriteData` | `golfer_sprites.md` |
 | Golfer CHR | 0, 1, 2 | `LuigiSpriteChrStreams` (bank 0 `$A23D`) and siblings | `golfer_sprites.md` |
-| Golfer cutscene poses (signpost walk-on, hole result, club house) | 10, 12 | bank 10 sprite ids `$01`, `$02`, `$03`, `$05` (frame tables `$811D`, `$8994`, `$923B`, `$A2B1`); bank 12 `$B094` the hole result (from bank 11 `$BEE5`; `$B2F3` classifies the score, `$B35B` picks the record), `$AC01` `LC_AC01_PlaceGolferStandee`, `$B7D9` the hole in one (`$B81B` shared with the long drive and near-pin scenes), `$A4A4` the tournament placing celebration | `cutscene_sprites.md` |
-| Golfer cutscene CHR | 6, 7, 0 | bank 6 `$8000` (Mario), `$8AB2` (Luigi); bank 7 `$8000` (signpost, both); bank 0 `$B2E2` (wager) | `cutscene_sprites.md` |
+| Golfer cutscene poses (club house walk-out, hole result, other club house scenes) | 10, 12 | bank 10 sprite ids `$01`, `$02`, `$03`, `$05` (frame tables `$811D`, `$8994`, `$923B`, `$A2B1`); bank 12 `$B094` the hole result (from bank 11 `$BEE5`; `$B2F3` classifies the score, `$B35B` picks the record), `$AB87` `InitClubHouseWalkOutScene` (`$AC01` `LC_AC01_PlaceClubHouseGolfer` loads it), `$B7D9` the hole in one (`$B81B` shared with the long drive and near-pin scenes), `$A4A4` the tournament placing celebration | `cutscene_sprites.md` |
+| Golfer cutscene CHR | 6, 7, 0 | bank 6 `$8000` (Mario), `$8AB2` (Luigi); bank 7 `$8000` (club house walk-out, both); bank 0 `$B2E2` (wager) | `cutscene_sprites.md` |
+| Golfer outfit color | 5, 12 | the shot screen: bank 5 `$BF1B` `GolferShirtColorTable`, one byte per golfer; a cutscene: color 1 of sprite palette 0, its palette + `$11` in bank 12 (walk-out `$ADB5`, hole result `$B691`) | `cutscene_sprites.md`, `golfer_sprites.md` |
+| Club house walk-out scene | 12, 5, 7 | bank 12 `$AB87` `InitClubHouseWalkOutScene`; background bank 5 `$A22F` (tiles), bank 7 `$88BF` (nametable); palette `$ADA4` | `cutscene_sprites.md` |
 
 ## Input
 
@@ -128,7 +130,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Main menu chain | 12 | `$856E` `InitMainMenu`, `$8698` `MenuTick`, `$899F` `CallMenuChoiceHandler`, `MenuTextListData` | `menu_system.md` |
 | Club house entries | 12 | `$84F5`-`$855B` (`LC_84FA_OpenPrizeMoney` and siblings) | `menu_system.md` |
 | Course intro | 12 | `$9262` `SetupCourseIntroScene`, `$9478` `ShowCourseIntroScene`; `$92EC` the sunset showing after the scorecard, palette `$9837`; sprite 0 for the raster split is record `$98F3`, metasprite bank 10 `$AEA6` (tile `$1B`) | `course_intro_scene.md` |
-| Pre-hole signpost | 12 | `$AB87` `InitPreHoleSignpostScene`, `$ABA5` `DrawPreHoleSignpost` | `prehole_signpost.md` |
+| Pre-hole signpost | 12 | `$ABA5` `DrawPreHoleSignpost` | `prehole_signpost.md` |
 | Prize money | 12 | `$8F34` | `prize_money.md` |
 | Options | 11 | `$8B1B` `RunOptionsScreen` | |
 | Player stats | 9 | `$B519` `RunPlayerStatsScreen` | |

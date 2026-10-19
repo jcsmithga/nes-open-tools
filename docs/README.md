@@ -36,7 +36,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [menu_system.md](menu_system.md) | The data-driven title-screen menu chain |
 | [course_intro_scene.md](course_intro_scene.md) | The full-screen landscape shown after picking a course |
 | [golfer_sprites.md](golfer_sprites.md) | How the swinging golfer and club are drawn |
-| [cutscene_sprites.md](cutscene_sprites.md) | Mario and Luigi outside the shot screen: the signpost walk-on, the hole result and the club house poses |
+| [cutscene_sprites.md](cutscene_sprites.md) | Mario and Luigi outside the shot screen: walking out of the club house, the hole result and the other club house poses |
 | [scorecard.md](scorecard.md) | The pause-menu scorecard screen |
 | [prize_money.md](prize_money.md) | The PRIZE MONEY clubhouse cutscene |
 | [text_scripts.md](text_scripts.md) | The bank 11 dialogue scripts: interpreter, opcodes, entry points and native calls |

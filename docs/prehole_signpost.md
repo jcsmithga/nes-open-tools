@@ -24,15 +24,14 @@ name, a different label than "PAR") means drawing a new picture and pointing the
 banner-table entry at it, not editing a string.
 
 The full-screen card shown before every hole ("HOLE n PAR p ddd YARDS" on a signpost
-graphic), reached between the tee-off setup and actual play. It's built from two
-far-called entry points in bank 12, both reached from bank 13's hole-setup code:
+graphic), reached between the tee-off setup and actual play. Its entry point is
+**`DrawPreHoleSignpost`, bank 12 `$ABA5`**, far-called from bank 13 `$81AB` right before
+`StartCourseBgm` and the per-player turn loop: it draws the signpost card via
+`LC_AC2F_DrawSignpostCard`, then waits for A/B. No golfer appears on this screen.
 
-| Entry | Far-called from | Does |
-|---|---|---|
-| **`InitPreHoleSignpostScene`, bank 12 `$AB87`** | bank 13 `$8064` | starts music track `$10`, places the golfer standee object, does **not** draw the card |
-| **`DrawPreHoleSignpost`, bank 12 `$ABA5`** | bank 13 `$81AB`, right before `StartCourseBgm` and the per-player turn loop | draws the signpost card via `LC_AC2F_DrawSignpostCard`, then waits for A/B |
-
-Both entries fall into the same tail (`LC_ABB8` onward): turn rendering back on, run
+The routine just before it, `InitClubHouseWalkOutScene` (bank 12 `$AB87`, far-called from
+bank 13 `$8064`), is the round's opening club house scene, not part of the signpost
+(`cutscene_sprites.md`). The two share a tail (`LC_ABB8` onward): turn rendering back on, run
 `LC_8158` (a fixed 5-iteration warm-up loop), then loop on `WaitForVblank` ->
 `$F8CA` (per-frame object/OAM update) -> `LC_AD74` (exit-flag check) -> `$FF7E` until
 `SceneExitFlag` (`$0682`) is set. `LC_AD74` sets it when `MenuInputByte` has bit `$80`
@@ -198,30 +197,6 @@ jointly; testing in an emulator showed that was wrong on both counts - the wrong
 records, and two of them where only one was ever needed. Still not directly rendered
 (`render_signpost.py` only replays the nametable/background writes, not the OAM sprite
 system), but the in-game test confirms the model above.
-
-## `LC_AC01_PlaceGolferStandee`
-
-Called only from `InitPreHoleSignpostScene`, before the card is drawn:
-
-```
-LC_AC01_PlaceGolferStandee:
-       LDA MaybeTwoPlayerFlag ($0101)
-       BNE two_player
-       LDA #$01 : JSR AllocateObjectRecords : .dw $B05E    ; 1p standee
-       JMP shared
-two_player:
-       LDA #$01 : JSR AllocateObjectRecords : .dw $B067    ; 2p standee (different position/pose)
-shared:
-       JSR LoadCompressedGraphics : .db $07, $00, $80      ; golfer CHR
-       JSR LoadCompressedGraphics : .db $05, $2F, $A2      ; golfer CHR
-       JSR LoadCompressedGraphics : .db $07, $BF, $88      ; golfer CHR
-       JSR Load32BytesToBuffer : .dw $ADA4                 ; golfer palette
-       RTS
-```
-
-The two object records (`$B05E` 1p, `$B067` 2p) differ in their X position (`$28` vs
-`$70`) and in one of the two metasprite-pointer bytes (`$78` vs `$96`) - the standee is
-positioned and posed differently depending on player count, not just moved.
 
 ## The object/sprite system (shared machinery)
 

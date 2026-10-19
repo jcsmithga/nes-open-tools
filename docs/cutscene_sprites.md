@@ -2,8 +2,9 @@
 
 > **Note**: This document was written by Claude based on investigation requested by jdharms.
 
-Where Mario (and Luigi, as player 2) is drawn outside the shot screen: walking on beside
-the pre-hole signpost, reacting to the hole just played, and the club house scenes. The
+Where Mario (and Luigi, as player 2) is drawn outside the shot screen: walking out of the
+club house to start a round, reacting to the hole just played, and the other club house
+scenes. The
 swinging golfer of `golfer_sprites.md` shares nothing with these - not the tiles, not the
 metasprites, not the renderer.
 
@@ -16,8 +17,9 @@ Confidence is marked per claim:
 - **[D]** Derived - follows from the animation streams or from arithmetic on the data.
 - **[G]** Guess - plausible reading, not verified.
 
-Nothing here was checked in an emulator. Which screen a scene is has been read from its
-code, and is marked **[G]** wherever the code doesn't say.
+Two scenes were checked against emulator screenshots (see **Checked against the
+emulator**): the club house walk-out and the hole result. Which screen any other scene is
+has been read from its code, and is marked **[G]** wherever the code doesn't say.
 
 ## Where it lives
 
@@ -29,8 +31,8 @@ sprite ids hold a golfer:
 
 | Id | Frame table | Who | Frames | Shown by |
 |---|---|---|---|---|
-| `$01` | `$811D` | Mario | `$00`-`$06` | the pre-hole signpost, one player |
-| `$01` | | Mario and Luigi | `$07`-`$0D` | the pre-hole signpost, two players |
+| `$01` | `$811D` | Mario | `$00`-`$06` | the club house walk-out, one player |
+| `$01` | | Mario and Luigi | `$07`-`$0D` | the club house walk-out, two players |
 | `$02` | `$8994` | Mario | `$00`-`$1A` | the hole result, the great shot scene, the wager scene |
 | `$03` | `$923B` | Luigi | `$00`-`$18` | the same, as player 2 |
 | `$05` | `$A2B1` | Mario | `$00`-`$11`, `$35`-`$3A` | Prize Money and two more club house scenes |
@@ -40,7 +42,7 @@ sprite ids hold a golfer:
 two small props (`$3B`, `$3C`). Sprite `$04` is the wager scene's flags and pointer.
 Sprites `$07`-`$0C` are the course intro portraits (`course_intro_scene.md`).
 
-**[D]** In the two-player signpost frames both brothers are one metasprite, Luigi drawn
+**[D]** In the two-player walk-out frames both brothers are one metasprite, Luigi drawn
 with sprite palette 1 and Mario with palette 0, so replacing Mario there means rewriting
 half of each of seven metasprites.
 
@@ -51,13 +53,30 @@ addresses are bank 12.
 
 | Scene | CHR loads at | CHR tables | Palette | Sprite, frames |
 |---|---|---|---|---|
-| Pre-hole signpost (`LC_AC01_PlaceGolferStandee`) | `$AC17` | bank 7 `$8000` | `$ADA4` | `$01`: `$00`-`$06`, or `$07`-`$0D` with two players |
+| Club house walk-out (`LC_AC01_PlaceClubHouseGolfer`) | `$AC17` | bank 7 `$8000` | `$ADA4` | `$01`: `$00`-`$06`, or `$07`-`$0D` with two players |
 | Hole result, stroke play | `$B14B` / `$B178` | bank 6 `$8000` / `$8AB2` | `$B680` | `$02` / `$03`: `$06`-`$18` |
 | Great shot | `$B831` / `$B83A` | bank 6 `$8000` / `$8AB2` | `$BDB2` | `$02` / `$03`: `$00`-`$05` |
 | Wager | `$B903` | bank 6 `$8000`, bank 0 `$B2E2` | `$BDEA` | `$02`: `$19` |
 | Prize Money | `$8F85` | bank 6 `$8000` | `$9125` | `$05`: `$00`-`$03`, `$06`-`$11` |
 | Club house, `$A3B3` | `$A3B3` | bank 6 `$8000`, bank 7 `$8A45` | `$A469` | `$05`: `$00`-`$07` |
 | Club house, `$A4CC` | `$A4CC` | bank 6 `$8000` | `$A5F7` | `$05`: `$0E`-`$10`, `$35`-`$3A` |
+
+### The club house walk-out
+
+**[C]** Bank 13 `$8064` far-calls `InitClubHouseWalkOutScene` (bank 12 `$AB87`) at the start
+of a round: after the course intro on a one-player new game, and in its place with two
+players (`course_intro_scene.md`). It starts music track `$10` and calls
+`LC_AC01_PlaceClubHouseGolfer`, which allocates the golfer's record (`$B05E` at x `$28`, or `$B067` at x `$70`
+with two players, each with its own streams), then loads the whole screen:
+
+| Table | PPU | Holds |
+|---|---|---|
+| bank 7 `$8000` | `$0000`-`$0B7F` | the golfers' sprite tiles |
+| bank 5 `$A22F` | `$1000`-`$17BF` | the club house background tiles |
+| bank 7 `$88BF` | `$2000`-`$23FF` | the club house nametable and attributes |
+
+and the palette at `$ADA4`. The same scene's phase 2 handler, `LC_9A68_RoundEndDispatch`,
+is where a finished round returns to the main menu (`scorecard_qr.md`).
 
 ### The hole result
 
@@ -159,8 +178,8 @@ Luigi's counterpart of the first is bank 6 `$8AB2` (`$0000`-`$0B9F`, 2,135 B).
 
 | Set | Frames | Tiles | Range | Sprites a frame | Peak on a scanline | Metasprite bytes |
 |---|---|---|---|---|---|---|
-| Signpost, Mario | 7 | 87 | `$16`-`$B7` | 18-25 | 4 | 496 (`$813D`-`$832C`) |
-| Signpost, both | 7 | 184 | `$00`-`$B7` | 38-52 | 8 | 1,323 (`$832D`-`$8857`) |
+| Walk-out, Mario | 7 | 87 | `$16`-`$B7` | 18-25 | 4 | 496 (`$813D`-`$832C`) |
+| Walk-out, both | 7 | 184 | `$00`-`$B7` | 38-52 | 8 | 1,323 (`$832D`-`$8857`) |
 | Sprite `$02`, Mario | 26 | 171 | `$00`-`$D3` | 19-34 | 7 | 2,091 (`$89CA`-`$91F4`) |
 | Sprite `$03`, Luigi | 25 | 171 | `$00`-`$AE` | 20-36 | 6 | 2,271 (`$926F`-`$9B4D`) |
 | Sprite `$05`, Mario | 24 | 130 | `$00`-`$E0` | 18-46 | 8 | 1,927 (`$A32B`-`$ADFD`) |
@@ -176,15 +195,38 @@ cut cleanly into "Mario" and "everything else".
 Mario (`golfer_sprites.md`) - and Luigi is palette 1, `2B 0F 36`. Only color 0 differs
 between scenes, with the backdrop.
 
+**[C]** Color 1, `$25`, is Mario's cap and overalls; color 2 (`$0F`) is his outline and
+color 3 (`$36`) his skin. Each scene loads its own copy of the palette, so his outfit
+color is stored once per scene, at its palette address + `$11` in bank 12 (the walk-out's
+is `$ADB5`), and once more for the shot screen in `GolferShirtColorTable`.
+
 **[C]** Unlike the swing's renderer, this format carries an attribute per sprite (or per
 chunk), so a pose can mix palettes and flip tiles. Mario's poses use palette 0 with
 horizontal flips throughout; the great shot frames add palettes 2 and 3 for the club, and frame
 `$19` palette 3 for the putter.
 
+## Checked against the emulator
+
+Three native 256x240 emulator screenshots, one each of the walk-out, the hole result for a
+par and the shot screen, were compared pixel for pixel with what the repo decodes:
+
+| Screen | Background rebuilt from | Differs from the screenshot | Mario |
+|---|---|---|---|
+| Club house walk-out | the three tables above, palette `$ADA4` | 1,077 pixels, all in the box Mario stands in | sprite `$01` frame `$04` at (88, 145), every pixel |
+| Hole result | bank 6 `$9309` and `$9BDE`, palette `$B680` | Mario, and the three rows of name and score text the scene draws afterward | sprite `$02` frame `$0A` at (104, 125), every pixel |
+| Shot screen | not rebuilt (`perspective_scene.md`) | | swing body frame 0 (`golfer_sprites.md`) at (124, 167), every pixel |
+
+**[C]** The hole result's position is its record's (`$68`, `$7C`) with the NES's one-line
+sprite delay. The emulator's colors were the repo's `NES_SYSTEM_PALETTE` exactly.
+
+**[C]** A pose can be matched by more than one sprite: the hole result's standing Mario
+also matches sprite `$01` frame `$03` and sprite `$05` frame `$0E` pixel for pixel, at
+other origins. Matching a screenshot settles a scene only with the scene's own record.
+
 ## Renders
 
-![Signpost walk-on](../renders/golfers/cutscene_signpost_walk_on.png)
-![Signpost walk-on, two players](../renders/golfers/cutscene_signpost_walk_on_2p.png)
+![Club house walk-out](../renders/golfers/cutscene_club_house_walk_out.png)
+![Club house walk-out, two players](../renders/golfers/cutscene_club_house_walk_out_2p.png)
 ![Sprite $02](../renders/golfers/cutscene_hole_result.png)
 ![Sprite $03](../renders/golfers/cutscene_hole_result_2p.png)
 ![Sprite $05](../renders/golfers/cutscene_club_house.png)
@@ -203,7 +245,7 @@ more frames:
 - **One table, two sprites, and other art in it.** A new Mario for sprites `$02` and `$05`
   has to fit bank 6 `$8000` alongside the money and props, in 248 tiles, and recompress
   into its 2,738 bytes or move.
-- **The signpost table holds Luigi too**, and the two-player metasprites hold both.
+- **The walk-out table holds Luigi too**, and the two-player metasprites hold both.
 - **Metasprites grow and shrink.** Each set's data is a contiguous run in bank 10 with the
   next sprite's frame table right behind it, so a larger set has to move and its frame
   table be repointed.

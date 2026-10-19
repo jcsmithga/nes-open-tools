@@ -2,8 +2,8 @@
 Mario and Luigi outside the shot screen: the cutscene poses the object engine draws.
 
 The swinging golfer is bank 8's (`golf/core/golfer_sprites.py`). Everywhere else
-a golfer appears - walking on beside the pre-hole signpost, reacting to the hole
-just played, the club house scenes - he is a scene object (`docs/scene_objects.md`):
+a golfer appears - walking out of the club house to start a round, reacting to
+the hole just played, the other club house scenes - he is a scene object (`docs/scene_objects.md`):
 a sprite id in bank 10 whose frame table names one metasprite per pose, drawn
 with a CHR table the scene loads at `$0000`. Nothing is shared with the swing:
 separate tiles, separate metasprites.
@@ -124,7 +124,7 @@ SCENE_BANK = 12
 
 MARIO_CUTSCENE_CHR = (6, 0x8000)  # $0000-$0F7F: the hole result and club house
 LUIGI_CUTSCENE_CHR = (6, 0x8AB2)  # $0000-$0B9F
-SIGNPOST_CHR = (7, 0x8000)  # $0000-$0B7F: both brothers' walk-on
+WALK_OUT_CHR = (7, 0x8000)  # $0000-$0B7F: both brothers' walk-out
 CLUB_HOUSE_EXTRA_CHR = (7, 0x8A45)  # $0DB0-$0FFF
 WAGER_CHR = (0, 0xB2E2)  # $0A00-$0DEF
 
@@ -156,32 +156,32 @@ def _hole_result(chr_table) -> tuple[Scene, ...]:
 
 SETS = (
     SpriteSet(
-        "signpost_walk_on",
+        "club_house_walk_out",
         "Mario",
         0x01,
         (
             Scene(
-                "prehole_signpost",
+                "club_house_walk_out",
                 0xAC17,
-                (SIGNPOST_CHR,),
+                (WALK_OUT_CHR,),
                 0xADA4,
                 tuple(range(0x00, 0x07)),
-                "LC_AC01_PlaceGolferStandee, one player",
+                "LC_AC01_PlaceClubHouseGolfer, one player",
             ),
         ),
     ),
     SpriteSet(
-        "signpost_walk_on_2p",
+        "club_house_walk_out_2p",
         "Mario and Luigi",
         0x01,
         (
             Scene(
-                "prehole_signpost",
+                "club_house_walk_out",
                 0xAC17,
-                (SIGNPOST_CHR,),
+                (WALK_OUT_CHR,),
                 0xADA4,
                 tuple(range(0x07, 0x0E)),
-                "LC_AC01_PlaceGolferStandee, two players: both in each metasprite",
+                "LC_AC01_PlaceClubHouseGolfer, two players: both in each metasprite",
             ),
         ),
     ),

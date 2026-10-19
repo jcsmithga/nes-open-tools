@@ -119,8 +119,8 @@ class TestMario:
     def test_inventory(self, sprites):
         counts = {s.name: (len(s.frames), len(sprites.tiles(s))) for s in SETS}
         assert counts == {
-            "signpost_walk_on": (7, 87),
-            "signpost_walk_on_2p": (7, 184),
+            "club_house_walk_out": (7, 87),
+            "club_house_walk_out_2p": (7, 184),
             "hole_result": (26, 171),
             "hole_result_2p": (25, 171),
             "club_house": (24, 130),

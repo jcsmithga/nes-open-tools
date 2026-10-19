@@ -22,7 +22,7 @@ Bank 13 `$8000` is "start a round", entered from the menu's `$FF` terminal code.
 $801A  LDA LoadSavedGameFlag ($04D7)
 $801D  BNE $806A                 ; CONTINUE -> skip the scene entirely
 $8029  LDA MaybeTwoPlayerFlag
-$802C  BNE $8064                 ; 2 players -> different scene, bank 12 $AB87
+$802C  BNE $8064                 ; 2 players -> straight to the club house walk-out, bank 12 $AB87
 $802E  LDX GolfGameMode
 $8031  CPX #$05
 $8033  BCC $804F                 ; stroke/tournament-stroke

@@ -282,7 +282,7 @@ real — is decided in bank 2, where there is room: `GolfGameMode` `$0100` must 
 (18-hole stroke play) and `PlayerCount` `$9A` says whether a second code is owed.
 
 `ReturnToMainMenu` (bank 12 `$9A8A`) is **not** the hook. `find-refs` gives it exactly one
-reference — the `BNE` at `$9A82` — inside the standee scene's two-option prompt, which
+reference — the `BNE` at `$9A82` — inside the club house walk-out scene's two-option prompt, which
 means it only fires when the player picks the exit option; a player who finishes a round
 and immediately starts another would never see a code. By then `GameProgress` is also
 `$00`, zeroed unconditionally at bank 13 `$8018` on the way back through `LD_8000`, so the
