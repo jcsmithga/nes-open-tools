@@ -22,6 +22,41 @@
     </fieldset>
   </form>
 
+  <h2>Recent seeds</h2>
+  {% if recent %}
+    <div class="overflow-auto">
+      <table class="striped">
+        <thead>
+          <tr>
+            <th scope="col">Created</th>
+            <th scope="col">Seed</th>
+            <th scope="col">Par</th>
+            <th scope="col">By</th>
+            <th scope="col"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for seed in recent %}
+            <tr data-recent-seed="{{ seed.id }}">
+              <td>{{ seed.created_at|timestamp }}</td>
+              <td><a href="/h/{{ seed.id }}">{{ seed.magic_words|join(" ") }}</a></td>
+              <td>{{ seed.par }}</td>
+              <td>{{ seed.creator_name or "-" }}</td>
+              <td>
+                <form method="post" action="/host">
+                  <input type="hidden" name="seed" value="{{ seed.id }}">
+                  <button type="submit" class="outline">Host</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No seeds yet.</p>
+  {% endif %}
+
   <h2>Your hosted ROMs</h2>
   {% if listed %}
     <div class="overflow-auto">

@@ -50,6 +50,7 @@ from ..hosting import (
     hosted_roms_for_host,
     load_hosted_rom,
     mark_downloaded,
+    recent_seeds,
     release_slot,
     save_hosted_options,
 )
@@ -150,7 +151,9 @@ def host_router(templates: Jinja2Templates) -> APIRouter:
         for hosted in hosted_roms_for_host(db, host.id):
             row = load_seed(db, hosted.seed_id)
             listed.append((hosted, row))
-        return render(request, "index.html", {"listed": listed})
+        return render(
+            request, "index.html", {"listed": listed, "recent": recent_seeds(db)}
+        )
 
     @router.post("")
     def create(request: Request, host: Host, seed: Annotated[str, Form()] = ""):

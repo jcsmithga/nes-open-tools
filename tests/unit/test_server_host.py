@@ -201,6 +201,15 @@ def test_host_this_seed_again_makes_the_next_hosted_rom(client, seed_id, hosted)
     assert hosted_rom(client, again).seed_id == seed_id
 
 
+def test_host_lists_recent_seeds_to_host_with_one_click(client, seed_id):
+    """Every user's seeds, not only the host's own: this one was generated signed out."""
+    sign_in(client, "host")
+    page = client.get("/host").text
+    assert f'data-recent-seed="{seed_id}"' in page
+    assert f'<input type="hidden" name="seed" value="{seed_id}">' in page
+    assert hosted_rom(client, host_seed(client, seed_id)).seed_id == seed_id
+
+
 # -- The hosting page ---------------------------------------------------------------------
 
 

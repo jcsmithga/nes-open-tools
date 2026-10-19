@@ -39,6 +39,9 @@ TOKEN_BYTES = 16
 #: characters in a claim token: TOKEN_BYTES in unpadded base64url
 TOKEN_LENGTH = -(-TOKEN_BYTES * 4 // 3)
 
+#: how many seeds `/host` offers to host, newest first
+RECENT_SEEDS = 10
+
 #: HostingError reasons
 #: no hosted ROM has the token, or no seed the id
 UNKNOWN = "unknown"
@@ -311,6 +314,45 @@ def hosted_roms_for_host(db: Database, host_id: int) -> list[HostedRom]:
         ]
         loaded = [_load(conn, "hosted_roms.id = ?", (row_id,)) for row_id in ids]
     return [hosted for hosted in loaded if hosted is not None]
+
+
+@dataclass(frozen=True)
+class RecentSeed:
+    id: str
+    magic_words: tuple[str, ...]
+    par: int
+    created_at: str
+    #: who generated it, or None for a seed generated signed out
+    creator_name: str | None
+
+
+def recent_seeds(db: Database, limit: int = RECENT_SEEDS) -> list[RecentSeed]:
+    """The site's newest seeds that are not withdrawn, whoever generated them, newest first."""
+    with db.transaction() as conn:
+        rows = conn.execute(
+            """
+            SELECT seeds.id, seeds.manifest, seeds.created_at,
+                   coalesce(users.global_name, users.username) AS creator_name
+            FROM seeds LEFT JOIN users ON users.id = seeds.creator_id
+            WHERE seeds.withdrawn_at IS NULL
+            ORDER BY seeds.created_at DESC, seeds.rowid DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    seeds = []
+    for row in rows:
+        course = json.loads(row["manifest"])["course"]
+        seeds.append(
+            RecentSeed(
+                id=row["id"],
+                magic_words=tuple(course["magic_words"]),
+                par=sum(hole["par"] for hole in course["holes"]),
+                created_at=row["created_at"],
+                creator_name=row["creator_name"],
+            )
+        )
+    return seeds
 
 
 def _draw_public_id(conn: sqlite3.Connection) -> str:

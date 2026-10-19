@@ -27,6 +27,7 @@ from server.hosting import (
     load_by_token,
     load_hosted_rom,
     mark_downloaded,
+    recent_seeds,
     release_slot,
     save_hosted_options,
 )
@@ -259,3 +260,18 @@ def test_the_token_never_reaches_a_repr(db, hosted):
     assert loaded is not None
     assert hosted.token not in repr(loaded)
     assert hosted.token not in repr(hosted_roms_for_host(db, hosted.host_id))
+
+
+def test_recent_seeds_are_the_sites_newest_active_seeds(db, manifest, host):
+    other = user(db, "other")
+    older = store_seed(db, manifest, now="2026-10-20T10:00:00Z", creator_id=host)
+    newer = store_seed(db, manifest, now="2026-10-21T10:00:00Z", creator_id=other)
+    anonymous = store_seed(db, manifest, now="2026-10-21T11:00:00Z")
+    withdrawn = store_seed(db, manifest, now="2026-10-21T12:00:00Z")
+    withdraw_seed(db, withdrawn, host)
+    recent = recent_seeds(db)
+    assert [seed.id for seed in recent] == [anonymous, newer, older]
+    assert [seed.creator_name for seed in recent] == [None, "Other", "Host"]
+    assert recent[0].magic_words == manifest.course.magic_words
+    assert recent[0].par == manifest.course.par
+    assert [seed.id for seed in recent_seeds(db, limit=1)] == [anonymous]
