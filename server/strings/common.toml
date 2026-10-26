@@ -30,6 +30,10 @@ text = "NES Open Tournament Golf Randomizer"
 note = "nav link to ROM setup"
 text = "ROM Setup"
 
+[nav.rom_short]
+note = "nav.rom shortened, shown instead of it on a phone too narrow for the full row of nav links; as few characters as will still read as ROM setup; screen readers hear nav.rom"
+text = "Setup"
+
 [nav.generate]
 note = "nav link to the seed settings form"
 text = "Roll Seed"
