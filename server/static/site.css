@@ -40,8 +40,6 @@ header nav ul:not(:first-of-type) {
   margin-left: calc(var(--pico-nav-element-spacing-horizontal) * -1);
 }
 
-
-
 /* The Pages dropdown is the last of the links, near the right edge on a phone, so its
    menu opens leftward from the summary's right edge instead of running off the screen. */
 header nav details.dropdown > summary + ul {
