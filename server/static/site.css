@@ -475,6 +475,20 @@ table.nine {
   max-width: 100%;
 }
 
+/* keeps a cell's word together */
+table.nine th,
+table.nine td {
+  overflow-wrap: normal;
+}
+
+/* padding adjustment for phones */
+@media (max-width: 575px) {
+  table.nine th,
+  table.nine td {
+    padding-inline: calc(var(--pico-spacing) * 0.4);
+  }
+}
+
 table.nine col.hole,
 table.nine col.putts {
   width: 24%;
