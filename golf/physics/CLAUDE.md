@@ -24,18 +24,28 @@ uv run pytest --physics tests/physics
 ## The references
 
 - `rom_oracle.py`: one routine at a time. `RomShot` runs `CalcLaunchVector` alone;
-  `RomTerrainProbe` runs `ClassifyProbePosition` over a hole poked into RAM.
+  `RomTerrainProbe` runs `ClassifyProbePosition` over a hole poked into RAM;
+  `RomAimAtFlag` runs `CalcAimTowardFlag`.
 - `nes.py` and `rom_game.py`: the whole game. `NesMachine` emulates MMC1 banking, the
   controller and vblank (running the game's NMI handler), and `RomGameShot` plays a shot
   through the game's own `InitHole` and `ShotSetupSequence` by pressing buttons. Prefer
   this for anything that happens between frames of the physics; a routine-level oracle
-  misses code that runs elsewhere in the frame.
+  misses code that runs elsewhere in the frame. `green_view_sprites` runs the putting
+  setup the same way and returns the sprites the putting view shows.
+
+## The putting view
+
+`green_view.py` ports where the putting view puts the ball, the cup, the aim cursor and
+the meter's marker, and the aim every shot starts with (`docs/putting_view.md`). Its
+checks are `tests/physics/test_green_view_rom.py`, against the sprites the game itself
+leaves in RAM.
 
 ## Shared flights
 
 Apart from the references, `flights.py` is the one module here that is not a port. It is
 a faster way to run `shot.py`, and is checked against `simulate` rather than the ROM, by
-`tests/integration/test_flights_rom.py` (in the default run, as it takes seconds). It
+`tests/integration/test_flights_rom.py` (in the default run, as it takes seconds). It shares
+flights only between starts on whole pixels, and plays a start with fractions alone. It
 depends on knowing which parts of a frame read the ground and which registers the probe
 writes, so a change to `ShotInFlight` or `Ball.observe` that adds one must be mirrored
 there.

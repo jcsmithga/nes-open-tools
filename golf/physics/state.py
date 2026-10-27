@@ -75,6 +75,10 @@ class ShotInput:
     """Starting BallX, in pixels. The playfield is 176 wide; x >= 176 is out of bounds."""
     y: int = 0x300
     """Starting BallY, in pixels."""
+    x_fraction: int = 0
+    """Starting BallX's fraction ($AD), in 256ths of a pixel."""
+    y_fraction: int = 0
+    """Starting BallY's fraction ($B0)."""
     frames_to_impact: int = 0
     """
     Frames after launch before the golfer's swing animation (bank 8) reaches
@@ -83,6 +87,15 @@ class ShotInput:
     """
     scene_aim: int | None = None
     """`MaybeFineAimAnchor` ($BD): the aim the behind-the-golfer scene was built along. Defaults to `aim`."""
+
+    @property
+    def start_x(self) -> int:
+        """The starting BallX in `Ball`'s units: pixel, fraction and a zero low byte."""
+        return self.x << 16 | self.x_fraction << 8
+
+    @property
+    def start_y(self) -> int:
+        return self.y << 16 | self.y_fraction << 8
 
 
 @dataclass(frozen=True)

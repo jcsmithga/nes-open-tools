@@ -522,8 +522,9 @@ class Flights:
     def simulate(
         self, shot: ShotInput, ground: Ground, flag: Flag | None = None
     ) -> ShotResult:
-        launch_terrain = ground.probe(Ball(x=shot.x << 16, y=shot.y << 16))
-        if not shareable(shot, launch_terrain):
+        launch_terrain = ground.probe(Ball(x=shot.start_x, y=shot.start_y))
+        # A flight is moved between starts a whole pixel at a time.
+        if shot.x_fraction or shot.y_fraction or not shareable(shot, launch_terrain):
             return simulate(shot, ground, self.tables, flag=flag)
         rng_state = shot.rng_state if draws_at_launch(launch_terrain) else 0
         key = (replace(shot, x=0, y=0, rng_state=rng_state), launch_terrain)

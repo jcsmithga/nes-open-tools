@@ -49,6 +49,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [opponent_shots.md](opponent_shots.md) | How CPU opponents play: recorded shot lists replayed per hole, chosen by level and chance |
 | [wind.md](wind.md) | Wind anchors, per-swing speed, flight physics and the crosswind bug |
 | [shot_physics.md](shot_physics.md) | Ball physics from swing to rest: launch, wind, lift, curve, bounce and roll, and the Python model of it |
+| [putting_view.md](putting_view.md) | The putting view's sprites (ball, cup, aim cursor, meter marker), the aim every shot starts with, and Peach's panel |
 | [jp_putting_physics.md](jp_putting_physics.md) | Putting in Mario Open against NES Open: the same tables and rolling code, plus a doubled slope in the JP cup close-up |
 | [hole_difficulty.md](hole_difficulty.md) | Rating holes by expected strokes from the tee, solved over that model: how it was built, and every NES Open and Mario Open hole against par |
 

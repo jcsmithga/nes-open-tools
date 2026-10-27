@@ -105,17 +105,18 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 |---|---|---|---|
 | Hole and round flow | 13 | `$8490` `AdvanceHoleAndCheckRoundEnd`, `$868C` `IncrementStrokeCount` | |
 | Shot setup panels | 13 | `$877A` `ShotSetupSequence`; `$88C9` swing speed, `$8ADF` club, `$8BBD` spin; `$8A47` `AutoSelectClub` | `topspin.md` |
-| Aiming | 13 | `$8C77` `UpdateSetupAim`, `$BD57` `UpdateSwingAim` | |
-| Swing and meter | 13 | `$AA09` `SwingSequenceEntry`, `$A9A6` `ShotInitialization`, `$A8DD` `RenderSwingMeterMarkers` | `practice_swing.md` |
+| Aiming | 13 | `$8C77` `UpdateSetupAim`, `$BD57` `UpdateSwingAim`; every shot starts aimed at the flag by `$B9A7` (`CalcAimTowardFlag`, called at `$8289`; `ArctangentThresholdTable` `$BAA9`) | `putting_view.md` |
+| Swing and meter | 13 | `$AA09` `SwingSequenceEntry`, `$A9A6` `ShotInitialization`, `$A8DD` `RenderSwingMeterMarkers` (marker x `$D6 + $5D`; green view metasprites `$A96B`-`$A979`) | `practice_swing.md`, `putting_view.md` |
 | Ball physics | 13 | `$AD0A` `CalcLaunchVector`, `$B11F` `ProcessLanding`, `$B4FF` `ApplyWindEffect`, `$B451` `ApplyRollFriction`, `$B952` `ApplyLandingKick`, velocity helpers `$B6F0`-`$B893` | `shot_physics.md`, `green_slope_physics.md` |
 | Bunker lip rule (a sand shot put back in the sand) | 13 | `$B073`; armed at `$AA1E`, `BunkerFrameCount` (`$05A3`), `BunkerExitArmedFlag` (`$05A4`), sand snapshot `$059C`-`$05A2` (`$B0F4`), `MaybeBunkerExitClubThresholdTable` (`$B8AE`) | `shot_physics.md` |
 | Course (overhead) view | 13 | `$8DA6` `DrawCourseGameplayView`, `$8DCE` `LoadCourseViewTileset`, `$8FC2` `DrawBallSprites` | |
 | Green detail view | 13 | `$95A9` `DrawGreenDetailView`, `$95C6` `LoadGreenDetailViewTileset` | `green_shortcut.md` |
+| Putting view sprites: ball, cup, aim cursor | 13 | `$9164` `LD_9164_GreenView` (cursor at `$91DF`, radius by `PinDistance` `$057B`), `$9523` `LD_9523_GreenView` the screen position, `$8F36` the cup, `$870C` `CalcPinDistance` | `putting_view.md` |
 | Cup view, ball drop | 9 | `$8000` `LoadGreenViewTileset`, `$8050` `BallDropAnimationEntry`, `$81C4` `UpdateBallAtCup` | |
 | Behind-the-golfer scene | 9, 13, 15 | bank 9 `$8829` `BuildPerspectiveScene`; bank 13 `$BB6D` `UpdateBallInScene`; `$E9C8` `CollideBallWithScene` | `perspective_scene.md` |
 | HUD, distance readouts | 13 | `$A170` `ShowDistanceToPin`, `$A246` `UpdateShotDistanceReadout`; `CourseCodeFirstLetterTable` (`$9C47`) | `hud_course_abbrev.md` |
 | Ball lie popup | 13 | `$A5DE` `ShowBallLiePopup` | |
-| Peach (caddie) panel | 13 | `$BE0B` `DrawPeachPanel` | |
+| Peach (caddie) panel | 13 | `$BE0B` `DrawPeachPanel`; what the putt is for from `$BEE2`, lines at `$BE84`-`$BED9` | `putting_view.md` |
 | In-game (Select) menu | 13 | `$96B1` `RunInGameMenu`, `$9723` `ConfirmInGameMenuSelection`, `$98B7` `ResumePlayAfterMenu`; Select/Start splice `$89B0`/`$89E5` | `green_shortcut.md` |
 | Scorecard | 2 | `$AE76` `DrawScorecardScreen` | `scorecard.md`, `scorecard_qr.md` |
 | CPU opponents | 3 | far-called from bank 13 `$8142` to `$A869`; `...OpponentShotLists` | `opponent_shots.md` |

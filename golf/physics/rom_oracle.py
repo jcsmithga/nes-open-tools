@@ -17,7 +17,8 @@ tree probe itself is stubbed to report no tree, so shots on holes with trees are
 not covered yet (`docs/shot_physics.md`, Trees).
 
 `RomTerrainProbe` does the same for `ClassifyProbePosition` alone, with a hole
-loaded into RAM the way the game's loader leaves it.
+loaded into RAM the way the game's loader leaves it, and `RomAimAtFlag` for the
+aim at the flag every shot starts with.
 """
 
 from collections.abc import Callable
@@ -27,6 +28,7 @@ from py65.devices.mpu6502 import MPU
 from golf.core.packing import pack_attributes
 from golf.core.rom_reader import RomReader
 from golf.formats.hole_data import HoleData
+from golf.physics.nes import NesMachine
 from golf.physics.state import Ball, Ground, Lie, ShotInput, Slope, Terrain
 from golf.physics.tables import PHYSICS_BANK
 from golf.physics.terrain import (
@@ -53,6 +55,7 @@ SILENT = (
 # RAM the loop reads.
 BALL_X = 0xAC  # $AC-$AE
 BALL_Y = 0xAF  # $AF-$B2
+FLAG = 0xA7  # FlagX $A7/$A8, FlagY $A9/$AA
 HEIGHT = 0xB3  # $B3-$B6
 SHOT_ORIGIN = 0xB8  # $B8/$B9 x, $BA-$BC y
 AIMING = 0xB7
@@ -139,11 +142,11 @@ class RomShot:
 
     def _set_up(self, shot: ShotInput, hi_lo: int) -> None:
         m = self.memory
-        self._write(BALL_X, shot.x << 16, 3)
-        self._write(BALL_Y, shot.y << 16, 4)
+        self._write(BALL_X, shot.start_x, 3)
+        self._write(BALL_Y, shot.start_y, 4)
         # ShotSetupSequence: the shot's origin is where the ball starts.
         m[SHOT_ORIGIN : SHOT_ORIGIN + 5] = bytes(
-            [0, shot.x, 0, shot.y & 0xFF, shot.y >> 8]
+            [shot.x_fraction, shot.x, shot.y_fraction, shot.y & 0xFF, shot.y >> 8]
         )
         m[AIMING] = shot.aim
         m[CLUB] = shot.club
@@ -395,3 +398,28 @@ class RomTerrainProbe:
 
     def _read(self, address: int, length: int) -> int:
         return int.from_bytes(self.memory[address : address + length], "little")
+
+
+class RomAimAtFlag:
+    """`CalcAimTowardFlag` (bank 13) alone: the aim every shot starts with, at the flag."""
+
+    ROUTINE = 0xB9A7
+
+    def __init__(self, rom: RomReader):
+        self.machine = NesMachine(rom)
+
+    def aim(self, ball_x: int, ball_y: int, flag_x: int, flag_y: int) -> int:
+        """
+        The ball's x as pixel << 8 | fraction and its y as 16 bits of pixel then
+        the fraction; the flag's as `FlagX`/`FlagY`.
+        """
+        m = self.machine.memory
+        m[BALL_X + 1], m[BALL_X + 2] = ball_x & 0xFF, ball_x >> 8
+        m[BALL_Y + 1 : BALL_Y + 4] = bytes(
+            [ball_y & 0xFF, ball_y >> 8 & 0xFF, ball_y >> 16]
+        )
+        m[FLAG : FLAG + 4] = bytes(
+            [flag_x & 0xFF, flag_x >> 8, flag_y & 0xFF, flag_y >> 8]
+        )
+        self.machine.call(self.ROUTINE, bank=PHYSICS_BANK)
+        return self.machine.cpu.a

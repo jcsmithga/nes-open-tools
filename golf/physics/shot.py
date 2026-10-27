@@ -49,7 +49,7 @@ class ShotResult:
 
     @property
     def start(self) -> Point:
-        return Point(self.shot.x, self.shot.y)
+        return Point(self.shot.start_x / 0x10000, self.shot.start_y / 0x10000)
 
     @property
     def holed(self) -> bool:
@@ -145,7 +145,7 @@ class ShotInFlight:
         flag: Flag | None = None,
     ):
         if launch_terrain is None:
-            launch_terrain = ground.probe(Ball(x=shot.x << 16, y=shot.y << 16))
+            launch_terrain = ground.probe(Ball(x=shot.start_x, y=shot.start_y))
         self.shot = shot
         self.ground = ground
         self.tables = tables
@@ -155,8 +155,8 @@ class ShotInFlight:
             if flag is None
             else Cup(flag.x, flag.y, shot.aim, launch_terrain.lie == Lie.GREEN, tables)
         )
-        self.origin_x = shot.x << 8
-        self.origin_y = shot.y << 8
+        self.origin_x = shot.start_x >> 8
+        self.origin_y = shot.start_y >> 8
         self.scene_aim = shot.aim if shot.scene_aim is None else shot.scene_aim
         self.ball = launch(shot, launch_terrain, tables)
         # `ShotInitialization` zeroes it, and the launch counts one.

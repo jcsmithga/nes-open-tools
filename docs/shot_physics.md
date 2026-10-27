@@ -435,6 +435,8 @@ lands. So letting go of Up or Down just after the swing changes how the ball bit
 - `wind.py` gives the winds a hole and a shot can be dealt, with their probabilities
   ([seeded_wind.md](seeded_wind.md)).
 - `shot.py` runs the frame loop: the physics, the scene, then the view switch.
+- `green_view.py` is where the putting view draws the ball, the cup, the aim cursor and
+  the meter's marker, and the aim every shot starts with ([putting_view.md](putting_view.md)).
 - `flights.py` is not a port: it plays a shot once over uniform ground and finishes it
   from other starts, giving exactly what `shot.py` gives, much faster. Its docstring says
   which parts of a frame read the ground.
@@ -457,6 +459,8 @@ Three references check it (`tests/physics/`, run with `--physics`):
   with the setup panels, the swing, the scene builder, the views and the trees all running
   as they do on a console. `test_game_rom.py` replays random shots from random lies on
   random holes in the model, and every register must agree after every frame.
+  `green_view_sprites` there runs the putting setup alone and returns the sprites it
+  leaves in RAM, for `test_green_view_rom.py`.
 - `test_scene_rom.py` calls the projection, the distance and the scene collision directly,
   with thousands of random inputs, over scenes the game's builder made.
 

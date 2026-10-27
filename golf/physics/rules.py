@@ -47,14 +47,14 @@ def play_on(shot: ShotInput, ball: Ball) -> NextShot:
       played from.
     - Anywhere else, where it stopped.
 
-    `shot`'s start is taken to be a whole pixel, as `ShotInput` places it.
+    Out of bounds keeps `shot`'s start fractions, and `LD_86C8` sets the low byte.
     """
     if ball.holed:
         return NextShot(ball.x, ball.y, ball.bunker_depth, 1, True)
     if ball.lie == Lie.WATER:
         return NextShot(ball.drop_x, ball.drop_y, ball.bunker_depth, 2, False)
     if ball.lie == Lie.OUT_OF_BOUNDS:
-        x = shot.x << 16 | RESTORED_FRACTION
-        y = shot.y << 16 | RESTORED_FRACTION
+        x = shot.start_x | RESTORED_FRACTION
+        y = shot.start_y | RESTORED_FRACTION
         return NextShot(x, y, shot.bunker_depth, 2, False)
     return NextShot(ball.x, ball.y, ball.bunker_depth, 1, False)

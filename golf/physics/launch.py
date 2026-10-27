@@ -54,7 +54,7 @@ def hi_lo_offset(shot: ShotInput, tables: PhysicsTables) -> int:
 
 def launch(shot: ShotInput, terrain: Terrain, tables: PhysicsTables) -> Ball:
     """The ball as the first frame of the shot leaves it."""
-    ball = Ball(x=shot.x << 16, y=shot.y << 16, rng_state=shot.rng_state)
+    ball = Ball(x=shot.start_x, y=shot.start_y, rng_state=shot.rng_state)
     ball.observe(terrain)
     ball.launch_lie = terrain.lie
     ball.bunker_depth = shot.bunker_depth

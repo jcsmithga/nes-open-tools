@@ -16,6 +16,7 @@ from the same inputs and be compared frame by frame.
 from dataclasses import dataclass, field
 
 from golf.core.rom_reader import RomReader
+from golf.formats.hole_data import HoleData
 from golf.physics.nes import (
     BUTTON_A,
     BUTTON_DOWN,
@@ -42,6 +43,7 @@ from golf.physics.rom_oracle import (
 )
 from golf.physics.shot import Flag
 from golf.physics.state import Ball, ShotInput, Spin
+from golf.physics.terrain import GREEN_BUFFER_OPERANDS, GREEN_SIZE
 
 PHYSICS_BANK = 13
 
@@ -79,6 +81,18 @@ SWING_IMPACT_FRAME = 0x058F
 FINE_AIM_ANCHOR = 0xBD
 FLAG = 0xA7  # $A7/$A8 x, $A9/$AA y
 PUTTING = 0xD4  # MaybeIsPuttingFlag: the ball was on the green at setup
+#: The hole's green and pin, as `LoadHoleParameters` ($DAB4) writes them.
+GREEN_X = 0xA3
+GREEN_Y = 0xA4
+GREEN_FLAG_X = 0xA5
+GREEN_FLAG_Y = 0xA6
+#: `MaybePlayerHoleStatus`: 2 once a shot has come to rest on the green ($82E2).
+HOLE_STATUS = 0x0111
+ON_THE_GREEN = 2
+#: The meter's fixed tick (`$A975`), in the sprite page from the swing's first frame.
+METER_TICK_TILE = 0x3C
+#: OAM y at and below which a sprite is off the bottom of the screen.
+HIDDEN_Y = 0xEF
 
 #: `CurrCourse` numbers, in the ROM's order.
 COURSES = {"japan": 0, "us": 1, "uk": 2}
@@ -152,8 +166,6 @@ class RomGameShot:
         self,
         shot: ShotInput,
         swing: Swing = DEFAULT_SWING,
-        x_fraction: int = 0,
-        y_fraction: int = 0,
         follow_through: bool = False,
     ) -> RomShotRecord:
         """
@@ -164,6 +176,7 @@ class RomGameShot:
         """
         machine = self.machine
         m = machine.memory
+        x_fraction, y_fraction = shot.x_fraction, shot.y_fraction
         m[BALL_X : BALL_X + 3] = bytes([0, x_fraction, shot.x])
         m[BALL_Y : BALL_Y + 4] = bytes([0, y_fraction, shot.y & 0xFF, shot.y >> 8])
         m[RNG_STATE], m[RNG_STATE + 1] = shot.rng_state & 0xFF, shot.rng_state >> 8
@@ -294,7 +307,74 @@ class RomGameShot:
             bunker_depth=shot.bunker_depth,
             x=shot.x,
             y=shot.y,
+            x_fraction=x_fraction,
+            y_fraction=y_fraction,
             frames_to_impact=state["impact"],
             scene_aim=state["scene_aim"],
         )
         return record
+
+
+def green_view_sprites(
+    rom: RomReader, hole: HoleData, pin: int, ball: tuple[int, int], aim: int
+) -> list[tuple[int, int, int, int]]:
+    """
+    The visible sprites, as OAM entries (y, tile, attributes, x), of the putting
+    view on the first frame of the swing, with the ball at `ball` (x as pixel <<
+    8 | fraction, y as 16 bits of pixel then the fraction) aimed at `aim`.
+
+    `hole` need not be one the ROM holds: after `InitHole` has set up US hole 1,
+    its green, green position and pin are written over what it left, which is
+    everything the green view's sprites read. The sprites are the page at RAM
+    $0200 the NMI's DMA would copy; this harness never turns rendering on.
+    """
+    machine = NesMachine(rom)
+    m = machine.memory
+    m[PPU_CTRL_CACHE] = 0x80
+    m[GOLF_GAME_MODE] = 0
+    m[CURRENT_COURSE] = COURSES["us"]
+    m[HOLE_NUMBER] = 0
+    machine.call(INIT_HOLE)
+
+    flag = Flag.for_pin(hole, pin)
+    position = hole.metadata["flag_positions"][pin]
+    m[GREEN_X], m[GREEN_Y] = hole.green_x, hole.green_y
+    m[GREEN_FLAG_X], m[GREEN_FLAG_Y] = position["x_offset"], position["y_offset"]
+    m[FLAG : FLAG + 4] = bytes([flag.x & 0xFF, flag.x >> 8, flag.y & 0xFF, flag.y >> 8])
+    low, high = (rom.read_fixed(address, 1)[0] for address in GREEN_BUFFER_OPERANDS)
+    buffer = high << 8 | low
+    m[buffer : buffer + GREEN_SIZE * GREEN_SIZE] = bytes(
+        tile for row in hole.greens for tile in row
+    )
+
+    (x, x_fraction), (y, y_fraction) = divmod(ball[0], 0x100), divmod(ball[1], 0x100)
+    m[CURRENT_PLAYER] = 0
+    m[SRAM_DEFAULTS : SRAM_DEFAULTS + 3] = b"\xff\xff\xff"
+    m[PLAY_LOOP_ACTIVE] = 0xFF
+    m[HOLE_STATUS] = ON_THE_GREEN
+    m[PLAYER_LIE : PLAYER_LIE + 12 : 2] = bytes(
+        [x_fraction, x, y_fraction, y & 0xFF, y >> 8, 0]
+    )
+    m[BALL_X : BALL_X + 3] = bytes([0, x_fraction, x])
+    m[BALL_Y : BALL_Y + 4] = bytes([0, y_fraction, y & 0xFF, y >> 8])
+    m[AIMING] = aim
+
+    def on_frame(frame: int) -> None:
+        # The setup panels: tap A every few frames, as `RomGameShot` does.
+        machine.buttons = BUTTON_A if frame % 6 == 0 else 0
+
+    def swing_ready() -> bool:
+        page = m[0x200:0x300]
+        return any(
+            page[i + 1] == METER_TICK_TILE and page[i] < HIDDEN_Y
+            for i in range(0, 256, 4)
+        )
+
+    machine.on_frame = on_frame
+    machine.call(SHOT_SETUP_SEQUENCE, bank=PHYSICS_BANK, stop=swing_ready)
+    page = m[0x200:0x300]
+    return [
+        (page[i], page[i + 1], page[i + 2], page[i + 3])
+        for i in range(0, 256, 4)
+        if page[i] < HIDDEN_Y
+    ]
