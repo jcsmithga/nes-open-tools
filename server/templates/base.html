@@ -44,7 +44,11 @@
         </ul>
         <ul>
           <li>
-            <a href="/rom"{{ current(page=="rom") }}>{{ t("nav.rom") }}</a>
+            {# the short label shows instead on a phone too narrow for the full row of links;
+               screen readers always hear the full one #}
+            <a href="/rom"{{ current(page=="rom") }}>
+              <span class="nav-full">{{ t("nav.rom") }}</span><span class="nav-short" aria-hidden="true">{{ t("nav.rom_short") }}</span>
+            </a>
           </li>
           <li>
             <a href="/generate"

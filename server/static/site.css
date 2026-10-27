@@ -40,6 +40,52 @@ header nav ul:not(:first-of-type) {
   margin-left: calc(var(--pico-nav-element-spacing-horizontal) * -1);
 }
 
+/* The Pages dropdown is the last of the links, near the right edge on a phone, so its
+   menu opens leftward from the summary's right edge instead of running off the screen. */
+header nav details.dropdown > summary + ul {
+  right: 0;
+  left: auto;
+}
+
+/* A nav label with a short form shows only its full one (`nav-full`) until the screen is
+   too narrow for the whole row of links, and then only its short one (`nav-short`). The
+   short one is hidden from screen readers and the full one only visually, so they always
+   hear the full label. */
+header nav .nav-short {
+  display: none;
+}
+
+/* Phones: tighter spacing between the nav links keeps them on one line. */
+@media (max-width: 575px) {
+  header nav {
+    --pico-nav-element-spacing-horizontal: 0.25rem;
+  }
+}
+
+/* Below this width the full labels no longer fit in Inter, which is about as wide as
+   iOS's system font; Android's Roboto and Windows' Segoe UI run about 20px narrower.
+   The short labels then free room, and the links spread across the full width
+   of the screen to use it. */
+@media (max-width: 393px) {
+  header nav ul:not(:first-of-type, .account) {
+    flex-grow: 1;
+    justify-content: space-between;
+  }
+
+  header nav .nav-short {
+    display: inline;
+  }
+
+  header nav .nav-full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 /* Sign-in state at the end of the nav. The sign-out button is a form so it can POST, sized
    to sit in line with the links. */
 header nav ul.account form {
