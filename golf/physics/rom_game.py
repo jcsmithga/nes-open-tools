@@ -146,12 +146,19 @@ class RomShotRecord:
 
 
 class RomGameShot:
-    def __init__(self, rom: RomReader, course: str, hole: int, rng_state: int = 0):
+    def __init__(
+        self,
+        rom: RomReader,
+        course: str,
+        hole: int,
+        rng_state: int = 0,
+        ppu: bool = False,
+    ):
         """
         Load the hole with `InitHole`, which draws the pin and the wind anchors
-        from `rng_state`.
+        from `rng_state`. With `ppu` the machine keeps the PPU's memory.
         """
-        self.machine = NesMachine(rom)
+        self.machine = NesMachine(rom, ppu=ppu)
         m = self.machine.memory
         m[PPU_CTRL_CACHE] = 0x80  # NMI on, so frames come from vblank
         m[GOLF_GAME_MODE] = 0

@@ -31,7 +31,11 @@ uv run pytest --physics tests/physics
   through the game's own `InitHole` and `ShotSetupSequence` by pressing buttons. Prefer
   this for anything that happens between frames of the physics; a routine-level oracle
   misses code that runs elsewhere in the frame. `green_view_sprites` runs the putting
-  setup the same way and returns the sprites the putting view shows.
+  setup the same way and returns the sprites the putting view shows. With `ppu=True`
+  (`NesMachine`, `RomGameShot`) the machine also keeps the PPU's memory (`ppu.py`), so
+  `golf/rendering/nes_screen.py` can draw what the game put on screen; it is checked by
+  `tests/unit/test_ppu.py`, `tests/unit/test_nes_screen.py` and
+  `tests/integration/test_nes_screen_rom.py`.
 
 ## The putting view
 
@@ -42,13 +46,13 @@ leaves in RAM.
 
 ## Shared flights
 
-Apart from the references, `flights.py` is the one module here that is not a port. It is
-a faster way to run `shot.py`, and is checked against `simulate` rather than the ROM, by
-`tests/integration/test_flights_rom.py` (in the default run, as it takes seconds). It shares
-flights only between starts on whole pixels, and plays a start with fractions alone. It
-depends on knowing which parts of a frame read the ground and which registers the probe
-writes, so a change to `ShotInFlight` or `Ball.observe` that adds one must be mirrored
-there.
+Apart from the references and `ppu.py`, `flights.py` is the one module here that is not a
+port. It is a faster way to run `shot.py`, and is checked against `simulate` rather than
+the ROM, by `tests/integration/test_flights_rom.py` (in the default run, as it takes
+seconds). It shares flights only between starts on whole pixels, and plays a start with
+fractions alone. It depends on knowing which parts of a frame read the ground and which
+registers the probe writes, so a change to `ShotInFlight` or `Ball.observe` that adds one
+must be mirrored there.
 
 ## Rules for new code here
 

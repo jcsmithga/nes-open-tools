@@ -17,7 +17,9 @@ Rather than stub each of those, this machine gives the game what it expects:
 - **The PPU**, only as far as `$2002` reads: vblank set, so the few polling
   loops that read it fall through.
 
-Everything else is plain RAM. There is no picture.
+Everything else is plain RAM. There is no picture, unless the machine is made
+with `ppu=True`: then it keeps the PPU's memory (`golf.physics.ppu`), and
+`golf.rendering.nes_screen` can draw the screen from it.
 """
 
 from collections.abc import Callable
@@ -25,6 +27,7 @@ from collections.abc import Callable
 from py65.devices.mpu6502 import MPU
 
 from golf.core.rom_reader import RomReader
+from golf.physics.ppu import PpuState
 
 PRG_BANK_SIZE = 0x4000
 FIXED_BANK = 15
@@ -35,6 +38,8 @@ VBLANK_FLAG = 0x13
 CURRENT_BANK = 0x5C
 
 PPU_STATUS = 0x2002
+PPU_DATA = 0x2007
+OAM_DMA = 0x4014
 CONTROLLER_PORT = 0x4016
 SECOND_CONTROLLER_PORT = 0x4017
 
@@ -80,8 +85,35 @@ class Bus:
             self.memory[address] = value
 
 
+class PpuBus(Bus):
+    """`Bus`, with the PPU's registers and the sprite DMA wired to `PpuState`."""
+
+    def __init__(self, machine: "NesMachine", ppu: PpuState):
+        super().__init__(machine)
+        self.ppu = ppu
+
+    def __getitem__(self, address: int) -> int:
+        if 0x2000 <= address < 0x4000:
+            ppu = self.ppu
+            register = address & 7
+            if register == 2:
+                return ppu.read_status(super().__getitem__(PPU_STATUS))
+            if register == 7:
+                return ppu.read_data()
+            return 0
+        return super().__getitem__(address)
+
+    def __setitem__(self, address: int, value: int) -> None:
+        if 0x2000 <= address < 0x4000:
+            self.ppu.write(address & 7, value)
+        elif address == OAM_DMA:
+            self.ppu.dma(bytes(self.memory[value << 8 : (value << 8) + 0x100]))
+        else:
+            super().__setitem__(address, value)
+
+
 class NesMachine:
-    def __init__(self, rom: RomReader):
+    def __init__(self, rom: RomReader, ppu: bool = False):
         self.banks = [
             rom.read_prg(bank * PRG_BANK_SIZE, PRG_BANK_SIZE)
             for bank in range(rom.prg_banks)
@@ -90,7 +122,9 @@ class NesMachine:
         self.memory[0xC000:0x10000] = self.banks[FIXED_BANK]
         self.bank = -1
         self.select_bank(0)
-        self.cpu = MPU(memory=Bus(self))
+        #: The PPU's memory, kept only when asked for.
+        self.ppu = PpuState() if ppu else None
+        self.cpu = MPU(memory=Bus(self) if self.ppu is None else PpuBus(self, self.ppu))
         self.cpu.sp = 0xFF
 
         self._shift = 0
@@ -123,6 +157,8 @@ class NesMachine:
         self._shift |= (value & 1) << self._shift_count
         self._shift_count += 1
         if self._shift_count == 5:
+            if address < 0xA000 and self.ppu is not None:
+                self.ppu.mirroring = self._shift & 3
             if address >= 0xE000:
                 self.select_bank(self._shift & 0x0F)
             self._shift = self._shift_count = 0

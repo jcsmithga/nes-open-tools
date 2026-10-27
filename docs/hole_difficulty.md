@@ -193,8 +193,10 @@ builds the scene and runs the cup, and the NMI reads the pad. It gives the game:
   instruction. `rom_game.py` uses them to set the aim before the scene is built, snapshot
   the ball once per pass of the swing loop, capture the scene, and stop.
 
-Not emulated: the picture (PPU writes land in plain memory; `$2002` reads alternate the
-vblank bit so polling loops end), sprite 0, IRQs, the second pad. Nothing in a shot is
+Not emulated: the picture (PPU writes land in plain memory, unless the machine is made
+with `ppu=True`, which keeps the PPU's memory for `golf/rendering/nes_screen.py` to draw;
+`$2002` reads alternate the vblank bit so polling loops end), sprite 0, IRQs, the second
+pad. Nothing in a shot is
 known to depend on them. That is what the Mesen spot checks in phase 1 are for.
 
 `golf/physics/rom_game.py` (`RomGameShot`) uses the machine to play one shot:
