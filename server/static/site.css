@@ -302,6 +302,40 @@ table.scorecard col.nine-end {
   border-inline-end: 2px solid var(--pico-muted-color);
 }
 
+/* The first column, the Hole and Par labels and the players' names, stays in view while
+   the holes scroll sideways under it on a narrow screen. It sits above the score marks,
+   which are positioned, and its edge is an inset shadow because a collapsed table's
+   borders stay where the column started rather than moving with a sticky cell. */
+table.scorecard tr > :first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  box-shadow: inset -1px 0 var(--pico-muted-border-color);
+}
+
+/* The lines between the rows are the table's too, and it paints them above the column's
+   cells, so the Out and In rules would show as dashes where they cross those lines under
+   the column. Each body cell covers the line below it with a strip of the same color. */
+table.scorecard tbody tr > :first-child::after {
+  position: absolute;
+  right: 0;
+  bottom: calc(var(--pico-border-width) * -1);
+  left: 0;
+  height: var(--pico-border-width);
+  background-color: var(--pico-table-border-color);
+  content: "";
+}
+
+/* Pico's stripe is translucent, which would let the scores show through the column as
+   they pass under it, so a striped row's cell lays its stripe over the card's color. */
+table.scorecard.striped tbody tr:nth-child(odd) > :first-child {
+  background-color: var(--pico-card-background-color);
+  background-image: linear-gradient(
+    var(--pico-table-row-stripped-background-color),
+    var(--pico-table-row-stripped-background-color)
+  );
+}
+
 table.seed-details th {
   width: 40%;
 }
