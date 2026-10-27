@@ -408,6 +408,11 @@ details.download-settings[data-over-max="false"] .download-over-max {
   display: none;
 }
 
+/* fixes highlighted text padding issues */
+details.download-settings > summary {
+  line-height: var(--pico-line-height);
+}
+
 /* Seed page download form. download.js sets data-state: checking, missing, ready,
    building, done, error or unavailable. */
 article.download form > :last-child {
