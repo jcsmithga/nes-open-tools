@@ -150,7 +150,13 @@ def test_it_stacks_with_menu_trim(sky):
 def test_the_checked_in_image_is_mario_opens_sky(sky, tmp_path):
     assert read_sky_image(MARIO_OPEN_SKY_IMAGE) == sky
     write_sky_image(sky, tmp_path / "sky.png")
-    assert (tmp_path / "sky.png").read_bytes() == MARIO_OPEN_SKY_IMAGE.read_bytes()
+    # pixels, not file bytes: the PNG's deflate stream depends on Pillow's zlib build
+    with (
+        Image.open(tmp_path / "sky.png") as fresh,
+        Image.open(MARIO_OPEN_SKY_IMAGE) as checked_in,
+    ):
+        assert (fresh.mode, fresh.size) == (checked_in.mode, checked_in.size)
+        assert fresh.tobytes() == checked_in.tobytes()
 
 
 def recipe_build(params, base_dir):

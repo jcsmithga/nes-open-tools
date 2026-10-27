@@ -135,22 +135,22 @@ def test_claiming_again_finds_the_same_slot(db, hosted):
 
 def test_a_full_hosted_rom_refuses_a_third_player(db, hosted):
     for name in ("alice", "bob"):
-        claim_slot(db, hosted.token, user(db, name))
+        claim_slot(db, hosted.token, user(db, name), now=NOW)
     with pytest.raises(HostingError) as full:
-        claim_slot(db, hosted.token, user(db, "carol"))
+        claim_slot(db, hosted.token, user(db, "carol"), now=NOW)
     assert full.value.reason == FULL
 
 
 def test_releasing_player_one_lets_the_next_claim_take_it(db, host, hosted):
     alice, bob, carol = user(db, "alice"), user(db, "bob"), user(db, "carol")
-    claim_slot(db, hosted.token, alice)
-    claim_slot(db, hosted.token, bob)
+    claim_slot(db, hosted.token, alice, now=NOW)
+    claim_slot(db, hosted.token, bob, now=NOW)
     release_slot(db, hosted.public_id, 0, host, now=NOW)
     released = load_hosted_rom(db, hosted.public_id)
     assert released is not None
     assert released.claimants == (None, bob)
     assert released.slots[0].claimed_at is None
-    assert claim_slot(db, hosted.token, carol) == Claim(0, new=True)
+    assert claim_slot(db, hosted.token, carol, now=NOW) == Claim(0, new=True)
     assert actions(db)[-1] == (
         host,
         audit.RELEASE,
@@ -162,7 +162,7 @@ def test_releasing_player_one_lets_the_next_claim_take_it(db, host, hosted):
 
 def test_a_download_is_recorded_and_a_release_clears_it(db, host, hosted):
     alice = user(db, "alice")
-    claim_slot(db, hosted.token, alice)
+    claim_slot(db, hosted.token, alice, now=NOW)
     mark_downloaded(db, hosted.public_id, host, (alice, None), now=NOW)
     downloaded = load_hosted_rom(db, hosted.public_id)
     assert downloaded is not None
@@ -176,7 +176,7 @@ def test_a_download_is_recorded_and_a_release_clears_it(db, host, hosted):
     )
 
     # releasing the free slot changes no claim, but shows the claim code again
-    release_slot(db, hosted.public_id, 1, host)
+    release_slot(db, hosted.public_id, 1, host, now=NOW)
     released = load_hosted_rom(db, hosted.public_id)
     assert released is not None
     assert released.downloaded_at is None
@@ -185,13 +185,13 @@ def test_a_download_is_recorded_and_a_release_clears_it(db, host, hosted):
 
 def test_two_hosted_roms_of_one_seed_are_kept_apart(db, seed_id, host, hosted):
     alice, bob = user(db, "alice"), user(db, "bob")
-    second = create_hosted_rom(db, seed_id, host)
+    second = create_hosted_rom(db, seed_id, host, now=NOW)
     assert second.token != hosted.token
     assert second.public_id != hosted.public_id
-    claim_slot(db, hosted.token, alice)
-    assert claim_slot(db, second.token, bob) == Claim(0, new=True)
+    claim_slot(db, hosted.token, alice, now=NOW)
+    assert claim_slot(db, second.token, bob, now=NOW) == Claim(0, new=True)
     # a player can be in more than one pair
-    assert claim_slot(db, second.token, alice) == Claim(1, new=True)
+    assert claim_slot(db, second.token, alice, now=NOW) == Claim(1, new=True)
     first = load_hosted_rom(db, hosted.public_id)
     assert first is not None and first.claimants == (alice, None)
 
@@ -247,15 +247,15 @@ def test_the_options_are_stored_on_the_hosted_rom(db, hosted):
 
 def test_releasing_refuses_a_missing_hosted_rom_or_slot(db, host, hosted):
     with pytest.raises(KeyError):
-        release_slot(db, "0000000000", 0, host)
+        release_slot(db, "0000000000", 0, host, now=NOW)
     with pytest.raises(ValueError):
-        release_slot(db, hosted.public_id, 2, host)
+        release_slot(db, hosted.public_id, 2, host, now=NOW)
     with pytest.raises(KeyError):
         mark_downloaded(db, "0000000000", host, (None, None))
 
 
 def test_the_token_never_reaches_a_repr(db, hosted):
-    claim_slot(db, hosted.token, user(db, "alice"))
+    claim_slot(db, hosted.token, user(db, "alice"), now=NOW)
     loaded = load_hosted_rom(db, hosted.public_id)
     assert loaded is not None
     assert hosted.token not in repr(loaded)
