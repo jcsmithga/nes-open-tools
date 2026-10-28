@@ -30,7 +30,7 @@ text = "Generate a randomized game."
 [home.step_generate.body]
 note = "card 2 of 3, body; generate a seed, link /generate; share the seed page"
 text = """Head on over to
-<a href="/generate">Generate Game</a>.  This screen shows a variety of options.  When you're
+<a href="/generate">Roll Seed</a>.  This screen shows a variety of options.  When you're
 satisfied, hit the Randomize! button and it'll take you to the "seed page"."""
 
 [home.step_play.header]
