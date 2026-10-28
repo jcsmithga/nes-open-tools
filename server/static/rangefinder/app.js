@@ -123,7 +123,8 @@ async function initialize() {
         return;
       }
       if (
-        event.target.closest("input, select, textarea, button") ||
+        (event.target.closest("input, select, textarea, button") &&
+          !event.target.closest(".rangefinder-hole-nav")) ||
         event.altKey ||
         event.ctrlKey ||
         event.metaKey

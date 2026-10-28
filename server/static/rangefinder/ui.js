@@ -1,5 +1,5 @@
 export class UIController {
-  constructor(metadata, state, renderer, text, locationChanged = () => {}) {
+  constructor(metadata, state, renderer, text, locationChanged = () => {}) { 
     this.metadata = metadata;
     this.state = state;
     this.renderer = renderer;
@@ -12,6 +12,8 @@ export class UIController {
     this.holeWindArrow = document.getElementById("hole-wind-arrow");
     this.holeWindText = document.getElementById("hole-wind-text");
     this.distanceDisplay = document.getElementById("distance-display");
+    this.previousHoleButton = document.getElementById("previous-hole");
+    this.nextHoleButton = document.getElementById("next-hole");
     this.viewer = document.querySelector(".rangefinder-viewer");
     this.holeImage = document.getElementById("hole-image");
     this.overlayCanvas = document.getElementById("overlay-canvas");
@@ -60,6 +62,8 @@ export class UIController {
       this.state.clearPoints();
       this.updateDisplay();
     });
+    this.previousHoleButton.addEventListener("click", () => this.previousHole());
+    this.nextHoleButton.addEventListener("click", () => this.nextHole());
     this.holeImage.addEventListener("load", () => {
       this.resizeCanvas();
       this.viewer.scrollTop = this.viewer.scrollHeight;
@@ -85,6 +89,7 @@ export class UIController {
       this.currentHole.distance,
     );
     this.showWind(hole.wind);
+    this.updateHoleButtons();
     this.updateDisplay();
     this.locationChanged(courseId, holeNumber);
     return true;
@@ -141,6 +146,14 @@ export class UIController {
     );
     document.getElementById("zoom-in").disabled = this.zoomLevel >= this.maxZoom;
     document.getElementById("zoom-out").disabled = this.zoomLevel <= this.minZoom;
+  }
+
+  // The first hole has no previous one and the last no next, as previousHole and nextHole
+  // stop there.
+  updateHoleButtons() {
+    const holes = this.metadata.courses[this.state.courseId].holes;
+    this.previousHoleButton.disabled = this.state.holeNumber <= 1;
+    this.nextHoleButton.disabled = this.state.holeNumber >= holes.length;
   }
 
   previousHole() {

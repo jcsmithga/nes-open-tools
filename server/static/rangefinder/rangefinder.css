@@ -52,6 +52,15 @@
   width: auto;
 }
 
+.rangefinder-hole-nav {
+  display: flex;
+  gap: inherit;
+}
+
+.rangefinder-hole-nav > button {
+  margin-bottom: 0;
+}
+
 #zoom-display {
   display: inline-flex;
   min-width: 4.5rem;
@@ -172,6 +181,15 @@
     width: 100%;
   }
 
+  /* the previous and next hole buttons take a line of their own, half of it each */
+  .rangefinder-hole-nav {
+    flex-basis: 100%;
+  }
+
+  .rangefinder-hole-nav > button {
+    flex: 1;
+  }
+  
   #distance-display {
     width: 100%;
     margin-inline-start: 0;
