@@ -122,6 +122,8 @@ async function initialize() {
         if (event.key === "ArrowRight") greenModal.nextFlag();
         return;
       }
+      // A focused control keeps its own keys, except the hole buttons: after tapping one,
+      // the arrow keys carry on moving between holes.
       if (
         (event.target.closest("input, select, textarea, button") &&
           !event.target.closest(".rangefinder-hole-nav")) ||

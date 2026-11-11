@@ -57,13 +57,15 @@
         <button id="clear-waypoints"
                 type="button"
                 class="secondary">{{ t("rangefinder.clear") }}</button>
-                <div class="rangefinder-hole-nav">
-        <button id="previous-hole"
-                type="button"
-                class="secondary">{{ t("rangefinder.previous_hole") }}</button>
-        <button id="next-hole"
-                type="button"
-                class="secondary">{{ t("rangefinder.next_hole") }}</button>
+        <div class="rangefinder-hole-nav">
+          <button id="previous-hole"
+                  type="button"
+                  class="secondary"
+                  aria-label="{{ t_plain('rangefinder.previous_hole') }}">‹</button>
+          <button id="next-hole"
+                  type="button"
+                  class="secondary"
+                  aria-label="{{ t_plain('rangefinder.next_hole') }}">›</button>
         </div>
         <strong id="distance-display"></strong>
       </div>

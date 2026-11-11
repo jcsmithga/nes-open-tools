@@ -87,6 +87,21 @@ def test_rangefinder_measures_zooms_switches_holes_and_opens_green(rangefinder_a
             )
             page.keyboard.press("Escape")
             assert not page.locator("#green-modal").evaluate("dialog => dialog.open")
+
+            # The hole buttons step through the holes, and the arrow keys still work
+            # while one has focus; each is disabled at its end of the course.
+            page.click("#next-hole")
+            assert "/images/japan/hole_03.png" in (image.get_attribute("src") or "")
+            page.keyboard.press("ArrowRight")
+            assert "/images/japan/hole_04.png" in (image.get_attribute("src") or "")
+            page.click("#previous-hole")
+            assert "/images/japan/hole_03.png" in (image.get_attribute("src") or "")
+            page.select_option("#hole-select", "1")
+            assert page.locator("#previous-hole").is_disabled()
+            assert page.locator("#next-hole").is_enabled()
+            page.select_option("#hole-select", "18")
+            assert page.locator("#next-hole").is_disabled()
+            assert page.locator("#previous-hole").is_enabled()
         finally:
             browser.close()
 

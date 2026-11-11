@@ -1,5 +1,5 @@
 export class UIController {
-  constructor(metadata, state, renderer, text, locationChanged = () => {}) { 
+  constructor(metadata, state, renderer, text, locationChanged = () => {}) {
     this.metadata = metadata;
     this.state = state;
     this.renderer = renderer;
