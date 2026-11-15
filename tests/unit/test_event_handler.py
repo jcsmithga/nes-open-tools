@@ -7,7 +7,15 @@ import pytest
 
 from editor.controllers.editor_state import EditorState, GridMode
 from editor.controllers.event_handler import EventHandler
-from editor.core.constants import STATUS_HEIGHT
+from editor.controllers.highlight_state import HighlightState
+from editor.core.constants import CANVAS_OFFSET_X, CANVAS_OFFSET_Y, STATUS_HEIGHT
+from editor.tools.carpet_paint_tool import CarpetPaintTool
+from editor.tools.cycle_tool import CycleTool
+from editor.tools.feature_brush_tool import (
+    BoundaryBrushTool,
+    FeatureBrushTool,
+    GreenBrushTool,
+)
 from editor.tools.forest_fill_tool import ForestFillTool
 from editor.tools.paint_tool import PaintTool
 from editor.tools.tool_manager import ToolManager
@@ -359,3 +367,81 @@ def test_update_screen_size_reaches_tool_context(event_handler):
     assert (
         event_handler.tool_context.view_state.canvas_rect.bottom == 900 - STATUS_HEIGHT
     )
+
+
+def click_canvas(event_handler, button=1):
+    """A press, drag and release on the canvas, with no picker taking the events."""
+    for picker in (
+        event_handler.terrain_picker,
+        event_handler.greens_picker,
+        event_handler.tool_picker,
+    ):
+        picker.handle_event.return_value = False
+    pos = (CANVAS_OFFSET_X + 40, CANVAS_OFFSET_Y + 40)
+    moved = (pos[0] + 40, pos[1] + 40)
+    event_handler.handle_events(
+        [
+            pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pos, button=button),
+            pygame.event.Event(pygame.MOUSEMOTION, pos=moved, rel=(40, 40), buttons=()),
+            pygame.event.Event(pygame.MOUSEBUTTONUP, pos=moved, button=button),
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    ("tool", "mode"),
+    [
+        (PaintTool, "greens"),
+        (CarpetPaintTool, "greens"),
+        (CycleTool, "greens"),
+        (FeatureBrushTool, "terrain"),
+        (BoundaryBrushTool, "terrain"),
+        (GreenBrushTool, "greens"),
+    ],
+)
+def test_with_no_hole_open_the_canvas_tools_get_no_mouse_events(
+    mock_pygame, event_handler, tool_manager, editor_state, tool, mode
+):
+    event_handler.hole_data.__init__()
+    editor_state.mode = mode
+    event_handler.tool_context.highlight_state = HighlightState()
+    tool_manager.hotkey_map.clear()  # the fixture's Paint Tool has P already
+    tool_manager.register_tool("under_test", tool())
+    tool_manager.set_active_tool("under_test", event_handler.tool_context)
+
+    click_canvas(event_handler)
+    click_canvas(event_handler, button=3)
+
+    assert event_handler.hole_data.terrain == []
+    assert event_handler.hole_data.greens == []
+
+
+def test_with_no_hole_open_a_tool_with_an_overlay_still_gets_the_mouse(
+    mock_pygame, event_handler, tool_manager
+):
+    event_handler.hole_data.__init__()
+    tool = Mock(
+        spec=[
+            "handle_mouse_down",
+            "handle_mouse_up",
+            "handle_mouse_motion",
+            "render_overlay",
+            "on_activated",
+            "get_hotkey",
+        ]
+    )
+    tool.get_hotkey.return_value = None
+    for handler in (
+        tool.handle_mouse_down,
+        tool.handle_mouse_up,
+        tool.handle_mouse_motion,
+    ):
+        handler.return_value = Mock(message=None)
+    tool_manager.register_tool("dialog", tool)
+    tool_manager.set_active_tool("dialog", event_handler.tool_context)
+
+    click_canvas(event_handler)
+
+    tool.handle_mouse_down.assert_called_once()
+    tool.handle_mouse_motion.assert_called_once()
+    tool.handle_mouse_up.assert_called_once()

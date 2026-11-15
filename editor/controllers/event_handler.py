@@ -193,8 +193,7 @@ class EventHandler:
                     self.state.canvas_offset_y += 20
                     continue
 
-                # Delegate to active tool
-                tool = self.tool_manager.get_active_tool()
+                tool = self._canvas_tool()
                 if tool:
                     result = tool.handle_mouse_down(
                         event.pos, event.button, modifiers, self.tool_context
@@ -202,8 +201,7 @@ class EventHandler:
                     self._process_tool_result(result)
 
             elif event.type == pygame.MOUSEBUTTONUP and not picker_handled:
-                # Delegate to active tool
-                tool = self.tool_manager.get_active_tool()
+                tool = self._canvas_tool()
                 if tool:
                     result = tool.handle_mouse_up(
                         event.pos, event.button, self.tool_context
@@ -211,8 +209,7 @@ class EventHandler:
                     self._process_tool_result(result)
 
             elif event.type == pygame.MOUSEMOTION:
-                # Delegate to active tool
-                tool = self.tool_manager.get_active_tool()
+                tool = self._canvas_tool()
                 if tool:
                     result = tool.handle_mouse_motion(event.pos, self.tool_context)
                     self._process_tool_result(result)
@@ -226,6 +223,19 @@ class EventHandler:
                     self.on_load_file(event.file)
 
         return True
+
+    def _canvas_tool(self):
+        """The active tool, to be given a mouse event, or None.
+
+        With no hole open the canvas has nothing to edit, so only a tool with an
+        overlay of its own (the metadata dialog) gets the mouse.
+        """
+        tool = self.tool_manager.get_active_tool()
+        if tool is None:
+            return None
+        if self.hole_data.terrain or hasattr(tool, "render_overlay"):
+            return tool
+        return None
 
     def _process_tool_result(self, result):
         """Process a tool result and trigger necessary callbacks."""

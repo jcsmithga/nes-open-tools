@@ -124,7 +124,9 @@ def handle_mouse_down(self, pos, button, modifiers, context):
 
 Every tool implements the Tool protocol in `tools/base_tool.py`: `handle_mouse_down`,
 `handle_mouse_up`, `handle_mouse_motion`, `handle_key_down`, `handle_key_up`,
-`on_activated`, `on_deactivated`, `reset`, `get_hotkey`. Copy the closest existing tool
+`on_activated`, `on_deactivated`, `reset`, `get_hotkey`. With no hole open, `EventHandler`
+gives mouse events only to a tool with a `render_overlay()`, so the others can assume the
+hole has terrain and greens when they get a click. Copy the closest existing tool
 of the same kind rather than starting from scratch:
 
 | Kind | Behavior | Example to copy |
