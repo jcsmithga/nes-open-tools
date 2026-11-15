@@ -284,10 +284,9 @@ def test_a_withdrawn_versions_content_cannot_come_back(published):
 
 
 def test_the_checks_a_build_makes_refuse_the_hole(published, monkeypatch):
-    def refuse(holes):
-        raise ValueError("no pattern for this row")
-
-    monkeypatch.setattr(derive_module, "compress_holes", refuse)
+    monkeypatch.setattr(
+        derive_module, "compression_problem", lambda hole: "no pattern for this row"
+    )
     hole = short_hole()
     hole.metadata["distance"] = 200
     with pytest.raises(DeriveError, match="does not compress: no pattern"):
@@ -345,39 +344,13 @@ def test_hidden_rows_and_their_palettes_are_not_published(workspace):
     assert content_hash(again) == content_hash(seen)
 
 
-@pytest.mark.parametrize(
-    ("change", "message"),
-    [
-        (lambda hole: hole.metadata.update(scroll_limit=4), "scroll_limit must be 1"),
-        (lambda hole: hole.metadata.update(par=6), "par must be one of"),
-        (lambda hole: hole.metadata.update(par=4.0), "par must be one of"),
-        (lambda hole: hole.metadata.update(scroll_limit=1.0), "scroll_limit must be 1"),
-        (lambda hole: hole.metadata.update(tee={"x": 5, "y": 240}), "tee must be"),
-        (lambda hole: hole.metadata.update(tee={"x": 176, "y": 20}), "tee must be"),
-        (lambda hole: hole.metadata.update(tee={"x": 5}), "tee must be"),
-        (lambda hole: hole.terrain[3].__setitem__(3, 0x100), r"terrain cells .* \$100"),
-        (lambda hole: hole.terrain[3].pop(), "terrain must be 22 cells wide"),
-        (lambda hole: hole.attributes[3].__setitem__(3, 4), "attributes cells"),
-        (lambda hole: hole.greens.pop(), "greens must be 24 cells wide and 24 rows"),
-        (lambda hole: hole.greens[2].__setitem__(2, -1), "greens cells"),
-        (lambda hole: hole.metadata.update(handicap=256), "handicap must be 1-18"),
-        (lambda hole: hole.metadata.update(distance=1000), "distance must be 1-999"),
-        (lambda hole: hole.metadata.update(distance="190"), "distance must be 1-999"),
-        (lambda hole: setattr(hole, "green_x", 256), "green's position"),
-        (lambda hole: hole.metadata["flag_positions"].pop(), "flag_positions"),
-        (
-            lambda hole: hole.metadata["flag_positions"][0].update(x_offset=300),
-            "flag_positions",
-        ),
-        (lambda hole: hole.attributes.pop(), "need 15 attribute rows"),
-        (lambda hole: setattr(hole, "terrain_height", 29), "even and 30-60"),
-    ],
-)
-def test_a_hole_no_seed_could_build_is_refused(published, change, message):
+def test_a_hole_no_seed_could_build_is_refused(published):
+    """Every problem is named; the rules themselves are tests/unit/test_hole_check.py's."""
     hole = short_hole()
     hole.metadata["distance"] = 200
-    change(hole)
-    with pytest.raises(DeriveError, match=message):
+    hole.metadata["par"] = 6
+    hole.metadata["handicap"] = 0
+    with pytest.raises(DeriveError, match="par must be one of .*; handicap must be"):
         derive_again(published, hole, "jdharms/other")
 
 

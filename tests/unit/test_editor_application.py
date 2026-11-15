@@ -6,8 +6,9 @@ from unittest.mock import patch
 import pygame
 import pytest
 
-from editor.application import EditorApplication, hole_shape_problem
+from editor.application import EditorApplication
 from editor.ui.confirm_dialog import UnsavedChoice
+from golf.formats.hole_check import editable_problem
 from tests.synthetic_holes import synthetic_hole
 
 
@@ -90,8 +91,8 @@ def test_a_missing_file_does_not_crash(app, tmp_path):
 def test_a_hole_of_the_wrong_shape_is_refused():
     hole = synthetic_hole()
     hole.greens = hole.greens[:-1]
-    assert (hole_shape_problem(hole) or "").startswith("greens")
-    assert hole_shape_problem(synthetic_hole()) is None
+    assert (editable_problem(hole) or "").startswith("greens")
+    assert editable_problem(synthetic_hole()) is None
 
 
 def modify(app):

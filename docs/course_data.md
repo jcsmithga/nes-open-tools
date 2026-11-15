@@ -31,6 +31,11 @@ the ROM, see `golf/core/compression.md` and the `nes-open-golf-rom-layout` skill
 - Attributes (palette indices for 2x2 supertiles)
 - Metadata (par, distance, tee/green positions, flag positions, scroll_limit)
 
+`golf/formats/hole_check.py` checks a hole: `editable_problem` says whether the editor
+can open it, and `hole_problems` and `compression_problem` whether a ROM can hold it,
+after `hidden_rows_trimmed` drops the rows the editor hid. Publishing a derived or
+community hole runs them.
+
 ## Terrain height
 
 Terrain uses a dual-height system:

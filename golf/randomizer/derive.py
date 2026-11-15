@@ -12,9 +12,12 @@ import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from golf.core.palettes import GREENS_WIDTH, TERRAIN_WIDTH
-from golf.core.patches.course import compress_holes
-from golf.formats.hole_data import MAX_TERRAIN_ROWS, MIN_TERRAIN_ROWS, HoleData
+from golf.formats.hole_check import (
+    compression_problem,
+    hidden_rows_trimmed,
+    hole_problems,
+)
+from golf.formats.hole_data import HoleData
 
 from . import delta as hole_delta
 from .catalog import (
@@ -32,7 +35,6 @@ from .catalog import (
     content_hash,
 )
 from .curation import CurationSnapshot, HoleCuration
-from .manifest import HOLE_PARS
 from .transforms import TRANSFORMS, TransformError, parse_transform
 from .twins import suggested_label
 
@@ -47,14 +49,6 @@ TRANSFORM_SEEDS = (0, 1, 2)
 #: is then mostly the base hole displaced
 WARN_SHARE = 0.35
 REFUSE_SHARE = 0.60
-
-MIN_ROWS = MIN_TERRAIN_ROWS
-MAX_ROWS = MAX_TERRAIN_ROWS
-ATTRIBUTES_WIDTH = 11
-GREENS_HEIGHT = 24
-ATTRIBUTE_PALETTES = range(4)
-TILES = range(0x100)
-PINS = 4
 
 
 class DeriveError(CatalogError):
@@ -131,130 +125,23 @@ def delta_file(hole_id: HoleId) -> str:
 
 
 def visible(hole: HoleData) -> tuple[HoleData, tuple[str, ...]]:
-    """`hole` as it is published: with the rows the editor hid, and their palettes, gone.
-
-    The editor removes rows softly, keeping the terrain and attribute rows below the
-    visible height so they can be restored. Terrain past the height never reaches a ROM,
-    but every attribute row does, so the hidden ones are dropped here.
-    """
-    canonical = canonical_dict(hole)
-    notes = []
-    wanted = (hole.terrain_height + 1) // 2
-    rows = canonical["attributes"]["rows"]
-    if len(rows) > wanted:
-        notes.append(
-            f"dropped {len(rows) - wanted} attribute rows below the visible "
-            f"{hole.terrain_height} terrain rows"
-        )
-        canonical["attributes"] = {
-            **canonical["attributes"],
-            "height": wanted,
-            "rows": rows[:wanted],
-        }
-    return HoleData.from_dict(canonical), tuple(notes)
-
-
-def _is_int(value: object, low: int, high: int) -> bool:
-    return (
-        isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
-    )
-
-
-def _grid_problems(
-    name: str, grid: list, width: int, height: int, values: range
-) -> list[str]:
-    if len(grid) != height or any(len(row) != width for row in grid):
-        return [f"{name} must be {width} cells wide and {height} rows tall"]
-    bad = sorted({cell for row in grid for cell in row if cell not in values})
-    if bad:
-        return [
-            f"{name} cells must be {values.start}-{values.stop - 1}, got "
-            + ", ".join(
-                f"${cell:X}" if isinstance(cell, int) else repr(cell) for cell in bad
-            )
-        ]
-    return []
+    """`hole` as it is published: its canonical form, without the rows the editor hid
+    (`hidden_rows_trimmed`)."""
+    trimmed, notes = hidden_rows_trimmed(hole)
+    return HoleData.from_dict(canonical_dict(trimmed)), notes
 
 
 def check_hole(hole: HoleData) -> None:
-    """Refuse a hole no seed could be built with. Raises DeriveError.
+    """Refuse a hole no seed could be built with (`golf/formats/hole_check.py`).
 
-    Every value `CoursePatch` writes is checked against what its table entry holds, and
-    the hole is then compressed, as a build would compress it.
+    Raises DeriveError.
     """
-    problems = []
-    metadata = hole.metadata
-    height = hole.terrain_height
-    if not isinstance(height, int) or height % 2 or not MIN_ROWS <= height <= MAX_ROWS:
-        raise DeriveError(
-            f"terrain height must be even and {MIN_ROWS}-{MAX_ROWS} rows, got {height}"
-        )
-    limit = metadata.get("scroll_limit")
-    if not _is_int(limit, (height - 28) // 2, (height - 28) // 2):
-        problems.append(
-            f"scroll_limit must be {(height - 28) // 2} for {height} rows, got {limit}"
-        )
-    if len(hole.attributes) != (height + 1) // 2:
-        problems.append(
-            f"{height} terrain rows need {(height + 1) // 2} attribute rows, got "
-            f"{len(hole.attributes)}"
-        )
-    else:
-        problems += _grid_problems(
-            "attributes",
-            hole.attributes,
-            ATTRIBUTES_WIDTH,
-            (height + 1) // 2,
-            ATTRIBUTE_PALETTES,
-        )
-    problems += _grid_problems(
-        "terrain", hole.terrain[:height], TERRAIN_WIDTH, height, TILES
-    )
-    problems += _grid_problems(
-        "greens", hole.greens, GREENS_WIDTH, GREENS_HEIGHT, TILES
-    )
-    if not _is_int(metadata.get("par"), min(HOLE_PARS), max(HOLE_PARS)):
-        problems.append(
-            f"par must be one of {list(HOLE_PARS)}, got {metadata.get('par')!r}"
-        )
-    for name, low, high in (("distance", 1, 999), ("handicap", 1, 18)):
-        if not _is_int(metadata.get(name), low, high):
-            problems.append(f"{name} must be {low}-{high}, got {metadata.get(name)!r}")
-    if not (_is_int(hole.green_x, 0, 0xFF) and _is_int(hole.green_y, 0, 0xFF)):
-        problems.append(
-            f"the green's position must be bytes, got {hole.green_x!r}, {hole.green_y!r}"
-        )
-    tee = metadata.get("tee")
-    if not (
-        isinstance(tee, dict)
-        and set(tee) == {"x", "y"}
-        and _is_int(tee["x"], 0, TERRAIN_WIDTH * 8 - 1)
-        and _is_int(tee["y"], 0, height * 8 - 1)
-    ):
-        problems.append(
-            f"the tee must be an x and y inside the hole's {TERRAIN_WIDTH * 8} x "
-            f"{height * 8} pixels, got {tee!r}"
-        )
-    flags = metadata.get("flag_positions")
-    if not (
-        isinstance(flags, list)
-        and len(flags) == PINS
-        and all(
-            isinstance(flag, dict)
-            and set(flag) == {"x_offset", "y_offset"}
-            and all(_is_int(value, 0, 0xFF) for value in flag.values())
-            for flag in flags
-        )
-    ):
-        problems.append(
-            f"flag_positions must be {PINS} pins with byte x_offset and y_offset"
-        )
+    problems = hole_problems(hole)
     if problems:
         raise DeriveError("; ".join(problems))
-    try:
-        compress_holes([hole])
-    except Exception as problem:
-        raise DeriveError(f"the hole does not compress: {problem}") from None
+    problem = compression_problem(hole)
+    if problem:
+        raise DeriveError(f"the hole does not compress: {problem}")
 
 
 def transform_problems(hole: HoleData) -> list[str]:

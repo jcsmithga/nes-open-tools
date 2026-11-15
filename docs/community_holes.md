@@ -62,8 +62,8 @@ Publishing a hole:
 
 1. Drops the attribute rows the editor hid below the visible terrain, as `golf-derive`
    does; they would otherwise reach the ROM.
-2. Refuses a hole no seed could be built with (`check_hole` in
-   `golf/randomizer/derive.py`) or that a transform cannot run on.
+2. Refuses a hole no seed could be built with (`golf/formats/hole_check.py`, as
+   `golf-derive` does) or that a transform cannot run on.
 3. Skips a hole whose content matches its lineage's newest version, and refuses one
    identical to another lineage's hole.
 4. Otherwise makes the lineage's next version: `community/<owner>/<slug>.json`, or

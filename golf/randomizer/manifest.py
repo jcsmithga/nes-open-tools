@@ -27,6 +27,7 @@ from golf.core.patches.sram_defaults import BAG_SIZE, Club, magic_bytes, parse_c
 from golf.core.patches.wind_anchors import DIRECTIONS as WIND_DIRECTIONS
 from golf.core.patches.wind_anchors import SPEEDS as WIND_SPEEDS
 from golf.core.rng import predict_hole
+from golf.formats.hole_data import HOLE_PARS
 
 from .catalog import (
     COMMUNITY,
@@ -56,7 +57,6 @@ INCLUDABLE = (DERIVED, COMMUNITY)
 DEFAULT_MERCY_POINT = 9
 #: the tap-in records the hole as one stroke past the mercy point, in a byte
 MERCY_POINTS = range(1, 255)
-HOLE_PARS = (3, 4, 5)
 NINE = 9
 #: the rule that caps the expert holes on each nine, and its cap on a default course
 EXPERT_CAP = "expert_cap"

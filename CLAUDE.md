@@ -51,7 +51,8 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
     physics and the difficulty solver can run under PyPy
   - `golf/core/patches/` - ROM patches (`ROMPatch`, `BytePatch`, `CompositePatch`), and
     `PatchStack` for building a ROM from an ordered list of them (`docs/patch_stack.md`)
-  - `formats/` - hole data model and JSON serialization (see `docs/course_data.md`)
+  - `formats/` - hole data model and JSON serialization (see `docs/course_data.md`), and
+    `hole_check.py`, whether the editor can open a hole and whether a ROM can hold it
   - `algorithms/` - hole-editing algorithms shared by the editor and the randomizer:
     terrain features (fairways, bunkers, water), the hazard shapes cut from them, the
     out-of-bounds line, a green's fringe, fitting border tiles to a painted shape

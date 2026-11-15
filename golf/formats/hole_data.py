@@ -17,6 +17,12 @@ MIN_TERRAIN_ROWS = 30
 #: the most terrain rows a hole has: the tallest Mario Open hole, and what the
 #: wram_expansion patch every written course gets sizes its buffers for
 MAX_TERRAIN_ROWS = 60
+#: the pars a hole can have
+HOLE_PARS = (3, 4, 5)
+#: palette columns in an attribute row: one per 2x2 supertile of the 22-tile terrain
+ATTRIBUTES_WIDTH = 11
+#: the pin positions every hole has, one per round of a tournament
+PINS = 4
 
 
 class HoleData:

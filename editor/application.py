@@ -11,6 +11,7 @@ import pygame
 from pygame import Rect
 
 from golf.algorithms.forest_fill import ForestFiller
+from golf.formats.hole_check import editable_problem
 from golf.formats.hole_data import HoleData
 
 from .controllers.editor_state import EditorState, GridMode
@@ -22,7 +23,6 @@ from .core.constants import (
     COLOR_BG,
     COLOR_STATUS,
     COLOR_TEXT,
-    GREENS_HEIGHT,
     GREENS_WIDTH,
     PICKER_WIDTH,
     STATUS_HEIGHT,
@@ -780,7 +780,7 @@ class EditorApplication:
                 data = json.load(f)
             # Parse into a scratch hole first: the editor's components all hold
             # self.hole_data, so it is only replaced once the file is known good
-            problem = hole_shape_problem(HoleData.from_dict(data))
+            problem = editable_problem(HoleData.from_dict(data))
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
             data, problem = None, f"{type(e).__name__}: {e}"
         if data is None or problem:
@@ -794,20 +794,3 @@ class EditorApplication:
         self.state.undo_manager.set_initial_state(self.hole_data)
         self.state.tool_message = None
         return True
-
-
-def hole_shape_problem(hole: HoleData) -> str | None:
-    """Why a parsed hole has a shape the editor can't edit, or None if it can."""
-    if any(len(row) != TERRAIN_WIDTH for row in hole.terrain):
-        return f"terrain rows must be {TERRAIN_WIDTH} tiles wide"
-    if not 0 < hole.terrain_height <= len(hole.terrain):
-        return "terrain height doesn't match its rows"
-    if len(hole.attributes) < (hole.terrain_height + 1) // 2 or any(
-        len(row) < (TERRAIN_WIDTH + 1) // 2 for row in hole.attributes
-    ):
-        return "attributes don't cover the terrain"
-    if len(hole.greens) != GREENS_HEIGHT or any(
-        len(row) != GREENS_WIDTH for row in hole.greens
-    ):
-        return f"greens must be {GREENS_WIDTH}x{GREENS_HEIGHT} tiles"
-    return None
