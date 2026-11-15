@@ -17,6 +17,9 @@ from .editor_state import EditorState
 #: the keys that show each flag position, in order
 FLAG_KEYS = (pygame.K_F1, pygame.K_F2, pygame.K_F3, pygame.K_F4)
 
+#: the keys that select palettes 1-3, in order
+PALETTE_KEYS = (pygame.K_1, pygame.K_2, pygame.K_3)
+
 
 class EventHandler:
     """Handles all user input events."""
@@ -36,11 +39,13 @@ class EventHandler:
         on_load: Callable[[], None],
         on_load_file: Callable[[str], None],
         on_save: Callable[[], None],
-        on_mode_change: Callable[[], None],
+        on_toggle_mode: Callable[[], None],
         on_select_flag: Callable[[int], None],
+        on_set_palette: Callable[[int], None],
         on_resize: Callable[[int, int], None],
         on_tool_change: Callable[[], None],
         on_create_stamp: Callable[[], None] | None = None,
+        on_quit: Callable[[], bool] | None = None,
     ):
         """
         Initialize event handler.
@@ -58,10 +63,12 @@ class EventHandler:
             on_load: Callback for load action
             on_load_file: Callback for loading a specific file (drag-and-drop)
             on_save: Callback for save action
-            on_mode_change: Callback when mode changes
+            on_toggle_mode: Callback to switch between terrain and greens mode
             on_select_flag: Callback to select a flag position by index (0-3)
+            on_set_palette: Callback to select a terrain palette (1-3)
             on_resize: Callback for window resize (width, height)
             on_create_stamp: Callback for creating stamp from selection
+            on_quit: Callback asked before quitting; returns False to stay open
         """
         self.state = state
         self.hole_data = hole_data
@@ -76,9 +83,11 @@ class EventHandler:
         self.on_load = on_load
         self.on_load_file = on_load_file
         self.on_save = on_save
-        self.on_mode_change = on_mode_change
+        self.on_toggle_mode = on_toggle_mode
         self.on_create_stamp = on_create_stamp
+        self.on_quit = on_quit
         self.on_select_flag = on_select_flag
+        self.on_set_palette = on_set_palette
         self.on_resize = on_resize
         self.on_tool_change = on_tool_change
 
@@ -114,7 +123,9 @@ class EventHandler:
         """
         for event in events:
             if event.type == pygame.QUIT:
-                return False
+                if self.on_quit is None or self.on_quit():
+                    return False
+                continue
 
             if event.type == pygame.KEYDOWN:
                 # Let active tool handle key events first (for tool-specific shortcuts)
@@ -220,19 +231,11 @@ class EventHandler:
         if event.key == pygame.K_g:
             self.state.cycle_grid_mode()
 
-        elif event.key == pygame.K_1:
-            self.state.selected_palette = 1
-        elif event.key == pygame.K_2:
-            self.state.selected_palette = 2
-        elif event.key == pygame.K_3:
-            self.state.selected_palette = 3
+        elif event.key in PALETTE_KEYS:
+            self.on_set_palette(PALETTE_KEYS.index(event.key) + 1)
 
         elif event.key == pygame.K_TAB:
-            # Cycle modes (terrain <-> greens)
-            modes = ["terrain", "greens"]
-            idx = modes.index(self.state.mode)
-            self.state.set_mode(modes[(idx + 1) % len(modes)])
-            self.on_mode_change()
+            self.on_toggle_mode()
 
         elif event.key == pygame.K_s:
             mods = pygame.key.get_mods()

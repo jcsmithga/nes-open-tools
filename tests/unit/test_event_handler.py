@@ -60,7 +60,6 @@ def event_handler(editor_state, hole_data, tool_manager):
     mock_on_load = Mock()
     mock_on_load_file = Mock()
     mock_on_save = Mock()
-    mock_on_mode_change = Mock()
     mock_on_select_flag = Mock()
     mock_on_resize = Mock()
     mock_on_tool_change = Mock()
@@ -79,8 +78,9 @@ def event_handler(editor_state, hole_data, tool_manager):
         on_load=mock_on_load,
         on_load_file=mock_on_load_file,
         on_save=mock_on_save,
-        on_mode_change=mock_on_mode_change,
+        on_toggle_mode=Mock(),
         on_select_flag=mock_on_select_flag,
+        on_set_palette=Mock(),
         on_resize=mock_on_resize,
         on_tool_change=mock_on_tool_change,
     )
@@ -106,6 +106,19 @@ class MockEvent:
         self.type = type
         for k, v in kwargs.items():
             setattr(self, k, v)
+
+
+@pytest.mark.parametrize(
+    "key, palette", [(pygame.K_1, 1), (pygame.K_2, 2), (pygame.K_3, 3)]
+)
+def test_number_keys_select_the_palette_through_the_application(
+    mock_pygame, event_handler, key, palette
+):
+    """The 1-3 keys go through on_set_palette, so the toolbar buttons follow."""
+    with patch("pygame.key.get_mods", return_value=0):
+        event_handler.handle_events([MockEvent(pygame.KEYDOWN, key=key)])
+
+    event_handler.on_set_palette.assert_called_once_with(palette)
 
 
 class TestToolHotkeys:
@@ -274,6 +287,26 @@ class TestEventHandlerDelegation:
         event = MockEvent(pygame.QUIT)
         running = event_handler.handle_events([event])
         assert running is False, "QUIT event should return False to stop application"
+
+
+def test_tab_asks_the_application_to_switch_modes(mock_pygame, event_handler):
+    """Tab goes through on_toggle_mode, so the application can swap mode-bound tools."""
+    with patch("pygame.key.get_mods", return_value=0):
+        event_handler.handle_events([MockEvent(pygame.KEYDOWN, key=pygame.K_TAB)])
+
+    event_handler.on_toggle_mode.assert_called_once_with()
+    assert event_handler.state.mode == "terrain"
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+def test_quit_asks_on_quit_first(mock_pygame, event_handler, allowed):
+    """on_quit can keep the editor open, e.g. when the user cancels over unsaved work."""
+    event_handler.on_quit = Mock(return_value=allowed)
+
+    running = event_handler.handle_events([MockEvent(pygame.QUIT)])
+
+    assert running is not allowed
+    event_handler.on_quit.assert_called_once_with()
 
 
 def test_update_screen_size_reaches_tool_context(event_handler):

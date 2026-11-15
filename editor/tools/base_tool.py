@@ -87,6 +87,7 @@ class ToolContext:
         stamp_library=None,
         on_revert_to_previous_tool=None,
         on_select_flag=None,
+        on_set_palette=None,
     ):
         self.hole_data = hole_data
         self.state = state
@@ -100,6 +101,7 @@ class ToolContext:
         self.stamp_library = stamp_library
         self._on_revert_to_previous_tool = on_revert_to_previous_tool
         self._on_select_flag = on_select_flag
+        self._on_set_palette = on_set_palette
 
     @property
     def view_state(self) -> "ViewState":
@@ -135,6 +137,17 @@ class ToolContext:
         """
         if self._on_select_flag:
             self._on_select_flag(index)
+
+    def select_palette(self, palette: int):
+        """Request that the application change the selected palette (1-3).
+
+        Used by tools (like EyedropperTool) so the toolbar's palette buttons
+        follow the selection.
+        """
+        if self._on_set_palette:
+            self._on_set_palette(palette)
+        else:
+            self.state.selected_palette = palette
 
 
 class ToolResult:

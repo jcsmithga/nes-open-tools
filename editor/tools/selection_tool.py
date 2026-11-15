@@ -24,13 +24,16 @@ class SelectionToolState:
         self.is_selecting = False
         self.selection_start: tuple[int, int] | None = None  # (row, col)
         self.selection_end: tuple[int, int] | None = None  # (row, col)
+        #: the editor mode ("terrain" or "greens") the selection was made in
+        self.selection_mode: str | None = None
         self.paste_mode = False
 
-    def start_selection(self, tile_pos: tuple[int, int]):
-        """Start a new selection."""
+    def start_selection(self, tile_pos: tuple[int, int], mode: str):
+        """Start a new selection in an editor mode."""
         self.is_selecting = True
         self.selection_start = tile_pos
         self.selection_end = tile_pos
+        self.selection_mode = mode
 
     def update_selection(self, tile_pos: tuple[int, int]):
         """Update selection end point."""
@@ -65,6 +68,7 @@ class SelectionToolState:
         """Clear the selection."""
         self.selection_start = None
         self.selection_end = None
+        self.selection_mode = None
         self.is_selecting = False
 
     def reset(self):
@@ -100,7 +104,7 @@ class SelectionTool:
             context.highlight_state.selection_rect = None
             context.highlight_state.selection_mode = None
 
-            self.state.start_selection(tile)
+            self.state.start_selection(tile, context.state.mode)
             return ToolResult.handled()
 
         return ToolResult.not_handled()
@@ -207,9 +211,19 @@ class SelectionTool:
         """Return 'S' key for Selection tool."""
         return pygame.K_s
 
+    def _selection_rect(self, context: ToolContext) -> tuple[int, int, int, int] | None:
+        """The selection, if it was made in the mode now shown.
+
+        A selection stays put across a Tab to the other mode, where it isn't drawn,
+        so acting on it there would edit tiles the user can't see selected.
+        """
+        if self.state.selection_mode != context.state.mode:
+            return None
+        return self.state.get_selection_rect()
+
     def _copy_selection(self, context: ToolContext) -> ToolResult:
         """Copy selected region to clipboard."""
-        sel_rect = self.state.get_selection_rect()
+        sel_rect = self._selection_rect(context)
 
         if not sel_rect:
             return ToolResult(is_handled=True, message="No selection to copy")
@@ -241,7 +255,7 @@ class SelectionTool:
             return copy_result
 
         # Then, delete (fill with default tile)
-        sel_rect = self.state.get_selection_rect()
+        sel_rect = self._selection_rect(context)
         if not sel_rect:
             return ToolResult(is_handled=True, message="No selection to cut")
 
@@ -271,7 +285,7 @@ class SelectionTool:
 
     def _delete_selection(self, context: ToolContext) -> ToolResult:
         """Fill selected region with default tile."""
-        sel_rect = self.state.get_selection_rect()
+        sel_rect = self._selection_rect(context)
 
         if not sel_rect:
             return ToolResult(is_handled=True, message="No selection to delete")
@@ -336,6 +350,13 @@ class SelectionTool:
             self.state.paste_mode = False
             context.state.paste_preview_active = False
             return ToolResult(is_handled=True, message="Clipboard is empty")
+
+        # Paste mode survives a Tab to the other mode; never paste across modes
+        if context.state.clipboard.mode != context.state.mode:
+            return ToolResult(
+                is_handled=True,
+                message=f"Cannot paste {context.state.clipboard.mode} clipboard into {context.state.mode} mode",
+            )
 
         tile = view_state.screen_to_tile(pos)
         if not tile:

@@ -28,7 +28,11 @@ class HoleData:
         self.modified: bool = False
 
     def load(self, path: str | os.PathLike[str]):
-        """Load hole data from JSON file."""
+        """Load hole data from JSON file.
+
+        Raises OSError, ValueError (bad JSON or hex), KeyError or TypeError for a file
+        that is not a hole, leaving this hole as it was.
+        """
         with open(path) as f:
             data = json.load(f)
         self.load_dict(data)
@@ -42,31 +46,18 @@ class HoleData:
         return hole
 
     def load_dict(self, data: dict[str, Any]):
-        """Load hole data from the dict a hole file holds."""
-        # Parse terrain using shared hex utility
-        self.terrain = []
-        for row_str in data["terrain"]["rows"]:
-            row = hex_utils.parse_hex_row(row_str)
-            self.terrain.append(row)
+        """Load hole data from the dict a hole file holds.
 
-        # Set terrain height from JSON
-        self.terrain_height = data["terrain"]["height"]
-
-        # Parse attributes
-        self.attributes = data["attributes"]["rows"]
-
-        # Parse greens using shared hex utility
-        self.greens = []
-        for row_str in data["greens"]["rows"]:
-            row = hex_utils.parse_hex_row(row_str)
-            self.greens.append(row)
-
-        # Green position
-        self.green_x = data["green"]["x"]
-        self.green_y = data["green"]["y"]
-
-        # Store other metadata
-        self.metadata = {
+        Everything is parsed before anything is assigned, so a dict that fails to
+        parse leaves this hole unchanged.
+        """
+        terrain = [hex_utils.parse_hex_row(row) for row in data["terrain"]["rows"]]
+        terrain_height = data["terrain"]["height"]
+        attributes = data["attributes"]["rows"]
+        greens = [hex_utils.parse_hex_row(row) for row in data["greens"]["rows"]]
+        green_x = data["green"]["x"]
+        green_y = data["green"]["y"]
+        metadata = {
             "hole": data.get("hole", 1),
             "par": data.get("par", 4),
             "distance": data.get("distance", 400),
@@ -78,8 +69,15 @@ class HoleData:
         }
         # Who made the hole, for a community hole's credit; it never reaches the ROM
         if "author" in data:
-            self.metadata["author"] = data["author"]
+            metadata["author"] = data["author"]
 
+        self.terrain = terrain
+        self.terrain_height = terrain_height
+        self.attributes = attributes
+        self.greens = greens
+        self.green_x = green_x
+        self.green_y = green_y
+        self.metadata = metadata
         self.modified = False
 
     def save(self, path: str | None = None):

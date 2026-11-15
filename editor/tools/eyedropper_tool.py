@@ -63,9 +63,7 @@ class EyedropperTool:
                 if 0 <= row < len(context.hole_data.attributes) and 0 <= col < len(
                     context.hole_data.attributes[row]
                 ):
-                    context.state.selected_palette = context.hole_data.attributes[row][
-                        col
-                    ]
+                    context.select_palette(context.hole_data.attributes[row][col])
                     return ToolResult.handled()
 
         elif mode == "terrain":

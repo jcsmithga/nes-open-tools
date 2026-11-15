@@ -23,6 +23,9 @@ class ToolManager:
         self.tools: dict[str, Tool] = {}
         self.active_tool: Tool | None = None
         self.active_tool_name: str | None = None
+        #: the modal tool that was active before the current one, which a dialog
+        #: tool returns to when it closes
+        self.previous_tool_name: str | None = None
         self.hotkey_map: dict[int, str] = {}  # pygame key → tool name
 
     def register_tool(self, name: str, tool: Tool):
@@ -93,6 +96,7 @@ class ToolManager:
             # Normal modal tool behavior
             if self.active_tool and self.active_tool_name != name:
                 self.active_tool.on_deactivated(context)
+                self.previous_tool_name = self.active_tool_name
 
             self.active_tool = self.tools[name]
             self.active_tool_name = name

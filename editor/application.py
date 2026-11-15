@@ -4,6 +4,7 @@ NES Open Tournament Golf - Editor Application
 Main application class that orchestrates all editor components.
 """
 
+import json
 from pathlib import Path
 
 import pygame
@@ -21,6 +22,7 @@ from .core.constants import (
     COLOR_BG,
     COLOR_STATUS,
     COLOR_TEXT,
+    GREENS_HEIGHT,
     GREENS_WIDTH,
     PICKER_WIDTH,
     STATUS_HEIGHT,
@@ -55,10 +57,27 @@ from .tools.row_operations_tool import RowOperationsTool
 from .tools.selection_tool import SelectionTool
 from .tools.stamp_tool import StampTool
 from .tools.tool_manager import ToolManager
+from .ui.confirm_dialog import UnsavedChangesDialog, UnsavedChoice
 from .ui.dialogs import open_file_dialog, save_file_dialog
 from .ui.pickers import GreensTilePicker, TilePicker, ToolPicker
 from .ui.stamp_browser import StampBrowser
 from .ui.toolbar import Toolbar, ToolbarCallbacks
+
+#: the window size the editor asks for, shrunk to fit a smaller desktop
+PREFERRED_WINDOW_SIZE = (1280, 1200)
+#: room left on the desktop for the title bar and taskbar
+DESKTOP_MARGIN = (40, 100)
+
+
+def _initial_window_size() -> tuple[int, int]:
+    """The preferred window size, shrunk to fit the primary desktop."""
+    width, height = PREFERRED_WINDOW_SIZE
+    desktops = pygame.display.get_desktop_sizes()
+    if desktops and desktops[0][0] > 0 and desktops[0][1] > 0:
+        desktop_w, desktop_h = desktops[0]
+        width = min(width, desktop_w - DESKTOP_MARGIN[0])
+        height = min(height, desktop_h - DESKTOP_MARGIN[1])
+    return width, height
 
 
 class EditorApplication:
@@ -67,8 +86,7 @@ class EditorApplication:
     def __init__(self, terrain_chr: str, greens_chr: str):
         pygame.init()
 
-        self.screen_width = 1280
-        self.screen_height = 1200
+        self.screen_width, self.screen_height = _initial_window_size()
         self.screen = pygame.display.set_mode(
             (self.screen_width, self.screen_height), pygame.RESIZABLE
         )
@@ -76,9 +94,6 @@ class EditorApplication:
 
         self.font = get_font("monospace", 14)
         self.font_small = get_font("monospace", 12)
-
-        # Track previous tool for revert behavior (used by dialog tools)
-        self.previous_tool_name: str | None = None
 
         # Load tilesets
         self.terrain_tileset = Tileset(terrain_chr)
@@ -115,12 +130,7 @@ class EditorApplication:
         self.highlight_state = HighlightState()
 
         # Create pickers first (needed by event handler)
-        picker_rect = Rect(
-            0,
-            TOOLBAR_HEIGHT,
-            PICKER_WIDTH,
-            self.screen_height - TOOLBAR_HEIGHT - STATUS_HEIGHT,
-        )
+        picker_rect = self._picker_rect()
         self.terrain_picker = TilePicker(
             self.terrain_tileset,
             picker_rect,
@@ -135,14 +145,8 @@ class EditorApplication:
         )
 
         # Create tool picker (right sidebar)
-        tool_picker_rect = Rect(
-            self.screen_width - TOOL_PICKER_WIDTH,
-            TOOLBAR_HEIGHT,
-            TOOL_PICKER_WIDTH,
-            self.screen_height - TOOLBAR_HEIGHT - STATUS_HEIGHT,
-        )
         self.tool_picker = ToolPicker(
-            tool_picker_rect,
+            self._tool_picker_rect(),
             on_tool_change=self._on_tool_change,
         )
         self.tool_picker.register_tool("paint", "Paint", "🖌")
@@ -210,11 +214,13 @@ class EditorApplication:
             on_load=self._on_load,
             on_load_file=self._on_load_file,
             on_save=self._on_save,
-            on_mode_change=self._update_mode_buttons,
+            on_toggle_mode=self._toggle_mode,
             on_select_flag=self._select_flag,
+            on_set_palette=self._set_palette,
             on_resize=self._on_resize,
             on_tool_change=self._on_tool_change,
             on_create_stamp=self._on_create_stamp,
+            on_quit=self._confirm_discard,
         )
 
         # Set forest_filler, tool_manager, highlight_state, stamp_library, and revert callback on tool_context (needed by tools)
@@ -226,6 +232,7 @@ class EditorApplication:
             self._revert_to_previous_tool
         )
         self.event_handler.tool_context._on_select_flag = self._select_flag
+        self.event_handler.tool_context._on_set_palette = self._set_palette
 
         # Activate paint tool now that we have context
         self.tool_manager.set_active_tool("paint", self.event_handler.tool_context)
@@ -266,6 +273,10 @@ class EditorApplication:
 
         self._update_mode_buttons()
 
+    def _toggle_mode(self):
+        """Switch between terrain and greens mode (Tab)."""
+        self._set_mode("greens" if self.state.mode == "terrain" else "terrain")
+
     def _on_tool_change(self, tool_name: str | None = None):
         """Handle tool selection change from picker or hotkey."""
         if tool_name is None:
@@ -274,16 +285,10 @@ class EditorApplication:
             if tool_name:
                 self.tool_picker.selected_tool = tool_name
         else:
-            # Called from picker or hotkey - activate tool
-            current_tool = self.tool_manager.active_tool_name
+            # Called from picker - activate tool
             self.tool_manager.set_active_tool(
                 tool_name, self.event_handler.tool_context
             )
-
-            # An action tool leaves the active tool as it was
-            if self.tool_manager.active_tool_name != current_tool:
-                # Normal tool switch - track previous tool for revert
-                self.previous_tool_name = current_tool
 
         # Auto-switch to supertile grid when palette tool activates
         if tool_name == "palette":
@@ -295,13 +300,9 @@ class EditorApplication:
         Called by dialog tools (like Metadata Editor) when their dialog closes
         to automatically switch back to the tool that was active before.
         """
-        if self.previous_tool_name:
-            self.tool_manager.set_active_tool(
-                self.previous_tool_name, self.event_handler.tool_context
-            )
-            # Update picker selection to match
-            self.tool_picker.selected_tool = self.previous_tool_name
-            # Don't update previous_tool_name here - keep the chain for nested reverts
+        tool_name = self.tool_manager.previous_tool_name or "paint"
+        self.tool_manager.set_active_tool(tool_name, self.event_handler.tool_context)
+        self.tool_picker.selected_tool = tool_name
 
     def _update_mode_buttons(self):
         """Update mode button active states."""
@@ -340,33 +341,60 @@ class EditorApplication:
 
     def _on_load(self):
         """Load a hole file."""
+        if not self._confirm_discard():
+            return
         path = open_file_dialog(
             "Load Hole", [("JSON files", "*.json"), ("All files", "*.*")]
         )
         if path:
-            self.hole_data.load(path)
-            self.state.reset_canvas_position()
-            # Clear undo history when loading new file
-            self.state.undo_manager.set_initial_state(self.hole_data)
+            self.load_hole(path)
 
     def _on_load_file(self, path: str):
         """Load a hole file from a specific path (e.g., drag-and-drop)."""
         if not path.lower().endswith(".json"):
             return
-        self.load_hole(path)
+        if self._confirm_discard():
+            self.load_hole(path)
 
     def _on_save(self):
-        """Save the current hole."""
-        if self.hole_data.filepath:
-            self.hole_data.save()
-            self.state.tool_message = "Hole saved!"
-        else:
-            path = save_file_dialog(
-                "Save Hole", ".json", [("JSON files", "*.json"), ("All files", "*.*")]
-            )
-            if path:
-                self.hole_data.save(path)
-                self.state.tool_message = "Hole saved!"
+        """Save the current hole (Ctrl+S and the toolbar's Save)."""
+        self._save_hole()
+
+    def _save_hole(self) -> bool:
+        """Save the current hole, asking for a path if it has none; True if saved."""
+        path = self.hole_data.filepath or save_file_dialog(
+            "Save Hole", ".json", [("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        if not path:
+            return False
+        try:
+            self.hole_data.save(path)
+        except OSError as e:
+            self.state.tool_message = f"Could not save {Path(path).name}: {e}"
+            return False
+        self.state.tool_message = "Hole saved!"
+        return True
+
+    def _confirm_discard(self) -> bool:
+        """Ask what to do with unsaved changes; True if the hole may be replaced.
+
+        Save saves first (and counts only if the save succeeds), Don't Save discards,
+        Cancel keeps the hole open.
+        """
+        if not self.hole_data.modified:
+            return True
+        name = (
+            Path(self.hole_data.filepath).name
+            if self.hole_data.filepath
+            else "this hole"
+        )
+        dialog = UnsavedChangesDialog(
+            self.screen_width, self.screen_height, name, self.font
+        )
+        choice = dialog.show(self.screen, self.clock)
+        if choice is UnsavedChoice.SAVE:
+            return self._save_hole()
+        return choice is UnsavedChoice.DISCARD
 
     def _on_resize(self, width: int, height: int):
         """Handle window resize."""
@@ -377,17 +405,32 @@ class EditorApplication:
         )
         self.toolbar.resize(width)
 
-        # Resize tool picker (right sidebar)
-        self.tool_picker.resize(
-            Rect(
-                width - TOOL_PICKER_WIDTH,
-                TOOLBAR_HEIGHT,
-                TOOL_PICKER_WIDTH,
-                height - TOOLBAR_HEIGHT - STATUS_HEIGHT,
-            )
-        )
+        # Left sidebar (tile pickers or stamp browser) and right sidebar (tools)
+        picker_rect = self._picker_rect()
+        self.terrain_picker.resize(picker_rect)
+        self.greens_picker.resize(picker_rect)
+        self.stamp_browser.resize(picker_rect)
+        self.tool_picker.resize(self._tool_picker_rect())
 
         self.event_handler.update_screen_size(width, height)
+
+    def _picker_rect(self) -> Rect:
+        """The left sidebar, which holds the tile pickers and the stamp browser."""
+        return Rect(
+            0,
+            TOOLBAR_HEIGHT,
+            PICKER_WIDTH,
+            self.screen_height - TOOLBAR_HEIGHT - STATUS_HEIGHT,
+        )
+
+    def _tool_picker_rect(self) -> Rect:
+        """The right sidebar, which holds the tool picker."""
+        return Rect(
+            self.screen_width - TOOL_PICKER_WIDTH,
+            TOOLBAR_HEIGHT,
+            TOOL_PICKER_WIDTH,
+            self.screen_height - TOOLBAR_HEIGHT - STATUS_HEIGHT,
+        )
 
     def _on_terrain_hover_change(self, tile_value: int | None):
         """Called when terrain picker hover changes."""
@@ -712,9 +755,45 @@ class EditorApplication:
         text_surf = self.font.render(status_text, True, COLOR_TEXT)
         self.screen.blit(text_surf, (10, self.screen_height - STATUS_HEIGHT + 8))
 
-    def load_hole(self, path: str):
-        """Load a hole from file path."""
-        self.hole_data.load(path)
+    def load_hole(self, path: str) -> bool:
+        """Load a hole from file path; True if it loaded.
+
+        A file that can't be read or isn't a hole leaves the current hole open and
+        says why in the status bar.
+        """
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            # Parse into a scratch hole first: the editor's components all hold
+            # self.hole_data, so it is only replaced once the file is known good
+            problem = hole_shape_problem(HoleData.from_dict(data))
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            data, problem = None, f"{type(e).__name__}: {e}"
+        if data is None or problem:
+            self.state.tool_message = f"Could not load {Path(path).name}: {problem}"
+            return False
+
+        self.hole_data.load_dict(data)
+        self.hole_data.filepath = path
         self.state.reset_canvas_position()
         # Clear undo history when loading new file
         self.state.undo_manager.set_initial_state(self.hole_data)
+        self.state.tool_message = None
+        return True
+
+
+def hole_shape_problem(hole: HoleData) -> str | None:
+    """Why a parsed hole has a shape the editor can't edit, or None if it can."""
+    if any(len(row) != TERRAIN_WIDTH for row in hole.terrain):
+        return f"terrain rows must be {TERRAIN_WIDTH} tiles wide"
+    if not 0 < hole.terrain_height <= len(hole.terrain):
+        return "terrain height doesn't match its rows"
+    if len(hole.attributes) < (hole.terrain_height + 1) // 2 or any(
+        len(row) < (TERRAIN_WIDTH + 1) // 2 for row in hole.attributes
+    ):
+        return "attributes don't cover the terrain"
+    if len(hole.greens) != GREENS_HEIGHT or any(
+        len(row) != GREENS_WIDTH for row in hole.greens
+    ):
+        return f"greens must be {GREENS_WIDTH}x{GREENS_HEIGHT} tiles"
+    return None

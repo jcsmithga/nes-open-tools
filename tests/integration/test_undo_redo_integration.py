@@ -59,8 +59,9 @@ def editor_setup():
         on_load=lambda: None,
         on_load_file=lambda path: None,
         on_save=lambda: None,
-        on_mode_change=lambda: None,
+        on_toggle_mode=lambda: None,
         on_select_flag=lambda index: None,
+        on_set_palette=lambda palette: None,
         on_resize=lambda w, h: None,
         on_tool_change=lambda: None,
     )

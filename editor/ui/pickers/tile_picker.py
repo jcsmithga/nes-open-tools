@@ -143,6 +143,10 @@ class TilePicker:
         # Track tile currently under mouse
         self.hovered_tile = None
 
+    def resize(self, rect: Rect):
+        """Move the picker to a new rectangle (e.g., on window resize)."""
+        self.rect = rect
+
     def _calculate_bank_positions(self):
         """Calculate y-offset for each bank (for layout and hit testing)."""
         self._bank_positions = []

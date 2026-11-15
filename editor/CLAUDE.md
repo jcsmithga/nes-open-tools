@@ -31,7 +31,7 @@ architectural drift and should be avoided.
 ```python
 # GOOD: delegate to callback
 if key == pygame.K_TAB:
-    self.on_mode_change()
+    self.on_toggle_mode()
 
 # BAD: change state directly
 if key == pygame.K_TAB:
@@ -103,7 +103,7 @@ def handle_mouse_down(self, pos, button, modifiers, context):
 ## Common pitfalls
 
 - **State changes in EventHandler.** `self.state.mode = "greens"` in a key handler is
-  wrong; call `self.on_mode_change()` and let Application change it.
+  wrong; call `self.on_toggle_mode()` and let Application change it.
 - **Duplicated coordinate math.** Don't compute `(pos[0] - canvas_rect.x + offset_x) //
   tile_size` or build a `Rect` from layout constants; use
   `context.view_state.screen_to_tile(pos)`.

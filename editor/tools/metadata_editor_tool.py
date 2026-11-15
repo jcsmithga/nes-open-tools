@@ -26,6 +26,8 @@ class MetadataEditorTool:
         self.undo_pushed: bool = False
 
     def handle_mouse_down(self, pos, button, modifiers, context):
+        if self.dialog is None:
+            return ToolResult.not_handled()
         # Delegate to dialog
         if self.dialog and self.dialog.handle_event(
             pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=button, pos=pos)
@@ -41,6 +43,9 @@ class MetadataEditorTool:
         return ToolResult.not_handled()
 
     def handle_key_down(self, key, modifiers, context):
+        if self.dialog is None:
+            # Never swallow the editor's keys once the dialog has closed
+            return ToolResult.not_handled()
         if self.dialog:
             # Delegate to dialog
             event = pygame.event.Event(
