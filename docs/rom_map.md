@@ -136,6 +136,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Title screen | 12 | `$80EC` `TitleScreenUpdate` | `title_screen.md` |
 | Main menu chain | 12 | `$856E` `InitMainMenu`, `$8698` `MenuTick`, `$899F` `CallMenuChoiceHandler`, `MenuTextListData` | `menu_system.md` |
 | Club house entries | 12 | `$84F5`-`$855B` (`LC_84FA_OpenPrizeMoney` and siblings) | `menu_system.md` |
+| Training (practice mode) | 14, 15, 13 | bank 14 `$BD04` `OpenTrainingScreen` (course and hole picker, loops until B); `$D9C3` `LD9C3_InitManualWindMode` sets `ManualWindModeFlag` (`$04F6`) and far-calls the round at bank 13 `$8097` with `HoleNumber` already set; the hole returns by `RTS` at bank 13 `$82F3` (Start before a shot) and `$8346` (holed out); the outer game loop is bank 13 `$8000`, entered from reset at `$CD70` | |
 | Course intro | 12 | `$9262` `SetupCourseIntroScene`, `$9478` `ShowCourseIntroScene`; `$92EC` the sunset showing after the scorecard, palette `$9837`; sprite 0 for the raster split is record `$98F3`, metasprite bank 10 `$AEA6` (tile `$1B`) | `course_intro_scene.md` |
 | Pre-hole signpost | 12 | `$ABA5` `DrawPreHoleSignpost` | `prehole_signpost.md` |
 | Prize money | 12 | `$8F34` | `prize_money.md` |
