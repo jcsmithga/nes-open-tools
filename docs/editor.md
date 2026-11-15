@@ -21,15 +21,28 @@ New, Load and quitting ask first when there are unsaved changes.
 ## Check
 
 Check runs the checks publishing a hole runs (`golf/formats/hole_check.py`), on the hole
-without the rows the editor has hidden: an even height of 30-60 rows and the scroll limit
-that goes with it, every tile a real one (no placeholder left), par 3-5, distance 1-999,
-handicap 1-18, the tee inside the hole, four pins, and that the hole compresses. Saving
-runs them too, and says on the status bar how many problems there are; it saves either
-way, so work in progress can always be kept.
+without the rows the editor has hidden. Some are what a ROM can hold: an even height of
+30-60 rows and the scroll limit that goes with it, every tile a real one (no placeholder
+left), par 3-5, distance 1-999, handicap 1-18, the tee inside the hole, four pins, and
+that the hole compresses. The others are what makes a green playable, set to the least
+any vanilla green has, so every vanilla hole passes:
+
+- **The putting surface's safe zone.** At least 3 tiles of fringe or rough between the
+  putting surface (any tile that is neither) and the top of the green's grid, and 2 at
+  the right, bottom and left. The top and right edges are the screen's, so they keep the
+  surface out of a CRT's overscan; the fringe all round keeps a ball a pixel off the
+  surface from being sent to chip.
+- **Pins on the putting surface.** Each pin's tile is putting surface, and so are the
+  eight tiles round it.
+
+Publishing refuses a hole that breaks any of them (ADR 0032). Saving runs them too, and
+says on the status bar how many problems there are; it saves either way, so work in
+progress can always be kept.
 
 ## Starting a hole from scratch
 
-New makes a hole that passes Check but has nothing on it: 30 rows of deep rough (`$DF`)
+New makes a hole with nothing on it, which fails Check only for having no putting
+surface: 30 rows of deep rough (`$DF`)
 on palette 1, a green that is all rough, the green's box at the top in the middle, the
 tee near the bottom, and the four pins near the middle of the green. A hole then goes
 roughly:

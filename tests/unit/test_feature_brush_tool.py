@@ -19,6 +19,7 @@ from editor.tools.feature_brush_tool import (
 from golf.algorithms.boundary import LINE_TILES, PLACEHOLDER
 from golf.algorithms.green_zones import FLAT_TILE, FRINGE_TILES
 from golf.core.palettes import TERRAIN_WIDTH
+from golf.formats.hole_data import HoleData
 from tests.synthetic_holes import synthetic_hole
 
 ROUGH = 0xDF
@@ -30,6 +31,8 @@ def hole():
     hole = synthetic_hole()
     hole.terrain = [[ROUGH] * TERRAIN_WIDTH for _ in range(30)]
     hole.attributes = [[1] * 11 for _ in range(15)]
+    # a green all rough, for the Green Brush to paint
+    hole.greens = HoleData.blank().greens
     return hole
 
 

@@ -8,6 +8,7 @@ from golf.formats import hole_check
 from golf.formats.hole_check import (
     compression_problem,
     editable_problem,
+    green_problems,
     hidden_rows_trimmed,
     hole_problems,
     rom_problems,
@@ -111,17 +112,89 @@ def test_the_editor_opens_any_hole_its_grids_cover():
     assert editable_problem(hole) == "terrain height doesn't match its rows"
 
 
-def test_a_blank_hole_passes_every_check():
+def test_a_blank_hole_lacks_only_its_putting_surface():
     hole = HoleData.blank()
     assert editable_problem(hole) is None
-    assert rom_problems(hole) == []
+    assert rom_problems(hole) == ["the green has no putting surface"]
 
 
 def test_rom_problems_ignores_hidden_rows_and_names_placeholder():
-    hole = HoleData.blank()
+    hole = good_hole()
     hole.terrain += [[0x100] * 22, [0x100] * 22]
     hole.attributes.append([1] * 11)
     assert rom_problems(hole) == []
     hole.terrain[0][0] = 0x100
     (problem,) = rom_problems(hole)
     assert "placeholder" in problem
+
+
+def flat_green(top: int, bottom: int, left: int, right: int) -> list[list[int]]:
+    """A green of rough with flat putting surface over rows `top` to `bottom` and
+    columns `left` to `right`, inclusive."""
+    return [
+        [
+            0xB0 if top <= row <= bottom and left <= col <= right else 0x29
+            for col in range(24)
+        ]
+        for row in range(24)
+    ]
+
+
+PINS_IN_THE_MIDDLE = [{"x_offset": 96, "y_offset": 96}] * 4
+
+
+@pytest.mark.parametrize(
+    ("green", "side"),
+    [
+        (flat_green(2, 21, 2, 21), "top"),
+        (flat_green(3, 22, 2, 21), "bottom"),
+        (flat_green(3, 21, 1, 21), "left"),
+        (flat_green(3, 21, 2, 22), "right"),
+    ],
+)
+def test_the_putting_surface_keeps_its_safe_zone(green, side):
+    assert green_problems(flat_green(3, 21, 2, 21), PINS_IN_THE_MIDDLE) == []
+    (problem,) = green_problems(green, PINS_IN_THE_MIDDLE)
+    assert f"green's {side} edge" in problem
+
+
+def test_fringe_and_rough_both_count_toward_the_safe_zone():
+    green = flat_green(3, 21, 2, 21)
+    for col in range(24):
+        green[0][col] = 0x4C  # an outer fringe corner, as vanilla greens have there
+    assert green_problems(green, PINS_IN_THE_MIDDLE) == []
+
+
+@pytest.mark.parametrize(
+    ("x", "y", "ok"),
+    [
+        (96, 96, True),
+        # tile (4, 3): a ring of surface round it, the least a vanilla pin has
+        (24, 32, True),
+        (31, 39, True),
+        # tile (3, 2), on the surface's edge
+        (16, 24, False),
+        # off the surface
+        (8, 8, False),
+        # past the grid
+        (200, 96, False),
+    ],
+)
+def test_a_pin_needs_putting_surface_all_round(x, y, ok):
+    green = flat_green(3, 21, 2, 21)
+    flags = [{"x_offset": x, "y_offset": y}, *PINS_IN_THE_MIDDLE[1:]]
+    problems = green_problems(green, flags)
+    assert problems == [] if ok else problems[0].startswith(f"pin 1 (x_offset {x}")
+
+
+def test_a_green_with_no_putting_surface_says_so_once():
+    green = HoleData.blank().greens
+    assert green_problems(green, PINS_IN_THE_MIDDLE) == [
+        "the green has no putting surface"
+    ]
+
+
+def test_publishing_runs_the_green_rules():
+    hole = good_hole()
+    hole.metadata["flag_positions"][2] = {"x_offset": 0, "y_offset": 0}
+    assert any(problem.startswith("pin 3") for problem in hole_problems(hole))

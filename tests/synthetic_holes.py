@@ -22,9 +22,13 @@ def synthetic_hole(number: int = 1) -> HoleData:
     hole.terrain[0][0] = number
     hole.terrain_height = 30
     hole.attributes = [[number % 4] * 11 for _ in range(15)]
-    # The rough's checkerboard, as the real greens are around their putting surface
+    # The rough's checkerboard, as the real greens are around their putting surface,
+    # and a flat putting surface inside the safe zone round the pins
     hole.greens = [
-        [(0x29, 0x2C)[(row + col) % 2] for col in range(GREENS_WIDTH)]
+        [
+            0xB0 if 4 <= row < 20 and 3 <= col < 21 else (0x29, 0x2C)[(row + col) % 2]
+            for col in range(GREENS_WIDTH)
+        ]
         for row in range(24)
     ]
     hole.green_x, hole.green_y = 100, 80

@@ -21,6 +21,7 @@ from golf.algorithms.green_zones import (
     ROUGH_FAMILIES,
     ROUGH_TILES,
 )
+from golf.formats.hole_data import HoleData
 from tests.synthetic_holes import synthetic_hole
 
 SLOPE = 0x33
@@ -36,6 +37,13 @@ def line(start, end, steps=40):
     ]
 
 
+def rough_hole() -> HoleData:
+    """A synthetic hole whose green is all rough, for the brush to paint."""
+    hole = synthetic_hole()
+    hole.greens = HoleData.blank().greens
+    return hole
+
+
 def zones(hole) -> np.ndarray:
     family = load_fitters()["green"].family
     return family.render(green_grid(family, hole))
@@ -47,7 +55,7 @@ def tiles(hole) -> np.ndarray:
 
 def a_green():
     """A hole with a green painted on it, about 80 by 50 pixels."""
-    hole = synthetic_hole()
+    hole = rough_hole()
     paint_green(hole, green_stroke_mask(line((70, 96), (120, 96)), 25))
     return hole
 
@@ -72,7 +80,7 @@ def test_stroke_mask_is_a_disc_in_the_greens_pixels():
 
 
 def test_painting_on_rough_draws_a_green_with_fringe_all_round():
-    hole = synthetic_hole()
+    hole = rough_hole()
     stroke = green_stroke_mask(line((70, 96), (120, 96)), 25)
     assert paint_green(hole, stroke) > 40
     made = zones(hole)
@@ -89,7 +97,7 @@ def test_painting_on_rough_draws_a_green_with_fringe_all_round():
 
 
 def test_the_rough_keeps_its_checkerboard_and_gains_strips():
-    hole = synthetic_hole()
+    hole = rough_hole()
     # its top edge four pixels into a row of cells, which `$64` draws
     paint_green(hole, green_stroke_mask(line((70, 96), (120, 96)), 28))
     grid = tiles(hole)
@@ -105,7 +113,7 @@ def test_the_rough_keeps_its_checkerboard_and_gains_strips():
 
 
 def test_a_green_checkered_the_other_way_stays_so():
-    hole = synthetic_hole()
+    hole = rough_hole()
     hole.greens = [[0x29 + 0x2C - tile for tile in row] for row in hole.greens]
     paint_green(hole, green_stroke_mask(line((70, 96), (120, 96)), 25))
     paint_green(hole, green_stroke_mask([(96, 96)], 12), erase=True)
@@ -139,7 +147,7 @@ def test_erasing_cuts_the_stroke_out_and_erasing_everything_leaves_rough():
 
     paint_green(hole, np.ones((192, 192), bool), erase=True)
     assert set(tiles(hole).flat) == {0x29, 0x2C}
-    assert hole.greens == synthetic_hole().greens
+    assert hole.greens == rough_hole().greens
 
 
 def test_only_cells_near_the_stroke_change():
@@ -181,7 +189,7 @@ def test_a_stroke_that_changes_nothing_is_an_empty_change():
 
 
 def test_a_change_holds_plain_ints_and_applies_to_the_green_only():
-    hole = synthetic_hole()
+    hole = rough_hole()
     terrain = copy.deepcopy(hole.terrain)
     change = green_change(hole, green_stroke_mask(line((70, 96), (120, 96)), 20))
     assert change
@@ -192,7 +200,7 @@ def test_a_change_holds_plain_ints_and_applies_to_the_green_only():
 
 
 def test_the_editors_placeholder_reads_as_rough_and_is_left_where_nothing_changes():
-    hole = synthetic_hole()
+    hole = rough_hole()
     hole.greens = [[PLACEHOLDER] * 24 for _ in range(24)]
     paint_green(hole, green_stroke_mask(line((70, 96), (120, 96)), 25))
     grid = tiles(hole)
@@ -202,7 +210,7 @@ def test_the_editors_placeholder_reads_as_rough_and_is_left_where_nothing_change
 
 
 def test_a_green_painted_to_the_edge_stops_short_of_it_with_its_fringe():
-    hole = synthetic_hole()
+    hole = rough_hole()
     paint_green(hole, green_stroke_mask(line((150, 96), (191, 96)), 20))
     made = zones(hole)
     # the fringe's last tile is the fit's to choose, a pixel or two either way
@@ -213,7 +221,7 @@ def test_a_green_painted_to_the_edge_stops_short_of_it_with_its_fringe():
 
 
 def test_putting_surface_already_at_the_edge_is_left_there():
-    hole = synthetic_hole()
+    hole = rough_hole()
     for row in range(8, 16):
         hole.greens[row][18:24] = [FLAT_TILE] * 6
     paint_green(hole, green_stroke_mask([(150, 96)], 12))

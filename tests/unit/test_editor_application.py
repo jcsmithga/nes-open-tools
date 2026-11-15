@@ -265,7 +265,8 @@ def test_saving_a_new_hole_asks_where(app, tmp_path):
     assert HoleData.from_dict(json.loads(path.read_text())).terrain == (
         HoleData.blank().terrain
     )
-    assert app.state.tool_message == "Hole saved!"
+    # saved all the same: a new hole has no putting surface yet
+    assert app.state.tool_message == "Hole saved, but Check finds 1 problem(s)"
 
 
 def test_save_as_saves_a_copy_and_works_on_it(app, hole_file, tmp_path):
@@ -295,9 +296,9 @@ def test_canceling_save_as_saves_nothing(app, hole_file):
     assert app.hole_data.modified
 
 
-def test_saving_a_hole_a_rom_cannot_hold_warns(app, hole_file):
-    app._on_new()
-    app.hole_data.metadata["par"] = 6
+def test_saving_a_hole_that_fails_check_warns(app, hole_file):
+    app.load_hole(str(hole_file))
+    app.hole_data.metadata.update(par=6, scroll_limit=1, tee={"x": 88, "y": 200})
     app.hole_data.filepath = str(hole_file)
 
     app._on_save()
@@ -314,14 +315,16 @@ def test_check_names_every_problem(app):
         app._on_check()
 
     _, _, title, paragraphs, _ = dialog.call_args.args
-    assert title == "Check: 2 problem(s)"
+    assert title == "Check: 3 problem(s)"
+    assert any("no putting surface" in line for line in paragraphs)
     assert any("placeholder" in line for line in paragraphs)
     assert any("par must be" in line for line in paragraphs)
     assert app.state.tool_message == title
 
 
-def test_check_passes_a_blank_hole(app):
-    app._on_new()
+def test_check_passes_a_finished_hole(app, hole_file):
+    app.load_hole(str(hole_file))
+    app.hole_data.metadata.update(scroll_limit=1, tee={"x": 88, "y": 200})
     with patch("editor.application.MessageDialog") as dialog:
         app._on_check()
     assert dialog.call_args.args[2] == "Check: no problems"

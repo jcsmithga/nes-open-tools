@@ -64,8 +64,8 @@ class HoleData:
         The fewest rows a hole can have, all deep rough, and a green all rough. The
         green sits at the top in the middle, the tee near the bottom in the middle, and
         the four pins spread round where the vanilla holes' pins sit on average, so each
-        is on screen to move. It passes
-        `golf/formats/hole_check.py`'s checks as it is.
+        is on screen to move. Of `golf/formats/hole_check.py`'s checks it fails only
+        the one for a green with no putting surface.
         """
         height = MIN_TERRAIN_ROWS
         hole = cls()

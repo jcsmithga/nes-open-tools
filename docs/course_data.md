@@ -32,10 +32,11 @@ the ROM, see `golf/core/compression.md` and the `nes-open-golf-rom-layout` skill
 - Metadata (par, distance, tee/green positions, flag positions, scroll_limit)
 
 `golf/formats/hole_check.py` checks a hole: `editable_problem` says whether the editor
-can open it, and `hole_problems` and `compression_problem` whether a ROM can hold it,
-after `hidden_rows_trimmed` drops the rows the editor hid. Publishing a derived or
-community hole runs them, and so does the editor's Check. `HoleData.blank()` is the hole
-the editor's New starts from, which passes them ([editor.md](editor.md)).
+can open it, and `hole_problems` and `compression_problem` whether it can be published:
+whether a ROM can hold it and its green is playable (`green_problems`), after
+`hidden_rows_trimmed` drops the rows the editor hid. Publishing a derived or community
+hole runs them, and so does the editor's Check ([editor.md](editor.md)).
+`HoleData.blank()` is the hole the editor's New starts from.
 
 ## Terrain height
 

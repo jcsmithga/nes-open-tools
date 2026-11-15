@@ -1,18 +1,20 @@
-"""Checking a hole: whether the editor can open it, and whether a ROM can hold it.
+"""Checking a hole: whether the editor can open it, and whether it can be played.
 
 Pure functions over `HoleData`, shared by the editor's Check and by publishing derived
 and community holes (`golf/randomizer/derive.py`, `golf/randomizer/community.py`). Each
 returns what is wrong rather than raising, so a caller words the refusal its own way.
 
-The checks a ROM's hole has to pass run in order: `hidden_rows_trimmed` drops the rows
-the editor keeps below the visible height, `hole_problems` checks every value
-`CoursePatch` writes against what its table entry holds, and `compression_problem`
-compresses the hole as a build would.
+The checks a published hole has to pass run in order: `hidden_rows_trimmed` drops the
+rows the editor keeps below the visible height, `hole_problems` checks every value
+`CoursePatch` writes against what its table entry holds and the green against the
+rules every vanilla green keeps (`green_problems`), and `compression_problem` compresses
+the hole as a build would.
 """
 
 import copy
 from typing import Any
 
+from golf.algorithms.green_zones import FRINGE_TILES, ROUGH_TILES
 from golf.core.compressor import GreensCompressor, TerrainCompressor
 from golf.core.packing import pack_attributes
 from golf.core.palettes import GREENS_HEIGHT, GREENS_WIDTH, TERRAIN_WIDTH
@@ -30,6 +32,15 @@ ATTRIBUTE_PALETTES = range(4)
 TILES = range(0x100)
 #: the editor's placeholder, which marks a cell still to fill
 PLACEHOLDER = 0x100
+#: the fewest rough or fringe tiles between a green's putting surface and each edge of
+#: its grid: the fewest any vanilla green of either ROM has. The top and right edges
+#: are the screen's, so they keep the surface out of a CRT's overscan; the left and
+#: bottom ones meet the HUD. Fringe all round keeps a ball a pixel off the surface from
+#: being sent to chip. Publishing refuses a green that breaks it (ADR 0032).
+GREEN_SAFE_ZONE = {"top": 3, "right": 2, "bottom": 2, "left": 2}
+#: the rings of putting surface tiles round a pin's tile, on every side and corner: the
+#: fewest any vanilla pin has
+PIN_CLEARANCE = 1
 
 
 def editable_problem(hole: HoleData) -> str | None:
@@ -106,9 +117,8 @@ def hole_problems(hole: HoleData) -> list[str]:
     problems += _grid_problems(
         "terrain", hole.terrain[:height], TERRAIN_WIDTH, height, TILES
     )
-    problems += _grid_problems(
-        "greens", hole.greens, GREENS_WIDTH, GREENS_HEIGHT, TILES
-    )
+    greens = _grid_problems("greens", hole.greens, GREENS_WIDTH, GREENS_HEIGHT, TILES)
+    problems += greens
     if not _is_int(metadata.get("par"), min(HOLE_PARS), max(HOLE_PARS)):
         problems.append(
             f"par must be one of {list(HOLE_PARS)}, got {metadata.get('par')!r}"
@@ -145,6 +155,62 @@ def hole_problems(hole: HoleData) -> list[str]:
         problems.append(
             f"flag_positions must be {PINS} pins with byte x_offset and y_offset"
         )
+        flags = []
+    if not greens:
+        problems += green_problems(hole.greens, flags)
+    return problems
+
+
+def is_putting_surface(tile: int) -> bool:
+    """Whether a greens tile is putting surface: neither the rough nor the fringe."""
+    return tile not in ROUGH_TILES and tile not in FRINGE_TILES
+
+
+def green_problems(greens: list[list[int]], flags: list[dict[str, int]]) -> list[str]:
+    """How a 24 x 24 green and its pins break the rules every vanilla green keeps.
+
+    The putting surface keeps `GREEN_SAFE_ZONE` from the grid's edges, and each pin
+    (`x_offset`, `y_offset`: the cup's pixel in the green) is on a putting surface
+    tile with `PIN_CLEARANCE` rings of putting surface round it.
+    """
+    surface = [
+        (row, col)
+        for row, tiles in enumerate(greens)
+        for col, tile in enumerate(tiles)
+        if is_putting_surface(tile)
+    ]
+    if not surface:
+        return ["the green has no putting surface"]
+    rows = [row for row, _ in surface]
+    cols = [col for _, col in surface]
+    margins = {
+        "top": min(rows),
+        "right": GREENS_WIDTH - 1 - max(cols),
+        "bottom": GREENS_HEIGHT - 1 - max(rows),
+        "left": min(cols),
+    }
+    problems = [
+        f"the putting surface must keep {need} tiles of fringe or rough from the "
+        f"green's {side} edge, got {margins[side]}"
+        for side, need in GREEN_SAFE_ZONE.items()
+        if margins[side] < need
+    ]
+    reach = PIN_CLEARANCE
+    for number, flag in enumerate(flags, start=1):
+        row, col = flag["y_offset"] // 8, flag["x_offset"] // 8
+        clear = all(
+            0 <= near_row < GREENS_HEIGHT
+            and 0 <= near_col < GREENS_WIDTH
+            and is_putting_surface(greens[near_row][near_col])
+            for near_row in range(row - reach, row + reach + 1)
+            for near_col in range(col - reach, col + reach + 1)
+        )
+        if not clear:
+            problems.append(
+                f"pin {number} (x_offset {flag['x_offset']}, y_offset "
+                f"{flag['y_offset']}) must be on the putting surface with "
+                f"{reach} tile(s) of it on every side"
+            )
     return problems
 
 

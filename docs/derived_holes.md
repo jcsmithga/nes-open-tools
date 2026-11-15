@@ -133,8 +133,10 @@ live there. `golf-derive new` then:
    `scroll_limit` of `(height - 28) / 2`, a par of 3, 4 or 5, a distance of 1-999, a
    handicap of 1-18, 22-wide terrain and 24 x 24 greens of byte tiles, one attribute
    row of palettes 0-3 for every two terrain rows, a tee inside the hole, and four pins.
-   The hole is then compressed as a build compresses it. The checks are in
-   `golf/formats/hole_check.py`.
+   The green must keep the rules every vanilla green does: a safe zone of fringe or
+   rough round the putting surface, and each pin on the surface with surface all round
+   it ([editor.md](editor.md#check)). The hole is then compressed as a build compresses
+   it. The checks are in `golf/formats/hole_check.py`.
 3. Takes the delta, rebuilds the hole from it and checks the two agree.
 4. Refuses a new version whose par is not its lineage's, and a hole identical to its base, to its lineage's newest version or to a hole
    of another lineage. An older version's content can be published again, which is how

@@ -402,7 +402,7 @@ class EditorApplication:
         return True
 
     def _on_check(self):
-        """Show whether a ROM can hold the hole, and if not, why (the toolbar's Check)."""
+        """Show whether the hole can be published, and if not, why (the toolbar's Check)."""
         if not self.hole_data.terrain:
             return
         problems = rom_problems(self.hole_data)
@@ -411,7 +411,7 @@ class EditorApplication:
             paragraphs = [f"- {problem}" for problem in problems]
         else:
             title = "Check: no problems"
-            paragraphs = ["A ROM can hold this hole."]
+            paragraphs = ["The hole can be published."]
         MessageDialog(
             self.screen_width, self.screen_height, title, paragraphs, self.font
         ).show(self.screen, self.clock)
