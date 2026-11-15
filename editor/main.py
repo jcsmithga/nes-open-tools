@@ -80,11 +80,11 @@ def show_usage():
     print("")
     print("Examples:")
     print("  golf-editor")
-    print("  golf-editor hole_01.json")
+    print("  golf-editor my_hole.json")
     print("  golf-editor data/chr-ram.bin data/green-ram.bin")
-    print(
-        "  golf-editor data/chr-ram.bin data/green-ram.bin courses/japan/hole_01.json"
-    )
+    print("  golf-editor data/chr-ram.bin data/green-ram.bin my_hole.json")
+    print("")
+    print("With no hole, Ctrl+N starts a blank one; see docs/editor.md.")
 
 
 def validate_chr_file(path: str, label: str):

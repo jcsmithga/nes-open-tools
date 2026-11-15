@@ -28,6 +28,8 @@ from .hole_data import (
 
 ATTRIBUTE_PALETTES = range(4)
 TILES = range(0x100)
+#: the editor's placeholder, which marks a cell still to fill
+PLACEHOLDER = 0x100
 
 
 def editable_problem(hole: HoleData) -> str | None:
@@ -161,6 +163,18 @@ def compression_problem(hole: HoleData) -> str | None:
     return None
 
 
+def rom_problems(hole: HoleData) -> list[str]:
+    """Everything that keeps `hole`, as the editor holds it, out of a ROM: the problems
+    of the hole without its hidden rows, then, if it has none, whether it compresses."""
+    trimmed, _ = hidden_rows_trimmed(hole)
+    problems = hole_problems(trimmed)
+    if not problems:
+        problem = compression_problem(trimmed)
+        if problem:
+            problems.append(f"the hole does not compress: {problem}")
+    return problems
+
+
 def _is_int(value: Any, low: int, high: int) -> bool:
     return (
         isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
@@ -174,10 +188,12 @@ def _grid_problems(
         return [f"{name} must be {width} cells wide and {height} rows tall"]
     bad = sorted({cell for row in grid for cell in row if cell not in values})
     if bad:
-        return [
-            f"{name} cells must be {values.start}-{values.stop - 1}, got "
-            + ", ".join(
+        problem = f"{name} cells must be {values.start}-{values.stop - 1}, got " + (
+            ", ".join(
                 f"${cell:X}" if isinstance(cell, int) else repr(cell) for cell in bad
             )
-        ]
+        )
+        if PLACEHOLDER in bad:
+            problem += f" (${PLACEHOLDER:X} is the editor's placeholder, still to fill)"
+        return [problem]
     return []

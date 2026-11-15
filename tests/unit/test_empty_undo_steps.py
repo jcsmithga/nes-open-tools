@@ -97,8 +97,7 @@ def metadata_tool(context):
 def type_par(tool, par: str):
     """Replace the par field's text, as typing into it would."""
     assert tool.dialog is not None
-    tool.dialog.par_value = par
-    tool.dialog.par_valid = True
+    tool.dialog.field("par").text = par
 
 
 def test_canceling_the_metadata_dialog_pushes_nothing(metadata_tool, context):
@@ -127,3 +126,29 @@ def test_saving_changed_metadata_pushes_one_undoable_step(metadata_tool, context
     restored = context.state.undo_manager.undo(context.hole_data)
     assert restored is not None
     assert restored.metadata["par"] == par
+
+
+def test_the_metadata_dialog_edits_the_handicap(metadata_tool, context):
+    for key in (pygame.K_TAB, pygame.K_TAB, pygame.K_TAB):
+        metadata_tool.handle_key_down(key, 0, context)
+    assert metadata_tool.dialog.active is metadata_tool.dialog.field("handicap")
+    for key in (pygame.K_BACKSPACE, pygame.K_BACKSPACE, pygame.K_7):
+        metadata_tool.handle_key_down(key, 0, context)
+    metadata_tool.handle_key_down(pygame.K_RETURN, 0, context)  # leaves the field
+
+    result = metadata_tool.handle_key_down(pygame.K_RETURN, 0, context)
+
+    assert context.hole_data.metadata["handicap"] == 7
+    assert "Handicap=7" in (result.message or "")
+
+
+@pytest.mark.parametrize(("key", "text"), [("par", "6"), ("handicap", "19")])
+def test_the_metadata_dialog_keeps_values_a_rom_cannot_hold(
+    metadata_tool, context, key, text
+):
+    metadata_tool.dialog.field(key).text = text
+
+    metadata_tool.handle_key_down(pygame.K_RETURN, 0, context)
+
+    assert metadata_tool.dialog is not None  # still open
+    assert context.hole_data.metadata[key] != int(text)

@@ -75,14 +75,17 @@ def event_handler(editor_state, hole_data, tool_manager):
         tool_manager=tool_manager,
         tool_picker=mock_tool_picker,
         stamp_browser=mock_stamp_browser,
+        on_new=Mock(),
         on_load=mock_on_load,
         on_load_file=mock_on_load_file,
         on_save=mock_on_save,
+        on_save_as=Mock(),
         on_toggle_mode=Mock(),
         on_select_flag=mock_on_select_flag,
         on_set_palette=Mock(),
         on_resize=mock_on_resize,
         on_tool_change=mock_on_tool_change,
+        on_create_stamp=Mock(),
     )
 
     # Set tool context properties (normally done by Application)
@@ -209,6 +212,43 @@ class TestOtherGlobalShortcuts:
         with patch("pygame.key.get_mods", return_value=pygame.KMOD_CTRL):
             event_handler.handle_events([event])
             event_handler.on_save.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "key, mods, callback",
+        [
+            (pygame.K_s, pygame.KMOD_CTRL | pygame.KMOD_SHIFT, "on_save_as"),
+            (pygame.K_n, pygame.KMOD_CTRL, "on_new"),
+            (pygame.K_c, pygame.KMOD_CTRL | pygame.KMOD_SHIFT, "on_create_stamp"),
+        ],
+    )
+    def test_file_and_stamp_shortcuts(
+        self, mock_pygame, event_handler, key, mods, callback
+    ):
+        others = {"on_save", "on_save_as", "on_new", "on_create_stamp"} - {callback}
+        with patch("pygame.key.get_mods", return_value=mods):
+            event_handler.handle_events([MockEvent(pygame.KEYDOWN, key=key)])
+        getattr(event_handler, callback).assert_called_once()
+        for other in others:
+            getattr(event_handler, other).assert_not_called()
+
+    def test_ctrl_shift_c_creates_a_stamp_rather_than_copying(
+        self, mock_pygame, event_handler, tool_manager
+    ):
+        """The Selection tool sees keys first; it leaves Ctrl+Shift+C to the editor."""
+        from editor.tools.selection_tool import SelectionTool
+
+        tool_manager.register_tool("selection", SelectionTool())
+        tool_manager.set_active_tool("selection", event_handler.tool_context)
+        mods = pygame.KMOD_CTRL | pygame.KMOD_SHIFT
+        with (
+            patch("pygame.key.get_mods", return_value=mods),
+            patch.object(
+                tool_manager.get_active_tool(), "_copy_selection"
+            ) as copy_selection,
+        ):
+            event_handler.handle_events([MockEvent(pygame.KEYDOWN, key=pygame.K_c)])
+        copy_selection.assert_not_called()
+        event_handler.on_create_stamp.assert_called_once()
 
     def test_ctrl_z_triggers_undo(self, mock_pygame, event_handler, hole_data):
         """Ctrl+Z should trigger undo if available."""

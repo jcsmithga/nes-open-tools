@@ -10,6 +10,7 @@ from golf.formats.hole_check import (
     editable_problem,
     hidden_rows_trimmed,
     hole_problems,
+    rom_problems,
 )
 from golf.formats.hole_data import HoleData
 from tests.synthetic_holes import synthetic_hole
@@ -108,3 +109,19 @@ def test_the_editor_opens_any_hole_its_grids_cover():
     hole = good_hole()
     hole.terrain_height = 40
     assert editable_problem(hole) == "terrain height doesn't match its rows"
+
+
+def test_a_blank_hole_passes_every_check():
+    hole = HoleData.blank()
+    assert editable_problem(hole) is None
+    assert rom_problems(hole) == []
+
+
+def test_rom_problems_ignores_hidden_rows_and_names_placeholder():
+    hole = HoleData.blank()
+    hole.terrain += [[0x100] * 22, [0x100] * 22]
+    hole.attributes.append([1] * 11)
+    assert rom_problems(hole) == []
+    hole.terrain[0][0] = 0x100
+    (problem,) = rom_problems(hole)
+    assert "placeholder" in problem

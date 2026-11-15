@@ -88,6 +88,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 
 | Doc | About |
 |-----|-------|
+| [editor.md](editor.md) | Using the editor: files, Check, and starting a hole from scratch |
 | [../editor/CLAUDE.md](../editor/CLAUDE.md) | Editor architecture and how to add editor tools |
 | [forest_notes.md](forest_notes.md) | The forest fill algorithm |
 | [feature_brush.md](feature_brush.md) | The Feature Brush: painting fairways, bunkers and water as shapes, and the fit that chooses their border tiles; the Out of Bounds Brush and the Green Brush built on it |

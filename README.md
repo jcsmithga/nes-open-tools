@@ -78,7 +78,7 @@ full reference for its options.
 
 | Command | Description |
 |---------|-------------|
-| `golf-editor [terrain_chr] [greens_chr] [hole.json]` | Launch the course editor; see `editor/CLAUDE.md` |
+| `golf-editor [terrain_chr] [greens_chr] [hole.json]` | Launch the course editor; see `docs/editor.md` |
 
 Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 
@@ -183,8 +183,8 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 # Dump all courses from the ROMs (golf-dump alone writes the US ROM's, with statistics)
 golf-rehydrate
 
-# Edit a hole using the course editor
-golf-editor courses/japan/hole_01.json
+# Edit a hole using the course editor (or start one with Ctrl+N; docs/editor.md)
+golf-editor courses/us/hole_01.json
 
 # Write a course (all 3 course slots play it)
 golf-write nes_open_us.nes courses/japan/ -o modified.nes

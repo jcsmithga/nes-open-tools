@@ -163,8 +163,12 @@ class SelectionTool:
         return ToolResult.not_handled()
 
     def handle_key_down(self, key, modifiers, context):
-        # Ctrl+C: Copy
-        if key == pygame.K_c and (modifiers & pygame.KMOD_CTRL):
+        # Ctrl+C: Copy (Ctrl+Shift+C, Create Stamp, is the editor's)
+        if (
+            key == pygame.K_c
+            and modifiers & pygame.KMOD_CTRL
+            and not modifiers & pygame.KMOD_SHIFT
+        ):
             return self._copy_selection(context)
 
         # Ctrl+X: Cut

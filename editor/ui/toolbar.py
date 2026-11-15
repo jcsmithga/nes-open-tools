@@ -17,8 +17,11 @@ from .widgets import Button
 class ToolbarCallbacks:
     """Container for toolbar callbacks."""
 
+    on_new: Callable[[], None]
     on_load: Callable[[], None]
     on_save: Callable[[], None]
+    on_save_as: Callable[[], None]
+    on_check: Callable[[], None]
     on_set_mode: Callable[[str], None]
     on_toggle_grid: Callable[[], None]
     on_select_flag: Callable[[int], None]
@@ -55,13 +58,16 @@ class Toolbar:
         x = 10
 
         # File buttons
-        btn_load = Button(Rect(x, 5, 60, 30), "Load", self.callbacks.on_load)
-        self.file_buttons.append(btn_load)
-        x += 70
-
-        btn_save = Button(Rect(x, 5, 60, 30), "Save", self.callbacks.on_save)
-        self.file_buttons.append(btn_save)
-        x += 80
+        for label, width, callback in (
+            ("New", 50, self.callbacks.on_new),
+            ("Load", 60, self.callbacks.on_load),
+            ("Save", 60, self.callbacks.on_save),
+            ("Save As", 80, self.callbacks.on_save_as),
+            ("Check", 70, self.callbacks.on_check),
+        ):
+            self.file_buttons.append(Button(Rect(x, 5, width, 30), label, callback))
+            x += width + 10
+        x += 10
 
         # Mode buttons
         btn_terrain = Button(

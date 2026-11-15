@@ -36,9 +36,11 @@ class EventHandler:
         tool_manager,
         tool_picker: ToolPicker,
         stamp_browser,
+        on_new: Callable[[], None],
         on_load: Callable[[], None],
         on_load_file: Callable[[str], None],
         on_save: Callable[[], None],
+        on_save_as: Callable[[], None],
         on_toggle_mode: Callable[[], None],
         on_select_flag: Callable[[int], None],
         on_set_palette: Callable[[int], None],
@@ -60,9 +62,11 @@ class EventHandler:
             screen_height: Screen height
             tool_manager: Tool manager for handling tools
             stamp_browser: Stamp browser widget
+            on_new: Callback for starting a new hole
             on_load: Callback for load action
             on_load_file: Callback for loading a specific file (drag-and-drop)
             on_save: Callback for save action
+            on_save_as: Callback for saving under a new name
             on_toggle_mode: Callback to switch between terrain and greens mode
             on_select_flag: Callback to select a flag position by index (0-3)
             on_set_palette: Callback to select a terrain palette (1-3)
@@ -80,9 +84,11 @@ class EventHandler:
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.tool_manager = tool_manager
+        self.on_new = on_new
         self.on_load = on_load
         self.on_load_file = on_load_file
         self.on_save = on_save
+        self.on_save_as = on_save_as
         self.on_toggle_mode = on_toggle_mode
         self.on_create_stamp = on_create_stamp
         self.on_quit = on_quit
@@ -237,15 +243,15 @@ class EventHandler:
         elif event.key == pygame.K_TAB:
             self.on_toggle_mode()
 
-        elif event.key == pygame.K_s:
-            mods = pygame.key.get_mods()
-            if mods & pygame.KMOD_CTRL and mods & pygame.KMOD_SHIFT:
-                # Ctrl+Shift+S: Create stamp from selection
-                if self.on_create_stamp:
-                    self.on_create_stamp()
-            elif mods & pygame.KMOD_CTRL:
+        elif event.key == pygame.K_s and pygame.key.get_mods() & pygame.KMOD_CTRL:
+            if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                # Ctrl+Shift+S: Save As
+                self.on_save_as()
+            else:
                 # Ctrl+S: Save
                 self.on_save()
+        elif event.key == pygame.K_n and pygame.key.get_mods() & pygame.KMOD_CTRL:
+            self.on_new()
         elif event.key == pygame.K_o and pygame.key.get_mods() & pygame.KMOD_CTRL:
             self.on_load()
         elif event.key == pygame.K_z and pygame.key.get_mods() & pygame.KMOD_CTRL:
@@ -260,6 +266,14 @@ class EventHandler:
             self._redo()
 
         # Selection tool shortcuts (delegate to active tool if it's Selection)
+        elif (
+            event.key == pygame.K_c
+            and pygame.key.get_mods() & pygame.KMOD_CTRL
+            and pygame.key.get_mods() & pygame.KMOD_SHIFT
+        ):
+            # Ctrl+Shift+C: Create stamp from selection, beside Copy
+            if self.on_create_stamp:
+                self.on_create_stamp()
         elif event.key == pygame.K_c and pygame.key.get_mods() & pygame.KMOD_CTRL:
             # Ctrl+C = Copy (if Selection tool is active)
             active_tool = self.tool_manager.get_active_tool()

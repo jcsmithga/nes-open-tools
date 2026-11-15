@@ -1,5 +1,5 @@
 """
-Metadata editor tool for editing hole par and distance.
+Metadata editor tool for editing hole par, distance and handicap.
 
 Opens a modal dialog when activated.
 """
@@ -15,7 +15,7 @@ from .base_tool import ToolContext, ToolResult
 
 class MetadataEditorTool:
     """
-    Metadata editor tool - opens dialog for editing par and distance.
+    Metadata editor tool - opens dialog for editing par, distance and handicap.
 
     The tool owns a MetadataDialog that provides text entry for numeric metadata.
     The hole is snapshotted when the dialog opens and the snapshot pushed for undo
@@ -100,8 +100,7 @@ class MetadataEditorTool:
         """Close dialog and return appropriate result."""
         if self.dialog:
             saved = self.dialog.saved
-            par_value = self.dialog.par_value
-            distance_value = self.dialog.distance_value
+            summary = self.dialog.summary()
 
             before = self.before
 
@@ -121,9 +120,7 @@ class MetadataEditorTool:
                 assert before is not None
                 context.state.undo_manager.push_snapshot(before)
                 # Changes were saved
-                message = (
-                    f"Metadata updated: Par={par_value}, Distance={distance_value}"
-                )
+                message = f"Metadata updated: {summary}"
                 return ToolResult.modified(message=message)
             else:
                 # Dialog was canceled

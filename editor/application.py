@@ -11,7 +11,7 @@ import pygame
 from pygame import Rect
 
 from golf.algorithms.forest_fill import ForestFiller
-from golf.formats.hole_check import editable_problem
+from golf.formats.hole_check import editable_problem, rom_problems
 from golf.formats.hole_data import HoleData
 
 from .controllers.editor_state import EditorState, GridMode
@@ -59,6 +59,7 @@ from .tools.stamp_tool import StampTool
 from .tools.tool_manager import ToolManager
 from .ui.confirm_dialog import UnsavedChangesDialog, UnsavedChoice
 from .ui.dialogs import open_file_dialog, save_file_dialog
+from .ui.message_dialog import MessageDialog
 from .ui.pickers import GreensTilePicker, TilePicker, ToolPicker
 from .ui.stamp_browser import StampBrowser
 from .ui.toolbar import Toolbar, ToolbarCallbacks
@@ -211,9 +212,11 @@ class EditorApplication:
             self.tool_manager,
             self.tool_picker,
             self.stamp_browser,
+            on_new=self._on_new,
             on_load=self._on_load,
             on_load_file=self._on_load_file,
             on_save=self._on_save,
+            on_save_as=self._on_save_as,
             on_toggle_mode=self._toggle_mode,
             on_select_flag=self._select_flag,
             on_set_palette=self._set_palette,
@@ -239,8 +242,11 @@ class EditorApplication:
 
         # Create toolbar with callbacks
         toolbar_callbacks = ToolbarCallbacks(
+            on_new=self._on_new,
             on_load=self._on_load,
             on_save=self._on_save,
+            on_save_as=self._on_save_as,
+            on_check=self._on_check,
             on_set_mode=self._set_mode,
             on_toggle_grid=self.state.cycle_grid_mode,
             on_select_flag=self._select_flag,
@@ -339,6 +345,13 @@ class EditorApplication:
         if result.message:
             self.state.tool_message = result.message
 
+    def _on_new(self):
+        """Start a new, blank hole (Ctrl+N and the toolbar's New)."""
+        if not self._confirm_discard():
+            return
+        self._replace_hole(HoleData.blank().to_dict(), None)
+        self.state.tool_message = None
+
     def _on_load(self):
         """Load a hole file."""
         if not self._confirm_discard():
@@ -360,9 +373,16 @@ class EditorApplication:
         """Save the current hole (Ctrl+S and the toolbar's Save)."""
         self._save_hole()
 
-    def _save_hole(self) -> bool:
-        """Save the current hole, asking for a path if it has none; True if saved."""
-        path = self.hole_data.filepath or save_file_dialog(
+    def _on_save_as(self):
+        """Save the current hole under a new name (Ctrl+Shift+S and Save As)."""
+        self._save_hole(ask=True)
+
+    def _save_hole(self, ask: bool = False) -> bool:
+        """Save the current hole, asking for a path if it has none or `ask`; True if
+        saved. A hole a ROM could not hold is saved all the same, with a warning."""
+        if not self.hole_data.terrain:
+            return False
+        path = (None if ask else self.hole_data.filepath) or save_file_dialog(
             "Save Hole", ".json", [("JSON files", "*.json"), ("All files", "*.*")]
         )
         if not path:
@@ -373,8 +393,29 @@ class EditorApplication:
             self.state.tool_message = f"Could not save {Path(path).name}: {e}"
             return False
         self.state.undo_manager.mark_saved(self.hole_data)
-        self.state.tool_message = "Hole saved!"
+        problems = rom_problems(self.hole_data)
+        self.state.tool_message = (
+            f"Hole saved, but Check finds {len(problems)} problem(s)"
+            if problems
+            else "Hole saved!"
+        )
         return True
+
+    def _on_check(self):
+        """Show whether a ROM can hold the hole, and if not, why (the toolbar's Check)."""
+        if not self.hole_data.terrain:
+            return
+        problems = rom_problems(self.hole_data)
+        if problems:
+            title = f"Check: {len(problems)} problem(s)"
+            paragraphs = [f"- {problem}" for problem in problems]
+        else:
+            title = "Check: no problems"
+            paragraphs = ["A ROM can hold this hole."]
+        MessageDialog(
+            self.screen_width, self.screen_height, title, paragraphs, self.font
+        ).show(self.screen, self.clock)
+        self.state.tool_message = title
 
     def _confirm_discard(self) -> bool:
         """Ask what to do with unsaved changes; True if the hole may be replaced.
@@ -480,7 +521,7 @@ class EditorApplication:
             self.tool_picker.selected_tool = "stamp"
 
     def _on_create_stamp(self):
-        """Called when user presses Ctrl+Shift+S to create stamp from selection."""
+        """Called when user presses Ctrl+Shift+C to create stamp from selection."""
         from editor.data import ClipboardData
         from editor.ui.stamp_creation_dialog import StampCreationDialog
 
@@ -626,7 +667,9 @@ class EditorApplication:
 
         if not self.hole_data.terrain:
             text = self.font.render(
-                "No hole loaded. Press Ctrl+O to open.", True, COLOR_TEXT
+                "No hole open. Ctrl+N for a new hole, Ctrl+O to open one.",
+                True,
+                COLOR_TEXT,
             )
             self.screen.blit(
                 text, (canvas_rect.centerx - text.get_width() // 2, canvas_rect.centery)
@@ -747,14 +790,20 @@ class EditorApplication:
                     tile_val = self.hole_data.greens[row][col]
                     status_parts.append(f"Value: ${tile_val:02X}")
 
-        if self.hole_data.filepath:
-            name = Path(self.hole_data.filepath).name
+        if self.hole_data.terrain:
+            name = (
+                Path(self.hole_data.filepath).name
+                if self.hole_data.filepath
+                else "new hole"
+            )
             modified = "*" if self.hole_data.modified else ""
             status_parts.append(f"File: {name}{modified}")
 
         # Show tool message (e.g., from Position Tool)
         # Clear "Hole saved!" if file has been modified since saving
-        if self.state.tool_message == "Hole saved!" and self.hole_data.modified:
+        if (self.state.tool_message or "").startswith(
+            "Hole saved"
+        ) and self.hole_data.modified:
             self.state.tool_message = None
         if self.state.tool_message:
             status_parts.append(self.state.tool_message)
@@ -787,10 +836,15 @@ class EditorApplication:
             self.state.tool_message = f"Could not load {Path(path).name}: {problem}"
             return False
 
+        self._replace_hole(data, path)
+        self.state.tool_message = None
+        return True
+
+    def _replace_hole(self, data: dict, path: str | None):
+        """Make the hole a parsed hole file's `data`, saved at `path` (None if it has
+        never been saved), with a fresh undo history."""
+        # every component holds self.hole_data, so it is changed in place
         self.hole_data.load_dict(data)
         self.hole_data.filepath = path
         self.state.reset_canvas_position()
-        # Clear undo history when loading new file
         self.state.undo_manager.set_initial_state(self.hole_data)
-        self.state.tool_message = None
-        return True

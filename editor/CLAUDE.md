@@ -159,7 +159,10 @@ ToolManager validates hotkey uniqueness on registration and raises `ValueError` 
 conflict. Tool hotkeys currently in use: A, B, C, D, F, K, M, N, O, P, R, S, U, V, `=` (add row),
 `-` (remove row); `grep -n -A2 'def get_hotkey' editor/tools/*.py` is the source of truth.
 Also reserved: G (grid), Tab (mode), 1-3 (palette), F1-F4 (flag position), Ctrl+Z/Y
-(undo/redo), Ctrl+S (save), `,`/`.` (brush radius, in the brushes).
+(undo/redo), Ctrl+N (new), Ctrl+O (load), Ctrl+S (save), Ctrl+Shift+S (save as),
+Ctrl+C/X/V (the Selection tool's copy, cut and paste), Ctrl+Shift+C (create stamp),
+`,`/`.` (brush radius, in the brushes). The editor and its file commands, for users, are
+`docs/editor.md`.
 
 ## Tool-specific behavior
 

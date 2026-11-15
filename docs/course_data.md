@@ -34,7 +34,8 @@ the ROM, see `golf/core/compression.md` and the `nes-open-golf-rom-layout` skill
 `golf/formats/hole_check.py` checks a hole: `editable_problem` says whether the editor
 can open it, and `hole_problems` and `compression_problem` whether a ROM can hold it,
 after `hidden_rows_trimmed` drops the rows the editor hid. Publishing a derived or
-community hole runs them.
+community hole runs them, and so does the editor's Check. `HoleData.blank()` is the hole
+the editor's New starts from, which passes them ([editor.md](editor.md)).
 
 ## Terrain height
 

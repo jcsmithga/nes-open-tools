@@ -8,7 +8,7 @@ import pytest
 
 from editor.application import EditorApplication
 from editor.ui.confirm_dialog import UnsavedChoice
-from golf.formats.hole_check import editable_problem
+from golf.formats.hole_data import HoleData
 from tests.synthetic_holes import synthetic_hole
 
 
@@ -86,13 +86,6 @@ def test_a_file_that_is_not_a_hole_keeps_the_open_hole(
 def test_a_missing_file_does_not_crash(app, tmp_path):
     assert not app.load_hole(str(tmp_path / "gone.json"))
     assert "gone.json" in app.state.tool_message
-
-
-def test_a_hole_of_the_wrong_shape_is_refused():
-    hole = synthetic_hole()
-    hole.greens = hole.greens[:-1]
-    assert (editable_problem(hole) or "").startswith("greens")
-    assert editable_problem(synthetic_hole()) is None
 
 
 def modify(app):
@@ -228,3 +221,112 @@ def test_stamps_that_fail_to_load_are_reported(app, tmp_path):
     app._load_stamps()
 
     assert "broken.json" in (app.state.tool_message or "")
+
+
+def press_ctrl_shift(app, key):
+    mods = pygame.KMOD_CTRL | pygame.KMOD_SHIFT
+    with patch("pygame.key.get_mods", return_value=mods):
+        app.event_handler.handle_events(
+            [pygame.event.Event(pygame.KEYDOWN, key=key, mod=mods)]
+        )
+
+
+def test_ctrl_n_starts_a_blank_hole_with_no_file(app):
+    press_ctrl(app, pygame.K_n)
+
+    assert app.hole_data.to_dict() == HoleData.blank().to_dict()
+    assert app.hole_data.filepath is None
+    assert not app.hole_data.modified
+    assert not app.state.undo_manager.can_undo()
+
+
+def test_new_asks_about_unsaved_changes_first(app, hole_file):
+    app.load_hole(str(hole_file))
+    modify(app)
+
+    with patch(
+        "editor.application.UnsavedChangesDialog.show",
+        return_value=UnsavedChoice.CANCEL,
+    ):
+        app._on_new()
+
+    assert app.hole_data.filepath == str(hole_file)
+    assert app.hole_data.terrain[0][0] == 0x30
+
+
+def test_saving_a_new_hole_asks_where(app, tmp_path):
+    app._on_new()
+    path = tmp_path / "mine.json"
+
+    with patch("editor.application.save_file_dialog", return_value=str(path)):
+        press_ctrl(app, pygame.K_s)
+
+    assert app.hole_data.filepath == str(path)
+    assert HoleData.from_dict(json.loads(path.read_text())).terrain == (
+        HoleData.blank().terrain
+    )
+    assert app.state.tool_message == "Hole saved!"
+
+
+def test_save_as_saves_a_copy_and_works_on_it(app, hole_file, tmp_path):
+    app.load_hole(str(hole_file))
+    before = hole_file.read_text()
+    modify(app)
+    copy = tmp_path / "copy.json"
+
+    with patch("editor.application.save_file_dialog", return_value=str(copy)) as ask:
+        press_ctrl_shift(app, pygame.K_s)
+
+    ask.assert_called_once()
+    assert hole_file.read_text() == before
+    assert app.hole_data.filepath == str(copy)
+    assert not app.hole_data.modified
+    assert json.loads(copy.read_text())["terrain"]["rows"][0].startswith("30")
+
+
+def test_canceling_save_as_saves_nothing(app, hole_file):
+    app.load_hole(str(hole_file))
+    modify(app)
+
+    with patch("editor.application.save_file_dialog", return_value=None):
+        app._on_save_as()
+
+    assert app.hole_data.filepath == str(hole_file)
+    assert app.hole_data.modified
+
+
+def test_saving_a_hole_a_rom_cannot_hold_warns(app, hole_file):
+    app._on_new()
+    app.hole_data.metadata["par"] = 6
+    app.hole_data.filepath = str(hole_file)
+
+    app._on_save()
+
+    assert app.state.tool_message == "Hole saved, but Check finds 1 problem(s)"
+
+
+def test_check_names_every_problem(app):
+    app._on_new()
+    app.hole_data.metadata["par"] = 6
+    app.hole_data.set_terrain_tile(0, 0, 0x100)
+
+    with patch("editor.application.MessageDialog") as dialog:
+        app._on_check()
+
+    _, _, title, paragraphs, _ = dialog.call_args.args
+    assert title == "Check: 2 problem(s)"
+    assert any("placeholder" in line for line in paragraphs)
+    assert any("par must be" in line for line in paragraphs)
+    assert app.state.tool_message == title
+
+
+def test_check_passes_a_blank_hole(app):
+    app._on_new()
+    with patch("editor.application.MessageDialog") as dialog:
+        app._on_check()
+    assert dialog.call_args.args[2] == "Check: no problems"
+
+
+def test_the_toolbar_has_the_file_commands(app):
+    labels = [button.text for button in app.toolbar.file_buttons]
+    assert labels == ["New", "Load", "Save", "Save As", "Check"]

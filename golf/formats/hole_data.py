@@ -8,7 +8,7 @@ Handles loading from and saving to JSON files.
 import os
 from typing import Any
 
-from ..core.palettes import GREENS_WIDTH, TERRAIN_WIDTH
+from ..core.palettes import GREENS_HEIGHT, GREENS_WIDTH, TERRAIN_WIDTH
 from . import compact_json as json
 from . import hex_utils
 
@@ -23,6 +23,13 @@ HOLE_PARS = (3, 4, 5)
 ATTRIBUTES_WIDTH = 11
 #: the pin positions every hole has, one per round of a tournament
 PINS = 4
+#: deep rough, the commonest ground of the vanilla holes after fairway, and palette 1,
+#: their commonest palette, which a blank hole starts as everywhere
+BLANK_TERRAIN_TILE = 0xDF
+BLANK_PALETTE = 1
+#: the greens' rough, checkered as most vanilla greens have it
+#: (`ROUGH_FAMILIES` in golf/algorithms/green_zones.py)
+BLANK_GREENS_TILES = (0x29, 0x2C)
 
 
 class HoleData:
@@ -49,6 +56,45 @@ class HoleData:
             data = json.load(f)
         self.load_dict(data)
         self.filepath = os.fspath(path)
+
+    @classmethod
+    def blank(cls) -> "HoleData":
+        """A new hole with nothing on it, for starting one from scratch.
+
+        The fewest rows a hole can have, all deep rough, and a green all rough. The
+        green sits at the top in the middle, the tee near the bottom in the middle, and
+        the four pins spread round where the vanilla holes' pins sit on average, so each
+        is on screen to move. It passes
+        `golf/formats/hole_check.py`'s checks as it is.
+        """
+        height = MIN_TERRAIN_ROWS
+        hole = cls()
+        hole.terrain = [[BLANK_TERRAIN_TILE] * TERRAIN_WIDTH for _ in range(height)]
+        hole.terrain_height = height
+        hole.attributes = [
+            [BLANK_PALETTE] * ATTRIBUTES_WIDTH for _ in range((height + 1) // 2)
+        ]
+        hole.greens = [
+            [BLANK_GREENS_TILES[(row + col) % 2] for col in range(GREENS_WIDTH)]
+            for row in range(GREENS_HEIGHT)
+        ]
+        # the green's box is GREENS_WIDTH course pixels square
+        hole.green_x = (TERRAIN_WIDTH * 8 - GREENS_WIDTH) // 2
+        hole.green_y = 40
+        hole.metadata = {
+            "hole": 1,
+            "par": 4,
+            "distance": 400,
+            "handicap": 1,
+            "scroll_limit": (height - 28) // 2,
+            "tee": {"x": TERRAIN_WIDTH * 8 // 2, "y": height * 8 - 30},
+            "flag_positions": [
+                {"x_offset": x, "y_offset": y}
+                for x, y in ((80, 88), (104, 88), (80, 112), (104, 112))
+            ],
+            "_debug": {},
+        }
+        return hole
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "HoleData":
