@@ -36,6 +36,7 @@ class GreenFixTool:
         """Execute green fix when tool is activated (action tool)."""
         # Only works in greens mode
         if context.state.mode != "greens":
+            context.show_message("Green Fix: Only works in greens mode")
             return
 
         greens = context.hole_data.greens
@@ -60,6 +61,7 @@ class GreenFixTool:
                     changes.append((row_idx, col_idx, filled_tile))
 
         if not changes:
+            context.show_message("Green Fix: Nothing to change")
             return
 
         # Push undo state before applying
@@ -68,6 +70,7 @@ class GreenFixTool:
         # Apply changes
         for row, col, tile in changes:
             context.hole_data.set_greens_tile(row, col, tile)
+        context.show_message(f"Green Fix: Changed {len(changes)} tiles")
 
     def on_deactivated(self, context):
         pass

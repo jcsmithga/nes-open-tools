@@ -163,3 +163,67 @@ def test_the_window_fits_the_desktop(app):
     desktop_w, desktop_h = pygame.display.get_desktop_sizes()[0]
     assert app.screen_width <= desktop_w
     assert app.screen_height <= desktop_h
+
+
+def press_ctrl(app, key):
+    with patch("pygame.key.get_mods", return_value=pygame.KMOD_CTRL):
+        app.event_handler.handle_events(
+            [pygame.event.Event(pygame.KEYDOWN, key=key, mod=pygame.KMOD_CTRL)]
+        )
+
+
+def test_undo_back_to_the_saved_hole_leaves_nothing_to_save(app, hole_file):
+    app.load_hole(str(hole_file))
+    app.state.undo_manager.push_state(app.hole_data)
+    modify(app)
+
+    press_ctrl(app, pygame.K_z)
+
+    assert not app.hole_data.modified
+
+
+def test_undo_after_saving_leaves_something_to_save(app, hole_file):
+    app.load_hole(str(hole_file))
+    app.state.undo_manager.push_state(app.hole_data)
+    modify(app)
+    app._on_save()
+
+    press_ctrl(app, pygame.K_z)
+
+    assert app.hole_data.modified
+
+
+def test_creating_a_stamp_without_a_selection_says_so(app):
+    app._on_create_stamp()
+    assert (app.state.tool_message or "").startswith("Create stamp:")
+
+
+def test_green_fix_in_terrain_mode_says_so(app, hole_file):
+    app.load_hole(str(hole_file))
+    press(app, pygame.K_u)
+    assert app.state.tool_message == "Green Fix: Only works in greens mode"
+
+
+def test_add_row_at_the_limit_says_so(app, hole_file):
+    app.load_hole(str(hole_file))
+    app.hole_data.terrain_height = 60
+
+    press(app, pygame.K_EQUALS)
+
+    assert app.state.tool_message == "Cannot exceed 60 rows"
+
+
+def test_messages_from_a_tools_update_reach_the_status_bar(app):
+    from editor.tools.base_tool import ToolResult
+
+    app._process_tool_result(ToolResult(is_handled=True, message="hello"))
+    assert app.state.tool_message == "hello"
+
+
+def test_stamps_that_fail_to_load_are_reported(app, tmp_path):
+    (tmp_path / "broken.json").write_text("{")
+    app.stamp_library.user_path = tmp_path
+
+    app._load_stamps()
+
+    assert "broken.json" in (app.state.tool_message or "")

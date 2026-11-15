@@ -168,7 +168,7 @@ class EditorApplication:
 
         # Create stamp library and browser
         self.stamp_library = StampLibrary()
-        self.stamp_library.load_stamps()
+        self._load_stamps()
 
         self.stamp_browser = StampBrowser(
             picker_rect,
@@ -337,7 +337,7 @@ class EditorApplication:
     def _process_tool_result(self, result):
         """Process a tool result (same logic as EventHandler._process_tool_result)."""
         if result.message:
-            print(result.message)
+            self.state.tool_message = result.message
 
     def _on_load(self):
         """Load a hole file."""
@@ -372,6 +372,7 @@ class EditorApplication:
         except OSError as e:
             self.state.tool_message = f"Could not save {Path(path).name}: {e}"
             return False
+        self.state.undo_manager.mark_saved(self.hole_data)
         self.state.tool_message = "Hole saved!"
         return True
 
@@ -504,8 +505,8 @@ class EditorApplication:
             # Fall back to clipboard if no active selection
             clipboard_data = self.state.clipboard
         else:
-            print(
-                "No selection to create stamp from - use Selection tool to select a region first"
+            self.state.tool_message = (
+                "Create stamp: select a region with the Selection tool first"
             )
             return
 
@@ -527,11 +528,24 @@ class EditorApplication:
 
         if stamp_data:
             # Save stamp to library
-            save_path = self.stamp_library.save_stamp(stamp_data)
-            print(f"Stamp saved to {save_path}")
+            try:
+                save_path = self.stamp_library.save_stamp(stamp_data)
+            except OSError as e:
+                self.state.tool_message = f"Could not save stamp: {e}"
+                return
+            self.state.tool_message = f"Stamp saved to {save_path}"
 
             # Reload stamps to update browser
-            self.stamp_library.load_stamps()
+            self._load_stamps()
+
+    def _load_stamps(self):
+        """(Re)load the stamp library, saying in the status bar if any stamp failed."""
+        self.stamp_library.load_stamps()
+        errors = self.stamp_library.load_errors
+        if errors:
+            self.state.tool_message = (
+                f"{len(errors)} stamp file(s) failed to load, first: {errors[0]}"
+            )
 
     def _get_canvas_rect(self) -> Rect:
         """Get the canvas drawing area."""

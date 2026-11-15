@@ -14,7 +14,7 @@ from pathlib import Path
 
 from golf.core.palettes import GREENS_WIDTH, TERRAIN_WIDTH
 from golf.core.patches.course import compress_holes
-from golf.formats.hole_data import HoleData
+from golf.formats.hole_data import MAX_TERRAIN_ROWS, MIN_TERRAIN_ROWS, HoleData
 
 from . import delta as hole_delta
 from .catalog import (
@@ -48,8 +48,8 @@ TRANSFORM_SEEDS = (0, 1, 2)
 WARN_SHARE = 0.35
 REFUSE_SHARE = 0.60
 
-MIN_ROWS = 30
-MAX_ROWS = 60
+MIN_ROWS = MIN_TERRAIN_ROWS
+MAX_ROWS = MAX_TERRAIN_ROWS
 ATTRIBUTES_WIDTH = 11
 GREENS_HEIGHT = 24
 ATTRIBUTE_PALETTES = range(4)

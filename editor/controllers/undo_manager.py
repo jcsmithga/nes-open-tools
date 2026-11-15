@@ -22,11 +22,23 @@ class UndoManager:
         self.undo_stack: list[HoleData] = []
         self.redo_stack: list[HoleData] = []
         self.max_undo_levels = max_undo_levels
+        #: the hole as it was last loaded or saved, to tell when undo or redo
+        #: brings it back there
+        self._saved: dict | None = None
 
     def set_initial_state(self, hole_data: HoleData):
         """Set the initial state (called when loading a file)."""
         self.undo_stack.clear()
         self.redo_stack.clear()
+        self.mark_saved(hole_data)
+
+    def mark_saved(self, hole_data: HoleData):
+        """Remember the hole as it is now as the one on disk."""
+        self._saved = hole_data.to_dict()
+
+    def matches_saved(self, hole_data: HoleData) -> bool:
+        """Whether the hole is the same as when it was last loaded or saved."""
+        return self._saved is not None and hole_data.to_dict() == self._saved
 
     def push_state(self, hole_data: HoleData):
         """
@@ -36,8 +48,15 @@ class UndoManager:
         Args:
             hole_data: Current hole data to save
         """
-        # Create deep copy of current state
-        snapshot = self._create_snapshot(hole_data)
+        self.push_snapshot(self.snapshot(hole_data))
+
+    def snapshot(self, hole_data: HoleData) -> HoleData:
+        """A copy of the hole, for a change that can only tell afterwards whether
+        it changed anything: push it with push_snapshot if it did."""
+        return self._create_snapshot(hole_data)
+
+    def push_snapshot(self, snapshot: HoleData):
+        """Push a snapshot taken before a change onto the undo stack."""
         self.undo_stack.append(snapshot)
 
         # Limit stack size

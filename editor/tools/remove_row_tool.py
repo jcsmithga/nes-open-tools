@@ -32,7 +32,7 @@ class RemoveRowTool:
         )
         if isinstance(row_ops, RowOperationsTool):
             # This will push undo and modify terrain
-            row_ops.remove_row(context)
+            context.show_message(row_ops.remove_row(context).message)
 
     def on_deactivated(self, context: ToolContext):
         pass

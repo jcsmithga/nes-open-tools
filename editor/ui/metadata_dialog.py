@@ -279,9 +279,12 @@ class MetadataDialog:
 
         # Apply changes
         try:
-            self.hole_data.metadata["par"] = int(self.par_value)
-            self.hole_data.metadata["distance"] = int(self.distance_value)
-            self.hole_data.modified = True
+            par, distance = int(self.par_value), int(self.distance_value)
+            metadata = self.hole_data.metadata
+            if (metadata.get("par"), metadata.get("distance")) != (par, distance):
+                metadata["par"] = par
+                metadata["distance"] = distance
+                self.hole_data.modified = True
             self.saved = True
             return True  # Close dialog
         except ValueError:

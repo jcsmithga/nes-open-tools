@@ -409,3 +409,35 @@ class TestUndoRedoSequences:
         # Redo again
         s4 = undo_manager.redo(s3)
         assert s4 is not None
+
+
+class TestSavedState:
+    """Undo and redo know when they bring the hole back to the saved one."""
+
+    def test_undo_back_to_the_loaded_hole_matches_it(
+        self, undo_manager, simple_hole_data
+    ):
+        undo_manager.set_initial_state(simple_hole_data)
+        undo_manager.push_state(simple_hole_data)
+        simple_hole_data.terrain[0][0] = 9
+
+        assert not undo_manager.matches_saved(simple_hole_data)
+        restored = undo_manager.undo(simple_hole_data)
+        assert restored is not None
+        assert undo_manager.matches_saved(restored)
+
+    def test_undo_past_a_save_does_not_match_it(self, undo_manager, simple_hole_data):
+        undo_manager.set_initial_state(simple_hole_data)
+        undo_manager.push_state(simple_hole_data)
+        simple_hole_data.terrain[0][0] = 9
+        undo_manager.mark_saved(simple_hole_data)
+
+        restored = undo_manager.undo(simple_hole_data)
+
+        assert restored is not None
+        assert not undo_manager.matches_saved(restored)
+
+    def test_nothing_matches_before_a_hole_is_loaded(
+        self, undo_manager, simple_hole_data
+    ):
+        assert not undo_manager.matches_saved(simple_hole_data)

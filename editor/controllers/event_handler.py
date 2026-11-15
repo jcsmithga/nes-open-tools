@@ -329,4 +329,7 @@ class EventHandler:
         self.hole_data.green_x = snapshot.green_x
         self.hole_data.green_y = snapshot.green_y
         self.hole_data.metadata = snapshot.metadata
-        self.hole_data.modified = True  # Restoring counts as modification
+        # Undoing back to the saved hole leaves nothing to save
+        self.hole_data.modified = not self.state.undo_manager.matches_saved(
+            self.hole_data
+        )

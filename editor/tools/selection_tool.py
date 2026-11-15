@@ -5,14 +5,9 @@ Selection tool for rectangular selection with cut/copy/paste operations.
 import pygame
 
 from editor.controllers.view_state import ViewState
-from editor.core.constants import (
-    GREENS_HEIGHT,
-    GREENS_WIDTH,
-    TERRAIN_WIDTH,
-)
 from editor.data import ClipboardData
 
-from .base_tool import ToolContext, ToolResult
+from .base_tool import ToolContext, ToolResult, write_tiles
 
 DEFAULT_TILE = 0x100
 
@@ -254,28 +249,11 @@ class SelectionTool:
         if not copy_result.is_handled or "Failed" in (copy_result.message or ""):
             return copy_result
 
-        # Then, delete (fill with default tile)
+        # Then, clear it (fill with default tile)
         sel_rect = self._selection_rect(context)
         if not sel_rect:
             return ToolResult(is_handled=True, message="No selection to cut")
-
-        # Push undo state before modification
-        context.state.undo_manager.push_state(context.hole_data)
-
-        # Fill selection with default tile
-        start_row, start_col, end_row, end_col = sel_rect
-
-        for row in range(start_row, end_row + 1):
-            for col in range(start_col, end_col + 1):
-                if context.state.mode == "terrain":
-                    if (
-                        0 <= row < len(context.hole_data.terrain)
-                        and 0 <= col < TERRAIN_WIDTH
-                    ):
-                        context.hole_data.set_terrain_tile(row, col, DEFAULT_TILE)
-                else:  # greens
-                    if 0 <= row < GREENS_HEIGHT and 0 <= col < GREENS_WIDTH:
-                        context.hole_data.set_greens_tile(row, col, DEFAULT_TILE)
+        self._clear_region(sel_rect, context)
 
         width = context.state.clipboard.width if context.state.clipboard else 0
         height = context.state.clipboard.height if context.state.clipboard else 0
@@ -290,28 +268,29 @@ class SelectionTool:
         if not sel_rect:
             return ToolResult(is_handled=True, message="No selection to delete")
 
-        # Push undo state before modification
-        context.state.undo_manager.push_state(context.hole_data)
-
-        # Fill selection with default tile
         start_row, start_col, end_row, end_col = sel_rect
-
-        for row in range(start_row, end_row + 1):
-            for col in range(start_col, end_col + 1):
-                if context.state.mode == "terrain":
-                    if (
-                        0 <= row < len(context.hole_data.terrain)
-                        and 0 <= col < TERRAIN_WIDTH
-                    ):
-                        context.hole_data.set_terrain_tile(row, col, DEFAULT_TILE)
-                else:  # greens
-                    if 0 <= row < GREENS_HEIGHT and 0 <= col < GREENS_WIDTH:
-                        context.hole_data.set_greens_tile(row, col, DEFAULT_TILE)
-
         width = end_col - start_col + 1
         height = end_row - start_row + 1
+        if not self._clear_region(sel_rect, context):
+            return ToolResult(
+                is_handled=True, message=f"{width}x{height} region is already empty"
+            )
         return ToolResult.modified(
             message=f"Deleted {width}x{height} region",
+        )
+
+    @staticmethod
+    def _clear_region(sel_rect: tuple[int, int, int, int], context: ToolContext) -> int:
+        """Fill a (start_row, start_col, end_row, end_col) region with the default
+        tile; the number of tiles changed."""
+        start_row, start_col, end_row, end_col = sel_rect
+        return write_tiles(
+            context,
+            (
+                (row, col, DEFAULT_TILE)
+                for row in range(start_row, end_row + 1)
+                for col in range(start_col, end_col + 1)
+            ),
         )
 
     def _start_paste(self, context: ToolContext) -> ToolResult:
@@ -363,49 +342,24 @@ class SelectionTool:
             return ToolResult.handled()
 
         paste_row, paste_col = tile
-
-        # Push undo state before modification
-        context.state.undo_manager.push_state(context.hole_data)
-
-        # Apply clipboard tiles
-        tiles_pasted = 0
-        for row_offset in range(context.state.clipboard.height):
-            for col_offset in range(context.state.clipboard.width):
-                target_row = paste_row + row_offset
-                target_col = paste_col + col_offset
-
-                tile_value = context.state.clipboard.get_tile(row_offset, col_offset)
-
-                # Skip transparent tiles (None values)
-                if tile_value is None:
-                    continue
-
-                # Paste based on mode
-                if context.state.mode == "terrain":
-                    if (
-                        0 <= target_row < len(context.hole_data.terrain)
-                        and 0 <= target_col < TERRAIN_WIDTH
-                    ):
-                        context.hole_data.set_terrain_tile(
-                            target_row, target_col, tile_value
-                        )
-                        tiles_pasted += 1
-                else:  # greens
-                    if (
-                        0 <= target_row < GREENS_HEIGHT
-                        and 0 <= target_col < GREENS_WIDTH
-                    ):
-                        context.hole_data.set_greens_tile(
-                            target_row, target_col, tile_value
-                        )
-                        tiles_pasted += 1
+        clipboard = context.state.clipboard
+        tiles_pasted = write_tiles(
+            context,
+            (
+                (paste_row + row_offset, paste_col + col_offset, value)
+                for row_offset in range(clipboard.height)
+                for col_offset in range(clipboard.width)
+                # None marks a transparent tile
+                if (value := clipboard.get_tile(row_offset, col_offset)) is not None
+            ),
+        )
 
         # Stay in paste mode for multiple pastes
         # User can press Esc or right-click to exit paste mode
-
-        return ToolResult.modified(
-            message=f"Pasted {tiles_pasted} tiles (click to paste again, Esc/right-click to cancel)",
-        )
+        message = f"Pasted {tiles_pasted} tiles (click to paste again, Esc/right-click to cancel)"
+        if not tiles_pasted:
+            return ToolResult(is_handled=True, message=message)
+        return ToolResult.modified(message=message)
 
     def _cancel_paste(self, context: ToolContext):
         """Cancel paste mode."""

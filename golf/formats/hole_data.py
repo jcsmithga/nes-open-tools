@@ -12,6 +12,12 @@ from ..core.palettes import GREENS_WIDTH, TERRAIN_WIDTH
 from . import compact_json as json
 from . import hex_utils
 
+#: the fewest terrain rows a hole has
+MIN_TERRAIN_ROWS = 30
+#: the most terrain rows a hole has: the tallest Mario Open hole, and what the
+#: wram_expansion patch every written course gets sizes its buffers for
+MAX_TERRAIN_ROWS = 60
+
 
 class HoleData:
     """Manages hole data including terrain, attributes, and greens."""

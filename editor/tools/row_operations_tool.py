@@ -2,7 +2,7 @@
 Row operations tool - add and remove terrain rows.
 """
 
-from golf.formats.hole_data import HoleData
+from golf.formats.hole_data import MAX_TERRAIN_ROWS, MIN_TERRAIN_ROWS, HoleData
 
 from .base_tool import ToolContext, ToolResult
 
@@ -51,7 +51,7 @@ class RowOperationsTool:
         """Add TWO terrain rows with undo support.
 
         Constraints:
-        - Maximum 48 rows
+        - Maximum MAX_TERRAIN_ROWS (60) rows
         - Add in pairs (2 rows at a time)
         - Restore hidden rows before creating new ones
         - Update scroll_limit after operation
@@ -59,13 +59,15 @@ class RowOperationsTool:
         hole_data = context.hole_data
 
         # Check maximum constraint
-        if hole_data.terrain_height >= 48:
-            return ToolResult(is_handled=True, message="Cannot exceed 48 rows")
+        if hole_data.terrain_height >= MAX_TERRAIN_ROWS:
+            return ToolResult(
+                is_handled=True, message=f"Cannot exceed {MAX_TERRAIN_ROWS} rows"
+            )
 
-        if hole_data.terrain_height + 2 > 48:
+        if hole_data.terrain_height + 2 > MAX_TERRAIN_ROWS:
             return ToolResult(
                 is_handled=True,
-                message="Would exceed 48 row limit (can only add in pairs of 2)",
+                message=f"Would exceed {MAX_TERRAIN_ROWS} row limit (can only add in pairs of 2)",
             )
 
         # Push undo state before modification
@@ -88,14 +90,15 @@ class RowOperationsTool:
         # Update scroll limit
         _update_scroll_limit(hole_data)
 
-        # Return result indicating terrain was modified
-        return ToolResult.modified()
+        return ToolResult.modified(
+            message=f"Added 2 rows ({hole_data.terrain_height} rows)"
+        )
 
     def remove_row(self, context: ToolContext) -> ToolResult:
         """Remove TWO terrain rows with undo support (soft removal).
 
         Constraints:
-        - Minimum 30 rows
+        - Minimum MIN_TERRAIN_ROWS (30) rows
         - Remove in pairs (2 rows at a time)
         - Soft removal: decrease terrain_height, keep data
         - Update scroll_limit after operation
@@ -103,8 +106,11 @@ class RowOperationsTool:
         hole_data = context.hole_data
 
         # Check minimum constraint
-        if hole_data.terrain_height <= 30:
-            return ToolResult(is_handled=True, message="Cannot have fewer than 30 rows")
+        if hole_data.terrain_height <= MIN_TERRAIN_ROWS:
+            return ToolResult(
+                is_handled=True,
+                message=f"Cannot have fewer than {MIN_TERRAIN_ROWS} rows",
+            )
 
         # Push undo state before modification
         context.state.undo_manager.push_state(hole_data)
@@ -115,5 +121,6 @@ class RowOperationsTool:
         # Update scroll limit
         _update_scroll_limit(hole_data)
 
-        # Return result indicating terrain was modified
-        return ToolResult.modified()
+        return ToolResult.modified(
+            message=f"Removed 2 rows ({hole_data.terrain_height} rows)"
+        )

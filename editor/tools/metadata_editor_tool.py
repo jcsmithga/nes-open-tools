@@ -8,6 +8,7 @@ import pygame
 
 from editor.rendering import font_cache
 from editor.ui.metadata_dialog import MetadataDialog
+from golf.formats.hole_data import HoleData
 
 from .base_tool import ToolContext, ToolResult
 
@@ -17,13 +18,15 @@ class MetadataEditorTool:
     Metadata editor tool - opens dialog for editing par and distance.
 
     The tool owns a MetadataDialog that provides text entry for numeric metadata.
-    Undo state is pushed once when the dialog is opened, so all changes can be
-    reverted with a single Undo.
+    The hole is snapshotted when the dialog opens and the snapshot pushed for undo
+    only if a save changes something, so all changes revert with a single Undo and a
+    cancel leaves no empty undo step.
     """
 
     def __init__(self):
         self.dialog: MetadataDialog | None = None
-        self.undo_pushed: bool = False
+        #: the hole as it was when the dialog opened
+        self.before: HoleData | None = None
 
     def handle_mouse_down(self, pos, button, modifiers, context):
         if self.dialog is None:
@@ -66,11 +69,8 @@ class MetadataEditorTool:
         return ToolResult.not_handled()
 
     def on_activated(self, context):
-        """Called when tool becomes active - create dialog and push undo state."""
-        # Push undo state once for entire dialog session
-        if not self.undo_pushed:
-            context.state.undo_manager.push_state(context.hole_data)
-            self.undo_pushed = True
+        """Called when tool becomes active - create dialog and snapshot the hole."""
+        self.before = context.state.undo_manager.snapshot(context.hole_data)
 
         font = font_cache.get_font(None, 24)
 
@@ -85,12 +85,12 @@ class MetadataEditorTool:
     def on_deactivated(self, context):
         """Called when tool is deactivated - close dialog."""
         self.dialog = None
-        self.undo_pushed = False
+        self.before = None
 
     def reset(self):
         """Reset tool state."""
         self.dialog = None
-        self.undo_pushed = False
+        self.before = None
 
     def get_hotkey(self) -> int | None:
         """Return 'D' key for Data/metadata editing."""
@@ -103,14 +103,23 @@ class MetadataEditorTool:
             par_value = self.dialog.par_value
             distance_value = self.dialog.distance_value
 
+            before = self.before
+
             # Clean up dialog state
             self.dialog = None
-            self.undo_pushed = False
+            self.before = None
 
             # Request revert to previous tool
             context.request_revert_to_previous_tool()
 
+            changed = (
+                before is not None and before.metadata != context.hole_data.metadata
+            )
+            if saved and not changed:
+                return ToolResult(is_handled=True, message="Metadata unchanged")
             if saved:
+                assert before is not None
+                context.state.undo_manager.push_snapshot(before)
                 # Changes were saved
                 message = (
                     f"Metadata updated: Par={par_value}, Distance={distance_value}"

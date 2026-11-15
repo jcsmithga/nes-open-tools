@@ -2,6 +2,7 @@
 Tool protocol and base definitions for editor tools.
 """
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Protocol
 
 from editor.controllers.view_state import ViewState, canvas_rect
@@ -129,6 +130,13 @@ class ToolContext:
         if self._on_revert_to_previous_tool:
             self._on_revert_to_previous_tool()
 
+    def show_message(self, message: str | None):
+        """Show a message in the status bar.
+
+        For action tools, which run from on_activated and so return no ToolResult.
+        """
+        self.state.tool_message = message
+
     def select_flag(self, index: int):
         """Request that the application change the visible flag.
 
@@ -171,3 +179,27 @@ class ToolResult:
     def modified(message: str | None = None) -> "ToolResult":
         """Content was modified."""
         return ToolResult(is_handled=True, message=message)
+
+
+def write_tiles(context: ToolContext, tiles: Iterable[tuple[int, int, int]]) -> int:
+    """Write (row, col, tile) cells to the current mode's grid; the number changed.
+
+    Cells off the grid or already holding their tile are skipped, and undo state is
+    pushed once, before the first change, so a write that changes nothing leaves no
+    empty step on the undo stack.
+    """
+    hole = context.hole_data
+    greens = context.state.mode == "greens"
+    grid = hole.greens if greens else hole.terrain
+    changes = [
+        (row, col, tile)
+        for row, col, tile in tiles
+        if 0 <= row < len(grid) and 0 <= col < len(grid[row]) and grid[row][col] != tile
+    ]
+    if not changes:
+        return 0
+    context.state.undo_manager.push_state(hole)
+    set_tile = hole.set_greens_tile if greens else hole.set_terrain_tile
+    for row, col, tile in changes:
+        set_tile(row, col, tile)
+    return len(changes)

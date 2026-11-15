@@ -194,38 +194,38 @@ class TestRowOperationsPairConstraint:
 
 
 class TestRowOperationsMaximumConstraint:
-    """Tests for 48-row maximum constraint."""
+    """Tests for 60-row maximum constraint."""
 
-    def test_cannot_add_rows_beyond_48(self, row_operations_tool, mock_tool_context):
-        """Cannot add rows when already at 48."""
-        mock_tool_context.hole_data.terrain_height = 48
+    def test_cannot_add_rows_beyond_60(self, row_operations_tool, mock_tool_context):
+        """Cannot add rows when already at 60."""
+        mock_tool_context.hole_data.terrain_height = 60
 
         result = row_operations_tool.add_row(mock_tool_context)
 
         assert result.is_handled is True
-        assert "48" in result.message
-        assert mock_tool_context.hole_data.terrain_height == 48  # Unchanged
+        assert "60" in result.message
+        assert mock_tool_context.hole_data.terrain_height == 60  # Unchanged
 
-    def test_cannot_add_rows_that_would_exceed_48(
+    def test_cannot_add_rows_that_would_exceed_60(
         self, row_operations_tool, mock_tool_context
     ):
-        """Cannot add 2 rows if it would exceed 48."""
-        mock_tool_context.hole_data.terrain_height = 47  # Odd, but test edge case
+        """Cannot add 2 rows if it would exceed 60."""
+        mock_tool_context.hole_data.terrain_height = 59  # Odd, but test edge case
 
         result = row_operations_tool.add_row(mock_tool_context)
 
         assert result.is_handled is True
-        assert "48" in result.message
-        assert mock_tool_context.hole_data.terrain_height == 47  # Unchanged
+        assert "60" in result.message
+        assert mock_tool_context.hole_data.terrain_height == 59  # Unchanged
 
-    def test_add_row_allows_up_to_48(self, row_operations_tool, mock_tool_context):
-        """Can add rows up to exactly 48."""
-        mock_tool_context.hole_data.terrain_height = 46
-        mock_tool_context.hole_data.terrain = [[0] * 22 for _ in range(46)]
+    def test_add_row_allows_up_to_60(self, row_operations_tool, mock_tool_context):
+        """Can add rows up to exactly 60."""
+        mock_tool_context.hole_data.terrain_height = 58
+        mock_tool_context.hole_data.terrain = [[0] * 22 for _ in range(58)]
 
         row_operations_tool.add_row(mock_tool_context)
 
-        assert mock_tool_context.hole_data.terrain_height == 48  # Allowed
+        assert mock_tool_context.hole_data.terrain_height == 60  # Allowed
 
 
 class TestRowOperationsMinimumConstraint:
@@ -450,6 +450,7 @@ class TestRowOperationsScrollLimit:
             (30, 1),  # (30 - 28) // 2 = 1
             (32, 2),  # (32 - 28) // 2 = 2
             (48, 10),  # (48 - 28) // 2 = 10
+            (60, 16),  # (60 - 28) // 2 = 16, the most the scroll tables cover
         ]
 
         for height, expected_scroll in test_cases:

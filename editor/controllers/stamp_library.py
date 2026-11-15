@@ -21,6 +21,8 @@ class StampLibrary:
             str, list[str]
         ] = {}  # category -> list of stamp_ids (backward compat)
         self.category_tree = CategoryTree()  # Hierarchical category tree
+        #: "file: error" for each stamp file the last load_stamps couldn't read
+        self.load_errors: list[str] = []
 
         # Paths
         self.built_in_path = get_resource_path("data/stamps/built-in")
@@ -34,6 +36,7 @@ class StampLibrary:
         self.stamps.clear()
         self.categories.clear()
         self.category_tree.clear()
+        self.load_errors = []
 
         # Load built-in stamps
         if self.built_in_path.exists():
@@ -73,7 +76,7 @@ class StampLibrary:
                 self.category_tree.add_stamp(category, stamp_id)
 
             except Exception as e:
-                print(f"Warning: Failed to load stamp {json_file}: {e}")
+                self.load_errors.append(f"{json_file.name}: {e}")
 
     def get_stamps_by_path(
         self, category_path: str, recursive: bool = False

@@ -35,18 +35,20 @@ the ROM, see `golf/core/compression.md` and the `nes-open-golf-rom-layout` skill
 
 Terrain uses a dual-height system:
 
-- **Physical terrain data** (`terrain` list): can hold up to 48 rows of tile data
-- **Visible terrain height** (`terrain_height` field): how many rows are rendered (30-48 rows)
+- **Physical terrain data** (`terrain` list): can hold up to 60 rows of tile data
+- **Visible terrain height** (`terrain_height` field): how many rows are rendered (30-60 rows)
 - **Soft removal**: removing rows decreases `terrain_height` but keeps the data in the `terrain` list
 - **Restoration**: adding rows restores hidden data (if present) before creating new rows
 - **Scroll limit**: calculated as `(terrain_height - 28) / 2` and updated on every add/remove
 
 Row constraints:
 
-- **Minimum** 30 rows, **maximum** 48 rows
+- **Minimum** 30 rows, **maximum** 60 rows (`MIN_TERRAIN_ROWS` and `MAX_TERRAIN_ROWS` in
+  `golf/formats/hole_data.py`)
 - Rows are always added/removed in pairs, so every hole has an even row count
 
-Holes taller than 48 rows (some JP holes) need the WRAM expansion patch; see
+The vanilla game's terrain buffer holds only 48 rows; holes taller than that (six of
+Mario Open's) need the WRAM expansion patch, which `golf-write` always applies. See
 `docs/wram_expansion.md`.
 
 ## JSON format
@@ -58,7 +60,7 @@ one-liners for inspecting these files.
 
 ## Coordinate systems
 
-- **Terrain tiles**: 22 tiles wide, visible height 30-48 rows (always even)
+- **Terrain tiles**: 22 tiles wide, visible height 30-60 rows (always even)
 - **Supertiles**: 2x2 tile blocks used for attribute (palette) mapping
 - **Attributes**: 11 columns wide (12 supertiles minus 1 HUD column)
 - **Greens tiles**: fixed 24x24 grid centered at green position

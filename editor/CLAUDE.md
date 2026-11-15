@@ -98,7 +98,13 @@ def handle_mouse_down(self, pos, button, modifiers, context):
 - **HoleData** (`golf/formats/hole_data.py`) - the course data. Modified by tools via
   ToolContext.
 - **UndoManager** (`controllers/undo_manager.py`) - snapshot undo/redo. Tools call
-  `context.state.undo_manager.push_state(context.hole_data)` *before* modifying data.
+  `context.state.undo_manager.push_state(context.hole_data)` *before* modifying data,
+  and only when something will change: a step that changes nothing still marks the hole
+  modified when undone. `write_tiles(context, cells)` in `tools/base_tool.py` writes
+  tiles and pushes only if one changes; a change that can only tell afterwards takes
+  `snapshot()` first and `push_snapshot()`s it if it changed anything (the Metadata
+  Editor). The manager also remembers the hole as last loaded or saved, so undo back to
+  it clears `modified`.
 
 ## Common pitfalls
 
@@ -125,7 +131,7 @@ of the same kind rather than starting from scratch:
 |------|----------|-----------------|
 | Modal | Persistent mode shown in the picker; stays active until another tool is chosen | `paint_tool.py`, `forest_fill_tool.py` |
 | Service | Not in the picker; used by other tools via `context.get_eyedropper_tool()` | `eyedropper_tool.py` |
-| Action | Picker button that runs immediately in `on_activated()` and leaves the previous tool active; `is_action_tool()` returns `True` | `add_row_tool.py`, `remove_row_tool.py` |
+| Action | Picker button that runs immediately in `on_activated()` and leaves the previous tool active; `is_action_tool()` returns `True`; reports through `context.show_message()`, since `on_activated()` returns no ToolResult | `add_row_tool.py`, `remove_row_tool.py` |
 | Dialog | Opens a modal dialog in `on_activated()`, shows as active while open, then calls `context.request_revert_to_previous_tool()` on close; draws via `render_overlay()` | `metadata_editor_tool.py` |
 
 Register the tool in `Application.__init__`:

@@ -4,14 +4,9 @@ Stamp tool for browsing and placing stamp patterns.
 
 import pygame
 
-from editor.core.constants import (
-    GREENS_HEIGHT,
-    GREENS_WIDTH,
-    TERRAIN_WIDTH,
-)
 from editor.data import StampData
 
-from .base_tool import ToolContext, ToolResult
+from .base_tool import ToolContext, ToolResult, write_tiles
 
 
 class StampToolState:
@@ -152,43 +147,19 @@ class StampTool:
         stamp = self.state.current_stamp
         place_row, place_col = tile_pos
 
-        # Push undo state before modification
-        context.state.undo_manager.push_state(context.hole_data)
-
-        # Apply stamp tiles
-        tiles_placed = 0
-        for row_offset in range(stamp.height):
-            for col_offset in range(stamp.width):
-                target_row = place_row + row_offset
-                target_col = place_col + col_offset
-
-                tile_value = stamp.get_tile(row_offset, col_offset)
-
-                # Skip transparent tiles (None values)
-                if tile_value is None:
-                    continue
-
-                # Place based on mode
-                if context.state.mode == "terrain":
-                    if (
-                        0 <= target_row < len(context.hole_data.terrain)
-                        and 0 <= target_col < TERRAIN_WIDTH
-                    ):
-                        context.hole_data.set_terrain_tile(
-                            target_row, target_col, tile_value
-                        )
-                        tiles_placed += 1
-                else:  # greens
-                    if (
-                        0 <= target_row < GREENS_HEIGHT
-                        and 0 <= target_col < GREENS_WIDTH
-                    ):
-                        context.hole_data.set_greens_tile(
-                            target_row, target_col, tile_value
-                        )
-                        tiles_placed += 1
+        tiles_placed = write_tiles(
+            context,
+            (
+                (place_row + row_offset, place_col + col_offset, value)
+                for row_offset in range(stamp.height)
+                for col_offset in range(stamp.width)
+                # None marks a transparent tile
+                if (value := stamp.get_tile(row_offset, col_offset)) is not None
+            ),
+        )
 
         stamp_name = stamp.get_display_name()
-        return ToolResult.modified(
-            message=f"Stamp: Placed '{stamp_name}' ({tiles_placed} tiles)",
-        )
+        message = f"Stamp: Placed '{stamp_name}' ({tiles_placed} tiles)"
+        if not tiles_placed:
+            return ToolResult(is_handled=True, message=message)
+        return ToolResult.modified(message=message)
