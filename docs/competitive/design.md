@@ -62,7 +62,8 @@ finds the site finds the competition, with no chain of Discord servers to follow
 
 A Discord bot or a separate site on top of an API is how other randomizers do it, mostly
 because their results cannot reach the randomizer. Ours can. Discord's part here is an
-announcement when a daily opens, carrying no scores.
+announcement when a daily closes, carrying its standing. A daily is always open, so its
+opening is not news; its result is.
 
 Ratings are computed by a scheduled job, not in a request. The fit takes minutes, and a
 handicap that changes once a day is what golfers expect.
@@ -109,6 +110,34 @@ closing at 10:00 UTC the next day.
 - **For that hour two dailies are open.** The site always shows the latest as the Daily
   Seed. The older one is still played and scored, and is reached from a tab already
   open, a link, or the calendar of past dailies.
+
+### On the site
+
+**Decision** (jdharms, 2026-11-16).
+
+- **The home page** shows the Daily Seed, the latest open daily, with its theme and a
+  link to its seed page.
+- **`/daily`** redirects to the Daily Seed's page, a link that never goes stale.
+  **`/daily/<date>`** redirects to that day's seed, the replacement after a rerun.
+- **The calendar of past dailies** shows each day's theme and how many players it drew,
+  which shows activity without spoiling a score, and links to `/daily/<date>`.
+- **A daily's seed page** says it is a daily, with its date and theme, and links to the
+  calendar, so a link shared on its own still says what it is.
+- **A theme is a name and an optional one-line description**, both from the site's
+  strings by the day's schedule key (`server/CLAUDE.md`, "Player-facing text"). Weekday
+  themes may need only a name; the description is for special dailies, such as a
+  quarterly major or another event set by a dated override.
+- **Signed-out players** may download a daily as a guest ROM, as any seed (ADR 0003). The
+  seed page's guest marker says it cannot submit, and its scores are hidden from them as
+  from any viewer who has not submitted.
+- **The host page** lists a daily among the recent seeds like any other, so a host can
+  run it at an in-person event; rounds recorded in the window are daily rounds.
+- **`/me` and round pages are unchanged.** A daily round is an ordinary round there,
+  subject to Spoilers below.
+
+Until handicaps exist (Milestone A), a daily shows its recorded rounds as any seed does,
+to players who have submitted: no standing, no winner and no records. A winner by gross
+score would teach players a competition that handicaps then take away.
 
 ### Magic words
 
@@ -354,6 +383,11 @@ does not want to see them.
 not submitted a round on it. That covers the seed page, other players' round pages and
 link preview cards, which never carry a score on any seed.
 
+Once a daily closes, nobody can join its field, and its standing is public: positions,
+names, Stableford points and skins, posted to Discord and shown on the daily's page to
+anyone. Its scorecards are collapsed for a viewer who has not played it, as on any seed,
+since a player may still play the seed as an ordinary round.
+
 ## Integrity
 
 A cheated round cannot be prevented: an emulator has save states, and a player can
@@ -388,7 +422,6 @@ later net result.
 | A daily's settings: course mode, transforms, wind, club rules | A request per weekday, as in The week: an arc from Monday to Saturday, Casual Friday's par 3s, and Sunday Classic as the one day that needs only the US ROM |
 | Calendar months or a rolling 30 days for records | Calendar months, per jdharms; to be tested |
 | The numbers: 8 rounds, 90%, 3 rounds provisional, the caps, the flag threshold | Set by backtest before launch, then left alone |
-| Whether a closed daily's scores stay hidden from players who never played it | Collapsed, as on any seed |
 | Whether a player's page is public | Undecided |
 
 ## Evidence
