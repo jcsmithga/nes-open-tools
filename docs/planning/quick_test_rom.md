@@ -1,8 +1,7 @@
 # Quick-Test ROM
 
 > **Note**: This document was written by Claude based on an investigation requested by
-> jdharms. The patch below was built as a throwaway prototype that was not kept; no patch
-> module or CLI implements it yet.
+> jdharms.
 
 A ROM built from a single hole file that boots straight onto that hole's tee in the game's
 practice mode, and returns to the tee when the hole ends. It is meant for testing a hole
@@ -10,13 +9,14 @@ from the editor without playing through menus or a round.
 
 ## Status
 
-- The prototype built through `PatchStack` and booted under `golf.physics.nes` (py65):
-  reset to the shot screen in 146 frames, ball on the tee, wind 0, `ManualWindModeFlag`
-  set. Pressing Start before a shot returned to a fresh tee through the loop.
-- jdharms ran the prototype in Mesen on 2026-11-15 and reported that it works. Which
-  paths were exercised was not recorded.
-- Nothing is implemented in the repo. The whole prototype is reproduced under
-  [The prototype](#the-prototype).
+- The editor's Quick Test ROM action (`T`) builds it from the hole being edited
+  (`docs/editor.md`). Mesen has not been run on a ROM from the editor yet.
+- `tests/integration/test_quick_test_rom.py` boots it under `golf.physics.nes` (py65)
+  from US hole 1: reset reaches the shot screen with the ball on the tee, wind 0 and
+  `ManualWindModeFlag` set, and tapping Start before a shot returns through the loop to
+  a fresh tee.
+- jdharms ran an earlier prototype of the same patch stack in Mesen on 2026-11-15 and
+  reported that it works. Which paths were exercised was not recorded.
 
 ## How practice mode works
 
@@ -75,46 +75,45 @@ The rest of bank 13's `$800A`-`$8096` becomes unreachable, along with the three 
 `JMP $8000` sites (`$8061`, `$84B1`, `$858C`), which are all round-end paths that the flag
 keeps the game away from.
 
-## The prototype
+## The implementation
 
-```python
-hole = HoleData()
-hole.load(hole_path)
-boot = BytePatch(
-    "boot_to_practice",
-    "Boot into practice mode on hole 1, looping",
-    0x34000,
-    bytes.fromhex("A900 8599 2072D3 0C0080"),
-    bytes.fromhex("A900 8594 20C3D9 4C0080"),
-)
-steps = [
-    WRAM_EXPANSION_PATCH,
-    MULTI_BANK_CODE_PATCH,
-    COURSE_MIRRORS_PATCH,
-    CoursePatch([hole] * 18),
-    WIND_FIX_PATCH,
-    green_shortcut_patch(),
-    SWING_SPEED_HUD_PATCH,
-    boot,
-]
-rom = PatchStack(steps).build(vanilla).rom
-```
+| Piece | Where |
+|---|---|
+| Boot patch and stack | `golf/core/patches/quick_test.py`: `QUICK_TEST_BOOT_PATCH`, `quick_test_steps`, `build_quick_test_rom` |
+| One hole in 18 slots | `CoursePatch` stores identical compressed terrain, attributes and greens once and points every slot at them; `scorecard_totals=False` skips the scorecard totals, which 18 copies of a long hole overflow |
+| Editor action | `editor/tools/quick_test_rom_tool.py` |
+| Tests | `tests/unit/test_quick_test_patch.py`, `tests/unit/test_quick_test_rom_tool.py`, `tests/integration/test_quick_test_rom.py` |
 
-`PatchStack` reported no overlapping writes for these eight steps.
+The stack, in order: `wram_expansion`, `multi_bank_lookup`, `course_mirrors`, `course`
+(the hole 18 times), `wind_fix`, `green_shortcut`, `swing_speed_hud`, `quick_test_boot`.
+`build_quick_test_rom` drops the rows the editor hid before building, as publishing
+does.
 
-## Left to do for a real tool
+The editor action refuses a hole `rom_problems` rejects. It needs the vanilla US ROM,
+which it asks for with the open dialog, checks by SHA-1 and remembers under
+`vanilla_us_rom` in `~/.config/golf-editor/settings.json`, asking again when the file is
+missing or no longer matches. It writes `quick_test.nes`, replacing the last one, to
+`get_app_directory()` (`editor/ui/dialogs.py`) in the bundled editor, the executable's
+directory, and to the working directory when the editor runs from source, where that
+function would give `.venv/bin/`.
 
-- **One hole in 18 slots.** `CoursePatch` requires 18 holes and writes each one's data
-  separately, so the prototype stored the same hole 18 times. US hole 1 (455 bytes of
-  terrain) used 9,162 of the 17,444 terrain bytes; a hole over about 960 bytes will not
-  fit. The tool needs `CoursePatch` to share identical data between slots, or 17 small
-  filler holes.
+The signpost's exit waits at bank 12 `$ABE1` for the PPU buffer to drain (`$3C` equal
+to `$3B`) without calling `WaitForVblank`, which `NesMachine` never satisfies on its
+own; the boot test runs the NMI from a breakpoint there.
+
+## Left to do
+
 - **The signpost.** The pre-hole signpost is most of the 2.5 seconds before the shot
   screen, and with `CurrCourse` 0 it reads "JAPAN COURSE". It is one far call at bank 13
-  `$81AB` (to bank 12 `$ABA5`).
+  `$81AB` (to bank 12 `$ABA5`). It is kept for now.
 - **Pins.** `InitHole` draws one of the hole's four pins from the RNG each time it runs,
-  so the pin can change on each return to the tee. Whether the tool should leave that,
-  cycle the pins or fix one is undecided.
+  so the pin can change on each return to the tee. That is kept for now; cycling the
+  pins or fixing one is for later.
+- **Starting the ball anywhere.** Wanted; see below.
+- **A CLI.** A thin wrapper over `build_quick_test_rom`, later. Until then, `golf-patch`
+  can build the same stack from a course directory: `quick_test_boot` is in the patch
+  registry, and only the one-hole `course` step (18 copies, no scorecard totals) is the
+  builder's own.
 - **The rest of the unfinished stack.** Not tried with this patch: `seeded_wind`,
   `wind_anchors`, `mercy_tap_in`, the music and signpost steps, `round_stats`,
   `scorecard_qr`, `scorecard_course_name`, `menu_trim` and `extended_sram_defaults`. The
@@ -123,12 +122,6 @@ rom = PatchStack(steps).build(vanilla).rom
 - **A whole course.** Looping on `OpenTrainingScreen` (a far call to bank 14 `$BD04`)
   instead of `$D9C3` keeps the vanilla hole picker, for testing an 18-hole course
   directory. With `course_mirrors` its course choice has no effect.
-- **A CLI and an editor action**, and a place for the built ROM to go.
-- **A test.** The py65 machine can boot the built ROM and check that it reaches
-  `ShotSetupSequence` (bank 13 `$877A`) with the ball on the tee. The signpost's exit
-  waits at bank 12 `$ABE1` for the PPU buffer to drain without calling `WaitForVblank`,
-  which `NesMachine` never satisfies on its own; the prototype's harness ran an NMI from a
-  breakpoint there.
 
 ## Starting the ball anywhere
 
@@ -153,8 +146,8 @@ up to it.
 - The quick-test loop runs the fresh-hole loop on every return, so whatever start
   position the ROM holds is used again each time.
 
-Checked by building the prototype from US hole 1 with `tee` moved, booting each ROM under
-py65 and reading `BallLie` at the first shot:
+Checked by building a prototype of the quick-test stack from US hole 1 with `tee`
+moved, booting each ROM under py65 and reading `BallLie` at the first shot:
 
 | `tee` | `BallLie` |
 |---|---|
@@ -187,10 +180,10 @@ The three other `InitHole` callers (`$813C`, `$8D13`, `$8D66`) are resume paths 
 not touched. The `putting_practice` spike splices the same 18 bytes, so the two cannot be
 stacked.
 
-Built on the prototype as a `BytePatch` at PRG `0x34173` and booted under py65 with US
-hole 1: a start of (91, 150) gave the ball at (91, 150), `TeeBlocksX/Y` still (91, 242),
-`BallLie` 0, the view scrolled to the ball and REST reading 134 yards; (60, 140) gave
-`BallLie` 2. Not yet run in Mesen.
+Built on a prototype of the quick-test stack as a `BytePatch` at PRG `0x34173` and
+booted under py65 with US hole 1: a start of (91, 150) gave the ball at (91, 150),
+`TeeBlocksX/Y` still (91, 242), `BallLie` 0, the view scrolled to the ball and REST
+reading 134 yards; (60, 140) gave `BallLie` 2. Not yet run in Mesen.
 
 Moving `tee` in a copy of the hole also places the ball, with no 6502, but the tee markers
 move with it. jdharms prefers the markers in their real place, so the splice is the way.

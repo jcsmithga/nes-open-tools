@@ -13,6 +13,8 @@ a = Analysis(
         ('data/statistics', 'data/statistics'),
         ('data/fonts', 'data/fonts'),
         ('data/stamps/built-in', 'data/stamps/built-in'),
+        # Assembled when golf.core.patches is imported (the quick test ROM imports it)
+        ('golf/qr/port/*.s', 'golf/qr/port'),
     ],
     hiddenimports=[
         'plyer.platforms.linux.filechooser',

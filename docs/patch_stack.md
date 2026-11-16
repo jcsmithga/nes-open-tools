@@ -243,6 +243,7 @@ three requirements and the `course` step.
 | `extended_sram_defaults` | none; installs the SRAM defaults routine and table at vanilla values in PLAYER STATS' code space | `menu_trim` |
 | `peach_dress` | `color` (one of the curated NES colors in `DRESS_COLOR_FAMILIES`, `golf/core/patches/peach_dress.py`); recolors Peach's dress in the putting view | |
 | `course_intro_sky` | `image` (a 256-pixel-wide image whose top 64 rows are the sky, in the three colors of background palette 0; default Mario Open's, `golf/core/patches/data/course_intro_sky.png`); draws that sky over the course name on the course intro scene (`docs/course_intro_scene.md`, **The sky patch**) | |
+| `quick_test_boot` | none; replaces the title screen and menus with a loop that plays hole 1 in practice mode and starts it again from the tee when it ends, the editor's quick-test ROM (`docs/planning/quick_test_rom.md`) | |
 | `putting_practice` | (experimental) | |
 | `mario_open_free_play` | none; all six courses and no score limit (`docs/mario_open_free_play.md`) | |
 

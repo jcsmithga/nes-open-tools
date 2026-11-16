@@ -4,6 +4,11 @@ banks 0 and 1.
 
 See docs/multi_bank_terrain.md for the layout.
 
+Holes whose compressed data is identical share it: each slot gets its own
+pointers, bank table entry and metadata, pointing at one copy of the terrain,
+attributes or greens. `quick_test` relies on this to fill all 18 slots with one
+hole.
+
 Everything is computed when the patch is built: the holes are validated and
 compressed, terrain is allocated to banks, and every byte the patch will write
 is laid out in `writes`. A course that does not fit raises `BankOverflowError`
@@ -158,12 +163,25 @@ def allocate_terrain(compressed: Sequence[HoleCompressedData]) -> list[BankAlloc
     Allocate holes to banks using greedy first-fit.
 
     Each hole's terrain + attributes must fit contiguously in a bank.
-    Banks are filled in order: 0, then 1.
+    Banks are filled in order: 0, then 1. A hole whose terrain and attributes
+    are the same as an earlier hole's shares that hole's space.
     """
     allocations: list[BankAllocation] = []
     bank_next_addr = {bank: start for bank, (start, _) in TERRAIN_BOUNDS.items()}
+    placed: dict[tuple[bytes, bytes], BankAllocation] = {}
 
     for hole in compressed:
+        first = placed.get((hole.terrain, hole.attributes))
+        if first is not None:
+            allocations.append(
+                BankAllocation(
+                    hole_index=hole.hole_index,
+                    bank=first.bank,
+                    terrain_start=first.terrain_start,
+                    terrain_end=first.terrain_end,
+                )
+            )
+            continue
         hole_size = len(hole.terrain) + len(hole.attributes)
         for bank, (_, end) in TERRAIN_BOUNDS.items():
             start = bank_next_addr[bank]
@@ -177,9 +195,15 @@ def allocate_terrain(compressed: Sequence[HoleCompressedData]) -> list[BankAlloc
                     )
                 )
                 bank_next_addr[bank] += hole_size
+                placed[(hole.terrain, hole.attributes)] = allocations[-1]
                 break
         else:
-            total_required = sum(len(h.terrain) + len(h.attributes) for h in compressed)
+            total_required = sum(
+                len(terrain) + len(attributes)
+                for terrain, attributes in {
+                    (h.terrain, h.attributes) for h in compressed
+                }
+            )
             total_available = sum(end - start for start, end in TERRAIN_BOUNDS.values())
             raise BankOverflowError(
                 f"Hole {hole.hole_index} terrain ({hole_size} bytes) "
@@ -320,13 +344,18 @@ class CoursePatch(ROMPatch):
     description = "Write one 18-hole course, packed across terrain banks 0 and 1"
     requires = (MULTI_BANK_CODE_PATCH, COURSE_MIRRORS_PATCH, WRAM_EXPANSION_PATCH)
 
-    def __init__(self, holes: Sequence[HoleData]):
+    def __init__(self, holes: Sequence[HoleData], scorecard_totals: bool = True):
+        """`scorecard_totals=False` leaves the scorecard's totals alone, for a
+        ROM whose scorecard is never shown (`quick_test`), so a course of one
+        long hole repeated need not fit the yardage total's four digits."""
         if len(holes) != rom_utils.HOLES_PER_COURSE:
             raise ValueError(
                 f"Expected {rom_utils.HOLES_PER_COURSE} holes, got {len(holes)}"
             )
         self.holes = list(holes)
-        self.scorecard_writes = scorecard_total_writes(self.holes)
+        self.scorecard_writes = (
+            scorecard_total_writes(self.holes) if scorecard_totals else []
+        )
         self.compressed = compress_holes(self.holes)
         self.allocations = allocate_terrain(self.compressed)
         self.writes: list[DataWrite] = []
@@ -336,7 +365,12 @@ class CoursePatch(ROMPatch):
     # -- construction ---------------------------------------------------
 
     def _layout(self) -> None:
+        written: set[tuple[int, int]] = set()  # (bank, terrain start) written
         for hole, alloc in zip(self.compressed, self.allocations, strict=True):
+            if (alloc.bank, alloc.terrain_start) in written:
+                self._pointer_writes(alloc)
+                continue
+            written.add((alloc.bank, alloc.terrain_start))
             self.writes.append(
                 DataWrite(
                     f"hole {alloc.hole_index} terrain ({len(hole.terrain)} bytes, bank {alloc.bank})",
@@ -351,20 +385,7 @@ class CoursePatch(ROMPatch):
                     hole.attributes,
                 )
             )
-            self.writes.append(
-                DataWrite(
-                    f"hole {alloc.hole_index} terrain start ptr",
-                    _fixed(rom_utils.TABLE_TERRAIN_START_PTR + alloc.hole_index * 2),
-                    _word(alloc.terrain_start),
-                )
-            )
-            self.writes.append(
-                DataWrite(
-                    f"hole {alloc.hole_index} terrain end ptr",
-                    _fixed(rom_utils.TABLE_TERRAIN_END_PTR + alloc.hole_index * 2),
-                    _word(alloc.terrain_end),
-                )
-            )
+            self._pointer_writes(alloc)
 
         self.writes.append(
             DataWrite(
@@ -381,9 +402,26 @@ class CoursePatch(ROMPatch):
 
         self.writes += self.scorecard_writes
 
+    def _pointer_writes(self, alloc: BankAllocation) -> None:
+        self.writes.append(
+            DataWrite(
+                f"hole {alloc.hole_index} terrain start ptr",
+                _fixed(rom_utils.TABLE_TERRAIN_START_PTR + alloc.hole_index * 2),
+                _word(alloc.terrain_start),
+            )
+        )
+        self.writes.append(
+            DataWrite(
+                f"hole {alloc.hole_index} terrain end ptr",
+                _fixed(rom_utils.TABLE_TERRAIN_END_PTR + alloc.hole_index * 2),
+                _word(alloc.terrain_end),
+            )
+        )
+
     def _layout_greens(self) -> None:
-        """Lay greens out sequentially after bank 3's decompression tables."""
-        total_size = sum(len(hole.greens) for hole in self.compressed)
+        """Lay greens out sequentially after bank 3's decompression tables.
+        A hole whose greens are the same as an earlier hole's shares them."""
+        total_size = sum(len(greens) for greens in {h.greens for h in self.compressed})
         available = GREENS_DATA_END - GREENS_DATA_START
         if total_size > available:
             raise BankOverflowError(
@@ -393,22 +431,26 @@ class CoursePatch(ROMPatch):
             )
 
         cursor = GREENS_DATA_START
+        placed: dict[bytes, int] = {}
         for hole in self.compressed:
-            self.writes.append(
-                DataWrite(
-                    f"hole {hole.hole_index} greens ({len(hole.greens)} bytes)",
-                    rom_utils.cpu_to_prg_switched(cursor, GREENS_BANK),
-                    hole.greens,
+            address = placed.get(hole.greens)
+            if address is None:
+                address = placed[hole.greens] = cursor
+                self.writes.append(
+                    DataWrite(
+                        f"hole {hole.hole_index} greens ({len(hole.greens)} bytes)",
+                        rom_utils.cpu_to_prg_switched(cursor, GREENS_BANK),
+                        hole.greens,
+                    )
                 )
-            )
+                cursor += len(hole.greens)
             self.writes.append(
                 DataWrite(
                     f"hole {hole.hole_index} greens ptr",
                     _fixed(rom_utils.TABLE_GREENS_PTR + hole.hole_index * 2),
-                    _word(cursor),
+                    _word(address),
                 )
             )
-            cursor += len(hole.greens)
 
     def _calculate_stats(self) -> CourseWriteStats:
         stats = CourseWriteStats()
@@ -416,15 +458,22 @@ class CoursePatch(ROMPatch):
             stats.bank_capacity[bank] = end - start
             stats.bank_usage[bank] = 0
 
+        # Shared data counts once toward the totals, and for each hole holding it
+        # in the per-hole lists
+        counted: set[tuple[int, int]] = set()
         for hole, alloc in zip(self.compressed, self.allocations, strict=True):
-            stats.bank_usage[alloc.bank] += len(hole.terrain) + len(hole.attributes)
+            if (alloc.bank, alloc.terrain_start) not in counted:
+                counted.add((alloc.bank, alloc.terrain_start))
+                stats.bank_usage[alloc.bank] += len(hole.terrain) + len(hole.attributes)
             stats.bank_assignments.append(alloc.bank)
             stats.terrain_bytes_per_hole.append(len(hole.terrain))
             stats.attribute_bytes_per_hole.append(len(hole.attributes))
             stats.greens_bytes_per_hole.append(len(hole.greens))
 
         stats.total_terrain_bytes = sum(stats.bank_usage.values())
-        stats.total_greens_bytes = sum(stats.greens_bytes_per_hole)
+        stats.total_greens_bytes = sum(
+            len(greens) for greens in {h.greens for h in self.compressed}
+        )
         stats.total_yards = sum(hole_distance(hole) for hole in self.holes)
         stats.total_par = sum(hole_par(hole) for hole in self.holes)
         return stats

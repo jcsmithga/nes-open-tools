@@ -183,6 +183,8 @@ The indexes and pointers above only stay useful if changes keep them current:
 - `test_referenced_paths.py` - backticked paths in the CLAUDE.md files, `README.md`,
   `docs/README.md` and the skills exist
 - `test_tools_layering.py` - nothing imports from `tools/`, and `tools/archive/` and `tools/spikes/` have no entry points
+- `test_editor_bundle.py` - the bundled editor's layout (the Python plus `run_editor.spec`'s
+  data files) imports the editor, so no file read at import time is left out of the spec
 - `test_import_order.py` - every module in `golf/`, `server/`, `editor/` and `tools/`
   imports cleanly in a fresh interpreter
 - `test_pypy_ready.py` - the difficulty solver's imports use no 3.12-only syntax and

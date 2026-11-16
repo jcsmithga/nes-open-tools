@@ -53,6 +53,7 @@ from .tools.metadata_editor_tool import MetadataEditorTool
 from .tools.paint_tool import PaintTool
 from .tools.palette_tool import PaletteTool
 from .tools.position_tool import PositionTool
+from .tools.quick_test_rom_tool import QuickTestRomTool
 from .tools.remove_row_tool import RemoveRowTool
 from .tools.row_operations_tool import RowOperationsTool
 from .tools.selection_tool import SelectionTool
@@ -168,6 +169,7 @@ class EditorApplication:
         self.tool_picker.register_tool("add_row", "Add Row", "➕", is_action=True)
         self.tool_picker.register_tool("remove_row", "Remove Row", "➖", is_action=True)
         self.tool_picker.register_tool("export_png", "Export PNG", "🖼", is_action=True)
+        self.tool_picker.register_tool("quick_test_rom", "Test", "🎮", is_action=True)
 
         # Create stamp library and browser
         self.stamp_library = StampLibrary()
@@ -202,6 +204,7 @@ class EditorApplication:
         self.tool_manager.register_tool("add_row", AddRowTool())
         self.tool_manager.register_tool("remove_row", RemoveRowTool())
         self.tool_manager.register_tool("export_png", ExportPngTool())
+        self.tool_manager.register_tool("quick_test_rom", QuickTestRomTool())
 
         # Create event handler early (buttons will reference its methods)
         self.event_handler = EventHandler(

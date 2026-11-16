@@ -56,6 +56,7 @@ from .peach_dress import peach_dress_patch
 from .practice_swing import DEFAULT_HOLD_FRAMES, practice_swing_patch
 from .putting_practice import putting_practice_patches
 from .qr_credentials import load_credentials, qr_credentials_patch
+from .quick_test import QUICK_TEST_BOOT_PATCH
 from .round_stats import ROUND_STATS_PATCH
 from .scorecard_course_name import DEFAULT_NAME as DEFAULT_COURSE_NAME
 from .scorecard_course_name import scorecard_course_name_patch
@@ -629,6 +630,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
                 "Start every hole with the ball on the putting surface",
                 putting_practice_patches(),
             ),
+        ),
+        PatchSpec(
+            "quick_test_boot",
+            "Boot past the menus into practice mode on hole 1, back to the tee when it ends (docs/planning/quick_test_rom.md)",
+            NoParams,
+            _fixed(QUICK_TEST_BOOT_PATCH),
         ),
         PatchSpec(
             "mario_open_free_play",

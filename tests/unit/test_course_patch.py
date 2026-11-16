@@ -30,6 +30,7 @@ from golf.core.patches.course import (
 from golf.core.rom_writer import BankOverflowError
 from golf.formats.hole_data import HoleData
 from tests.prg_writer import PrgImageWriter
+from tests.synthetic_holes import synthetic_hole
 
 
 def leaf_patches(patch: ROMPatch) -> list[BytePatch]:
@@ -60,12 +61,14 @@ def rom_with_requirements() -> MockRomWriter:
 class MockHoleData(HoleData):
     """A hole of a single terrain tile and a single greens tile."""
 
-    def __init__(self, terrain_height: int = 32):
+    def __init__(self, terrain_height: int = 32, corner: int = 0xA0):
         self.terrain_height = terrain_height
         self.terrain = [[0xA0] * 22 for _ in range(terrain_height)]
+        self.terrain[0][0] = corner
         # Attributes need 11 columns (for 22-tile wide terrain with 2x2 supertiles)
         self.attributes = [[0] * 11 for _ in range((terrain_height + 1) // 2)]
         self.greens = [[0x10] * 24 for _ in range(24)]
+        self.greens[0][0] = corner
         self.green_x = 88
         self.green_y = 100
         self.metadata = {"par": 4, "tee": {"x": 88, "y": 500}}
@@ -75,7 +78,7 @@ def compressed_holes(count: int, terrain_size: int) -> list[HoleCompressedData]:
     return [
         HoleCompressedData(
             hole_index=i,
-            terrain=bytes([0xA0] * terrain_size),
+            terrain=bytes([i]) + bytes([0xA0] * (terrain_size - 1)),  # distinct
             attributes=bytes(72),
             greens=bytes([0x10] * 100),
         )
@@ -141,6 +144,23 @@ class TestAllocateTerrain:
         # 18 x 1,072 bytes = 19,296, more than banks 0 and 1 hold together
         with pytest.raises(BankOverflowError):
             allocate_terrain(compressed_holes(18, 1000))
+
+    def test_identical_holes_share_space(self):
+        holes = compressed_holes(3, 100)
+        holes[2].terrain, holes[2].attributes = holes[0].terrain, holes[0].attributes
+        allocations = allocate_terrain(holes)
+        assert [a.terrain_start for a in allocations] == [0x8000, 0x80AC, 0x8000]
+        assert allocations[2].hole_index == 2
+
+    def test_one_large_hole_fills_18_slots(self):
+        # 18 copies of 1,000 bytes would overflow; one copy does not
+        allocations = allocate_terrain(
+            [
+                HoleCompressedData(i, bytes([0xA0] * 1000), bytes(72), b"")
+                for i in range(18)
+            ]
+        )
+        assert {(a.bank, a.terrain_start) for a in allocations} == {(0, 0x8000)}
 
 
 class TestBankTable:
@@ -238,6 +258,55 @@ class TestScorecardTotals:
         assert (course.stats.total_yards, course.stats.total_par) == (7037, 72)
 
 
+class TestSharedHoles:
+    @pytest.fixture(scope="class")
+    def repeated(self) -> CoursePatch:
+        return CoursePatch([synthetic_hole()] * 18)
+
+    @staticmethod
+    def names(patch: CoursePatch, what: str) -> list[str]:
+        return [w.name for w in patch.writes if what in w.name]
+
+    def test_data_is_written_once(self, repeated):
+        assert len(self.names(repeated, "terrain (")) == 1
+        assert len(self.names(repeated, "attributes (")) == 1
+        assert len(self.names(repeated, "greens (")) == 1
+
+    def test_every_slot_gets_its_pointers_and_metadata(self, repeated):
+        def pointers(what: str) -> set[bytes]:
+            return {w.data for w in repeated.writes if w.name.endswith(what)}
+
+        for what in ("terrain start ptr", "terrain end ptr", "greens ptr"):
+            assert len(self.names(repeated, what)) == 18
+            assert len(pointers(what)) == 1
+        assert len([w for w in repeated.writes if w.name.endswith(" par")]) == 18
+        assert set(repeated.stats.bank_assignments) == {0}
+
+    def test_stats_count_shared_data_once(self, repeated):
+        compressed = repeated.compressed[0]
+        stats = repeated.stats
+        assert stats.bank_usage[0] == len(compressed.terrain) + len(
+            compressed.attributes
+        )
+        assert stats.total_greens_bytes == len(compressed.greens)
+
+    def test_apply_then_is_applied(self, repeated):
+        rom = rom_with_requirements()
+        repeated.apply(rom)
+        assert repeated.is_applied(rom)
+
+
+class TestScorecardTotalsOption:
+    def test_off_skips_the_totals(self):
+        long = synthetic_hole()
+        long.metadata["distance"] = 600  # 18 x 600 overflows the four digits
+        with pytest.raises(ValueError, match="Total yardage"):
+            CoursePatch([long] * 18)
+        patch = CoursePatch([long] * 18, scorecard_totals=False)
+        assert patch.scorecard_writes == []
+        assert not [w for w in patch.writes if w.name.startswith("scorecard")]
+
+
 class TestCoursePatch:
     @pytest.mark.parametrize("count", [0, 17, 19, 36])
     def test_takes_exactly_18_holes(self, count):
@@ -252,9 +321,10 @@ class TestCoursePatch:
         ]
 
     def test_building_raises_when_the_course_does_not_fit(self):
-        # Single-tile holes compress badly: 18 of them overflow bank 3's greens region
+        # Single-tile holes compress badly: 18 different ones overflow bank 3's
+        # greens region
         with pytest.raises(BankOverflowError):
-            CoursePatch([MockHoleData() for _ in range(18)])
+            CoursePatch([MockHoleData(corner=0xA0 + i) for i in range(18)])
 
     def test_stats(self, course):
         stats = course.stats

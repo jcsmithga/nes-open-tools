@@ -119,15 +119,20 @@ The multi-bank and mirror patches are defined in `golf/core/patches/multi_bank.p
 Building the patch does all the work, without a ROM:
 
 1. **Compress all holes**: Terrain, attributes, and greens for the 18 holes
-2. **Pack terrain across banks**: Greedy first-fit fills bank 0, then bank 1
+2. **Pack terrain across banks**: Greedy first-fit fills bank 0, then bank 1. A hole
+   whose compressed terrain and attributes are the same as an earlier hole's shares
+   that hole's bytes, and the same goes for greens; each slot still gets its own
+   pointers, bank table entry and metadata. A quick-test ROM fills all 18 slots with
+   one hole this way (`docs/planning/quick_test_rom.md`)
 3. **Generate per-hole bank table**: 36 bytes at `$A700` in bank 3 (doubled indexing)
 4. **Lay out every write**: Terrain to assigned banks, greens to bank 3, pointers and
    metadata (par, distance, positions) for holes 0-17 to the fixed bank, collected in
    `CoursePatch.writes`
 5. **Write the scorecard totals**: total yardage and total par into bank 2, where vanilla
-   keeps them as constants (see `docs/scorecard.md`)
+   keeps them as constants (see `docs/scorecard.md`). `scorecard_totals=False` skips
+   them, for a ROM that never shows the scorecard
 
-`CoursePatch.stats` reports bank usage and the two totals. The writes do not check the
+`CoursePatch.stats` reports bank usage, counting shared bytes once, and the two totals. The writes do not check the
 bytes they overwrite.
 
 ### Validation

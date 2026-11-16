@@ -24,6 +24,19 @@ not. It asks for a file name and writes two images beside it, each NES pixel dra
 `<name>_green.png`, the green with all four pins. They are drawn the way the
 rangefinder draws them, without the grid or anything else the editor overlays.
 
+Test (`T`, in the tool picker) builds `quick_test.nes` from the hole as it is
+now, saved or not: a ROM that boots straight onto the hole's tee in the game's practice
+mode and goes back to the tee when the hole ends (holing out, or Start before the first
+shot). The hole fills all 18 course slots, so it is always hole 1, and the pin is drawn
+at random each time it restarts. The wind starts at none; player 2's A and B turn and
+strengthen it. A hole Check finds problems in is not built.
+
+The ROM is built on the vanilla NES Open Tournament Golf (USA) ROM, which the editor
+asks for the first time and remembers in `~/.config/golf-editor/settings.json`, asking
+again if the file is gone. `quick_test.nes` is written to the folder the editor's
+executable is in, replacing the last one, or to the working directory when the editor
+is run from source. Load it in an emulator, or reload it after building again.
+
 ## Check
 
 Check runs the checks publishing a hole runs (`golf/formats/hole_check.py`), on the hole
