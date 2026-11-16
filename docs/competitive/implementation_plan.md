@@ -14,7 +14,7 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 
 | # | Task | Needs |
 |---|------|-------|
-| 1 | Settle the daily's open questions in `design.md`: the day's start and end, whether dailies overlap, the weekly schedule of requests (`design.md`, The week), bag rules. Record them as a proposed ADR | - |
+| 1 | Settle the daily's open questions in `design.md` and record them as a proposed ADR. Drafted as ADR 0033: the window, magic words, reruns, bags and the weekly schedule, whose settings live in `schedule.md` | - |
 | 2 | Record the standing decisions as proposed ADRs: competition lives on the site; the daily is the unit and there are no seasons; no handicap leaderboard; scores hidden until a player submits | - |
 | 3 | Record the handicap rules as a proposed ADR once task 9 has set the numbers: last 8 rounds, the allowance, the caps, the provisional period, which rounds count | 9 |
 
@@ -33,7 +33,7 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 
 | # | Task | Needs |
 |---|------|-------|
-| 10 | Tables for a ratings run, its hole ratings, and each player's index history by day (index, low mark, rounds counted, provisional) | 4 |
+| 10 | Tables for a ratings run, its hole ratings, each player's index history by run, and the current seed ratings (`data_model.md`, Ratings runs) | 4 |
 | 11 | The nightly ratings job: read rounds, fit, write a run and every player's index. A systemd timer in `deploy/`, described in `docs/deployment.md` | 5, 7, 10 |
 | 12 | Seed each current player's index from all of their recorded rounds on any seed, so the first daily has handicaps. After it, only daily rounds are added | 11 |
 
@@ -41,21 +41,21 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 
 | # | Task | Needs |
 |---|------|-------|
-| 13 | A `dailies` table (date, seed, opens, closes), the checked-in weekday requests and dated overrides, and the job that generates the day's seed at rollover from its request, with a PRNG seed from the date and a server secret. Idempotent, so a missed run catches up | 1 |
-| 14 | The daily on the site: today's daily on the home page, its own route, and an archive of past dailies | 13 |
+| 13 | The `dailies` and `daily_seeds` tables, and a card for each round on an open daily without its handicap fields (`data_model.md`), the checked-in weekday requests and dated overrides, and the job that generates the day's seed at rollover from its request, with a PRNG seed from the date and a server secret, and the date as its magic words (`design.md`, Magic words), which lowers a manifest word's minimum length to 3 while the word bank keeps 4 to 6. Idempotent, so a missed run catches up | 1 |
+| 14 | The daily on the site: the latest daily on the home page as the Daily Seed, its own route, and a calendar of past dailies | 13 |
 | 15 | Hide a daily's scores from a viewer who has not submitted a round on it: the seed page, other players' round pages, `/me` and link preview cards | 13 |
 | 16 | Announce a new daily to Discord by webhook, with no scores | 13 |
-| 17 | Admin actions for a daily: replace a broken seed, withdraw a day. Through the audit log | 13 |
+| 17 | Admin actions for a daily: replace a broken seed, whose magic words drop the weekday and end in `RERUN` (`NOV 16TH RERUN`), at most once a day and only while the day has no card; withdraw a day, as when some players complete it or a replacement breaks too. Through the audit log | 13 |
 
 ### Handicapped results
 
 | # | Task | Needs |
 |---|------|-------|
-| 18 | At rollover, store the daily's course rating, slope and stroke indexes, and the ratings run they came from | 6, 11, 13 |
-| 19 | When a scan records a round on an open daily, store the player's daily handicap, net score by hole and Stableford points | 8, 12, 18 |
-| 20 | Compute a daily's results under each format: the Stableford standing, every pair's match, and net skins across the field. Formats are separate functions of the field's net scores, so one can be added later. Recomputed when a round arrives, is voided or is restored | 19 |
+| 18 | At rollover, store the daily's ratings run, its scoring rules, and its seed's course rating, slope and stroke indexes under that run | 6, 11, 13 |
+| 19 | When a scan records a round on an open daily, fill its card's index, daily handicap, and net score and Stableford points by hole | 8, 12, 18 |
+| 20 | Compute a daily's results under each format: the Stableford standing, every pair's match, and net skins across the field. Formats are separate functions of the field's net scores, so one can be added later. Recomputed when a round arrives, is voided or is restored, before or after close | 19 |
 | 21 | Provisional players: shown their own results, left out of the standing, skins and other players' records | 20 |
-| 22 | Close a daily: fix its results and its winner. A round received later is an ordinary round | 20 |
+| 22 | Close a daily: stop new cards. A round received later is an ordinary round; a later void or restore still rescores the day | 20 |
 | 23 | Show results: a player's net card with strokes received, their matches, the standing and the skins, on the round page and the daily's page, only to players who have submitted | 15, 20 |
 | 24 | Show a signed-in player their handicap for any seed on its page, before they play | 8, 11 |
 
