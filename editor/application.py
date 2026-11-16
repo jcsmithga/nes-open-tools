@@ -39,6 +39,7 @@ from .resources import get_resource_path
 from .tools.add_row_tool import AddRowTool
 from .tools.carpet_paint_tool import CarpetPaintTool
 from .tools.cycle_tool import CycleTool
+from .tools.export_png_tool import ExportPngTool
 from .tools.eyedropper_tool import EyedropperTool
 from .tools.feature_brush_tool import (
     BoundaryBrushTool,
@@ -166,6 +167,7 @@ class EditorApplication:
         self.tool_picker.register_tool("position", "Position", "🎯")
         self.tool_picker.register_tool("add_row", "Add Row", "➕", is_action=True)
         self.tool_picker.register_tool("remove_row", "Remove Row", "➖", is_action=True)
+        self.tool_picker.register_tool("export_png", "Export PNG", "🖼", is_action=True)
 
         # Create stamp library and browser
         self.stamp_library = StampLibrary()
@@ -199,6 +201,7 @@ class EditorApplication:
         self.tool_manager.register_tool("position", PositionTool())
         self.tool_manager.register_tool("add_row", AddRowTool())
         self.tool_manager.register_tool("remove_row", RemoveRowTool())
+        self.tool_manager.register_tool("export_png", ExportPngTool())
 
         # Create event handler early (buttons will reference its methods)
         self.event_handler = EventHandler(

@@ -24,7 +24,7 @@ from golf.rendering.pil_renderer import (
     render_greens_to_image,
     render_hole_to_image,
 )
-from golf.rendering.pil_sprite import load_sprites
+from golf.rendering.pil_sprite import SPRITE_DIR, load_sprites
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data"
@@ -72,10 +72,11 @@ class HoleRenderer:
         self,
         tileset_path: Path = DEFAULT_TILESET,
         greens_tileset_path: Path = DEFAULT_GREENS_TILESET,
+        sprite_dir: Path = SPRITE_DIR,
     ):
         self.tileset = TilesetData(str(tileset_path))
         self.greens_tileset = TilesetData(str(greens_tileset_path))
-        self.sprites = load_sprites()
+        self.sprites = load_sprites(sprite_dir)
 
     @property
     def has_flags(self) -> bool:

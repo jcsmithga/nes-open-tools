@@ -18,6 +18,12 @@ tool to it, is in `editor/CLAUDE.md`; the hole file itself is described in
 
 New, Load and quitting ask first when there are unsaved changes.
 
+Export PNG (`E`, in the tool picker) saves pictures of the hole as it is now, saved or
+not. It asks for a file name and writes two images beside it, each NES pixel drawn 3x3:
+`<name>_terrain.png`, the whole hole with the tee, ball and the first pin's flag, and
+`<name>_green.png`, the green with all four pins. They are drawn the way the
+rangefinder draws them, without the grid or anything else the editor overlays.
+
 ## Check
 
 Check runs the checks publishing a hole runs (`golf/formats/hole_check.py`), on the hole
