@@ -1,0 +1,42 @@
+{
+  "handicap": {
+    "allowance": 0.9
+  },
+  "index": {
+    "best_of": 10,
+    "exceptional": [
+      7.0,
+      10.0
+    ],
+    "exceptional_cut": [
+      1.0,
+      2.0
+    ],
+    "hard_cap": 5.0,
+    "hole_cap_over_par": 2,
+    "low_min_rounds": 20,
+    "low_window_days": 365,
+    "soft_cap": 3.0,
+    "start_index": 0.0,
+    "start_weight": 4.0,
+    "window": 8
+  },
+  "model": {
+    "gamma": 0.44302934714963826,
+    "mirror_term": false,
+    "sigma2": 1.1783751005999574,
+    "tau2": {
+      "layout": 0.10202807452631259,
+      "pin": 0.015809055394185582,
+      "skill": 1.176375223163924,
+      "terrain": 0.055203505506588785
+    }
+  },
+  "provenance": {
+    "database": "prod_copy.db",
+    "em_steps": 124,
+    "estimated": "2026-11-17",
+    "latest_round": "2026-11-17T07:20:44Z",
+    "rounds": 285
+  }
+}

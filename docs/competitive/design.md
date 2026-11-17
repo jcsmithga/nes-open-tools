@@ -1,7 +1,7 @@
 # Competitive play: design
 
-> **Note**: This document was written by Claude, from a design session with jdharms on
-> 2026-11-12. It records the problems competitive play has to solve and the current
+> **Note**: This document was written by Claude, from design sessions with jdharms on
+> 2026-11-12 and 2026-11-17 (ratings and handicaps). It records the problems competitive play has to solve and the current
 > proposal for each. The ordered work is in
 > [implementation_plan.md](implementation_plan.md).
 
@@ -40,16 +40,17 @@ Players are asked how a feature feels once it exists, not asked to design it.
 | Term | Meaning |
 |------|---------|
 | Daily | The seed of the day: one seed the site generates each day, open to every signed-in player for a fixed window. The unit of competition |
-| Hole rating | For one hole as built (layout, terrain, pin, wind): the strokes a reference player is expected to take, and its spread factor, how much it separates players of different skill |
-| Course rating | The sum of a seed's 18 hole ratings: what the reference player is expected to shoot |
-| Slope | The mean of a seed's 18 spread factors. 1.0 is an average seed |
-| Stroke index | A seed's holes ranked 1 to 18 by spread factor, the order handicap strokes are given in |
-| Handicap index | A player's skill in strokes per 18 holes on an average seed, from their recent rounds |
+| Reference holes | The 54 untransformed NES Open holes, each hole's four pins averaged, with no wind. Index 0 and slope 1.0 are measured on them |
+| Hole rating | For one hole as built (layout, terrain, pin, wind): the strokes an index-0 player is expected to take, and its spread factor, how much it separates players of different skill |
+| Course rating | The sum of a seed's 18 hole ratings: what an index-0 player is expected to shoot |
+| Slope | The mean of a seed's 18 spread factors. 1.0 separates players as much as the reference holes do |
+| Stroke index | A seed's holes ranked 1 to 18 by difficulty for their par, the order handicap strokes are given in |
+| Handicap index | A player's expected score over par on the reference holes, per 18 holes, from their recent rounds |
+| Starting index | The fixed index every player starts from, 0. It counts as 4 rounds and fades as the player's own rounds arrive |
 | Low mark | The lowest handicap index a player has held in a trailing window |
 | Daily handicap | The whole number of strokes a player receives on one seed: index, slope, course rating and the allowance combined |
 | Allowance | The share of a handicap a player receives. Below 100% it favors the stronger player |
 | Net score | Strokes on a hole less the handicap strokes received there |
-| Provisional | A player with too few rounds for a trustworthy index |
 | Format | One way of scoring a daily's field. A daily is scored under several at once |
 | Result | What a format gives a player for one daily: a standing, a match against each other player, skins won |
 | Record | A count of results over time: career, by month, and head to head |
@@ -65,8 +66,19 @@ because their results cannot reach the randomizer. Ours can. Discord's part here
 announcement when a daily closes, carrying its standing. A daily is always open, so its
 opening is not news; its result is.
 
-Ratings are computed by a scheduled job, not in a request. The fit takes minutes, and a
-handicap that changes once a day is what golfers expect.
+Ratings are computed in three places, none of them a scheduled job (jdharms,
+2026-11-17):
+
+- **The model's parameters** are estimated offline, with all the CPU they need, and
+  checked in (Fitting).
+- **The hole ratings** are refitted once a day, at the daily's rollover, in the app's
+  own loop that already makes the daily. Under the checked-in parameters the fit takes
+  a second or two. Each seed is rated from the latest fit when it is generated, and
+  keeps that rating.
+- **A player's index** is updated when one of their daily rounds is scanned: the round
+  is scored with the index they hold, and their new index is computed from their
+  counted rounds and their seeds' stored ratings. Nothing else changes an index, so
+  nothing needs to run in between.
 
 ## The daily
 
@@ -88,8 +100,14 @@ The decisions in this section are recorded as ADR 0033 (proposed).
 - The first submission is a player's round, as on every seed.
 - Players choose their own bag, as on every seed, unless the day's request sets club
   rules.
-- Its course rating, slope and stroke indexes are fixed when it is generated, and each
-  player's index is the one posted before it opened.
+- Its course rating, slope and stroke indexes are fixed when it is generated, as every
+  seed's are.
+- A player's round on it is scored with the index they hold when it is scanned: their
+  index after their previous counted round. With one daily a day that is the index they
+  held when this daily opened. The one exception is the hour two dailies overlap: a
+  player who scans the older daily in that hour carries its update into the newer one,
+  so their round on the newer one is scored with an index that already counts the
+  older.
 - Its results are scored as rounds arrive, and scored again whenever a round on it is
   voided or restored, before or after it closes.
 - What it stores, and when each part is fixed, is in [data_model.md](data_model.md).
@@ -203,6 +221,8 @@ tuned there without changing what follows.
 
 ## Handicaps
 
+The decisions in this section are recorded as ADR 0034 (proposed).
+
 ### Rating holes and courses
 
 **Problem.** A generated course has never been played, and seeds range from par 54 short
@@ -214,23 +234,117 @@ or a pin, in any seed, refines it. A generated course is rated the moment it exi
 because nearly all of its holes have been played elsewhere. A hole nobody has played
 falls back on its baseline.
 
-The model gains one term. The gap between two players is wider on harder holes: on the
-2026-11-12 data, a hole one expected stroke harder separates players by about 46% more.
-Each hole therefore has a spread factor, and the model is
+A seed's ratings are stored when it is generated and never redone (jdharms,
+2026-11-17). Every round on it is scored against them, so a round's differential never
+changes and a player's index moves only when they play. Within a daily nothing would be
+gained by re-rating: every player shares the stored rating.
+
+**Mirrored holes** (jdharms, 2026-11-17). A hole that is mirrored and otherwise unchanged
+is the same hole as its unmirrored twin: it plays the same, flipped, so its rounds rate
+one hole and its pins. On the NES Open holes that adds 329 hole scores to the 1,318
+untransformed ones. A site-wide mirrored term measures any effect of the flip itself,
+such as a player's expectations of the hole, and is dropped if it cannot be told from
+zero. A hole with redrawn hazards stays its own variant, mirrored or not, keyed by the
+hole it built. Redraws often coincide even so: on 2026-11-17, 709 redrawn slots built
+532 distinct holes, 45 of them the hole with no redraw, since a hole with few hazards
+has few shapes to roll.
+
+On the 2026-11-17 database it cannot: compared within the 124 rounds that have both
+kinds, where the player, the day and their form cancel, a mirror-only hole plays
+-0.04 +/- 0.08 strokes a hole against its twin (p = 0.65), so the fit has no mirrored
+term. Fitted as a term, it comes out at -0.18 +/- 0.05, but that error treats every hole
+as independent: the rounds with mirrored holes were simply better rounds, played after
+mirroring arrived a month into the site, and the fit's one skill per player cannot see
+a player's form. `golf-ratings estimate` reports the paired test each time.
+
+The model gains one term. The gap between two players is wider on harder holes: a hole
+one expected stroke harder separates players by about 44% more (gamma, 0.443 on the
+2026-11-17 database). Each hole therefore has a spread factor, and the model is
 
 ```
-strokes = hole + spread(hole) * skill(player) + luck
-spread(hole) = 1 + gamma * (hole - mean hole)
+strokes = rating(hole) + spread(hole) * index(player) / 18 + luck
+spread(hole) = 1 + gamma * (rating(hole) - mean par of the reference holes)
 ```
 
-Summed over 18 holes this is golf's own pair of ratings: the course rating is the sum of
-the hole terms, and slope is the mean spread factor. From the current fit a par 54 short
-course has a slope near 0.65 and a hard full course near 1.25.
+where a hole's rating is what an index-0 player is expected to take on it (The
+reference). Summed over 18 holes this is golf's own pair of ratings: the course rating is
+the sum of the hole ratings, and slope is the mean spread factor. From the 2026-11-12 fit,
+measured against the field rather than the reference holes, a par 54 short course has a
+slope near 0.65 and a hard full course near 1.25. The model is `golf/ratings/model.py`.
 
-The spread term is thinly supported: 14 players, and mostly one strong player against the
-rest. An error in a course rating moves every player's handicap equally, so it cancels in
-every comparison between players and shows only in scores against one's own handicap. An
-error in slope does not cancel.
+An error in a course rating moves every player's handicap equally, so it cancels in every
+comparison between players and shows only in scores against one's own handicap. An error
+in slope does not cancel.
+
+### The reference
+
+**Problem.** The model cannot tell skill from difficulty on its own: a stroke added to
+every player and taken from every hole predicts the same scores. The spike settles it by
+pulling skills toward the field's average, which makes index 0 the average player on the
+site. Every index and course rating would then move as players join, leave and improve:
+the spike's offset to par moved from +7.5 to +10.4 between 2026-10-19 and 2026-11-10 as
+players joined.
+
+**Decision** (jdharms, 2026-11-17). Ratings are measured against the reference holes: the
+54 untransformed NES Open holes of the US, UK and Japan courses, each hole's four pins
+averaged, with no wind.
+
+- **Index 0** is a player expected to shoot par over the reference holes. A player's
+  index is their predicted score over par there, per 18 holes. A prediction does not
+  depend on how the model splits skill from difficulty, so the index does not move with
+  the field.
+- **The spread term is centered on the reference holes**, so their average spread factor
+  is 1.0: a seed of slope 1.0 separates players as much as they do. It is golf's slope
+  of 113, written as 1.0.
+- **A seed's course rating** is an index-0 player's expected score on it. Then
+  `index * slope + course rating - par` is the model's expected score over par for that
+  player.
+- **The reference holes' ratings are refined** as rounds come in, so an index can move a
+  little without its player's play changing. That is new information about the holes,
+  not a change in the field.
+- **The Mario Open holes are left out**, and share no hole with the reference. The five
+  Mario Open courses' ratings are a check on plausibility, not on the anchor, since their
+  holes are still in the fit.
+- **Sunday Classic is the direct check.** It plays a vanilla US course, so on an
+  unmirrored Sunday a +10 player should average about 10 over par, once the model's wind
+  term accounts for the storm.
+
+### Fitting
+
+**Decision** (jdharms, 2026-11-17).
+
+- **The model's own numbers are estimated offline**: how much players, layouts, terrains
+  and pins each vary, which sets how far a thin rating is pulled toward its group, and
+  gamma and the mirrored term. They are checked in as a parameters file, and re-estimated
+  by hand as the data grows, about quarterly. The estimate takes all the CPU time it
+  needs. The daily refit on the web server (Architecture) reads the file and only solves
+  for the ratings, which takes seconds, and its run records the file's hash.
+- **The estimate runs to convergence**, every parameter estimated together, by
+  expectation-maximization (EM). The 2026-11-10 fit stopped at its 500-iteration cap, and
+  the backtest's gamma was fitted on penalties from a fit without it.
+- **It reports how certain gamma is**, by refitting on players resampled with
+  replacement. On the 2026-11-17 database gamma is 0.443, and across 100 resampled
+  rosters 90% fall between 0.35 and the search's ceiling of 0.95: it is the soft number.
+  The backtest's fairness moves with it: at the steady state the stronger player takes
+  58% of net matches at 0.30, 55% at 0.443 and 49% at 0.60. The first two are within the
+  noise; past about 0.6 the allowance would need revisiting.
+- **Players improving.** The fit gives each player one skill for all time, so an
+  improving player's early rounds make the holes they played look harder. Before choosing
+  a model, the single skill is compared with a skill per player per month, or one that
+  drifts, by how much the course ratings of real seeds move: a few tenths of a stroke
+  keeps the single skill, a stroke or more adopts the other. On the 2026-11-17 database
+  a month's skill varies 0.13 strokes a hole about the player's and moves live seeds'
+  course ratings 0.19 on average and 0.80 at most, so the single skill stays. Decaying
+  old rounds, as college basketball ratings do, is turned down for hole ratings: a hole
+  does not change, so an old round says as much about it as a new one. Recency belongs
+  in the index.
+- **Slope follows from course rating.** With one gamma for every hole, a seed's slope is
+  `1 + gamma * (course rating - 72) / 18`, so two seeds of the same rating always have
+  the same slope. Real golf measures slope apart from course rating, by rating a course
+  for a scratch and a bogey golfer, because trouble at short range, such as a forced
+  carry, hurts the weaker player far more than length does. Hole scores can show that
+  directly: a spread for each layout beyond what its rating predicts is tested at the
+  next re-estimate (implementation task 34).
 
 ### The handicap index
 
@@ -238,15 +352,31 @@ error in slope does not cancel.
 improving players beat their number by 2 to 7 strokes a round while the strongest player,
 who has plateaued, beats his by 0.1. He then loses about 70% of his net matches.
 
-**Proposal.** The index comes from a player's last 8 rounds. On the backtest this removes
-the link between skill and net result (correlation +0.01 in net stroke play).
+**Decision** (jdharms, 2026-11-17). The index is the mean of the best 8 of a player's
+last 10 differentials, blended with the starting index while it lasts (New players). A
+record shorter than 10 keeps the same share, 80% of its rounds.
+
+- **It follows improvement**, as the last 8 did on the spike's backtest, where the
+  last 8 removed the link between skill and net result (correlation +0.01 in net stroke
+  play).
+- **It all but ends sandbagging.** A thrown round is usually one of the two dropped: a
+  round thrown by 15 strokes at a player's 25th round buys 4 strokes of index summed
+  over the next 8 rounds, against 19 with the last 8 (Sandbagging).
+- **It stops a volatile player's blowups from inflating their index**, so their good
+  days do not take dailies from a consistent player on strokes their bad days earned.
+- **An index reads optimistic**, as golf's does: it is what a player shoots on a good
+  day. On the 2026-11-17 backtest a round averages 2.2 strokes worse than its index
+  predicts, new players' rounds included. Matches do not care, since the allowance is
+  set on the result; the integrity flag allows for it.
 
 Turned down:
 
 - **All rounds.** Lags improvement, as above.
-- **Best 8 of the last 20**, the World Handicap System's rule. It balances the overall
-  numbers but punishes erratic players, whose best rounds sit far from their usual ones:
-  one +9 player fell to 0.26 match points.
+- **The last 8.** Fair at the steady state, but a thrown round counts in full for 8
+  rounds, and a volatile player's blowups raise their index.
+- **Best 8 of the last 20**, the World Handicap System's rule. It drops 12 of 20 rounds,
+  which punishes erratic players, whose best rounds sit far from their usual ones: on the
+  spike's backtest one +9 player fell to 0.26 match points.
 
 ### The daily handicap
 
@@ -258,12 +388,19 @@ Turned down:
 daily handicap = round(allowance * (index * slope + course rating - par))
 ```
 
-Strokes are given by stroke index: one on each of the hardest holes until they run out,
-a second lap past 18. A player better than scratch gives strokes back, starting from the
-easiest hole. In a match, the weaker player receives the difference between the two
-daily handicaps.
+Strokes are given in stroke index order: one on each hole from stroke index 1 until they
+run out, a second lap past 18. A player better than scratch gives strokes back, starting
+from stroke index 18. In a match, the weaker player receives the difference between the
+two daily handicaps.
 
 A fractional "personal par" for each hole was tested and was no fairer.
+
+**Stroke index** (jdharms, 2026-11-17). A seed's holes are ranked by difficulty for their
+par: the hole's rating less its par, ties broken by spread factor. Ranking by spread
+factor would put strokes where the gap between players is widest, but spread rises with
+total strokes, so par 5s would nearly always take indexes 1 to 4, which reads oddly. The
+daily handicap is the same either way; only hole-by-hole formats feel the order, and the
+backtest reports what it costs in fairness against ranking by spread.
 
 ### The allowance
 
@@ -271,7 +408,22 @@ A fractional "personal par" for each hole was tested and was no fairer.
 and their scores vary far more: net scores spread about 3 strokes for the strongest
 player and about 8 for players near +9.
 
-**Proposal.** A 90% allowance, treated as a dial.
+**Decision** (jdharms, 2026-11-17). The allowance aims at a target: the stronger of two
+players takes about 55% of their net matches, a slight edge for skill. At 50%, a
+handicap's textbook goal, improving lowers a player's index without winning them more
+matches. The World Handicap System sits above 50% too: its 95% exists partly because
+higher handicaps' scores vary more, which in a field wins them more than their average
+deserves, and the daily's standing is a field.
+
+The allowance is a round number that meets the target, measured at the steady state,
+between players who both have a full record of 10 rounds: 90% on the 2026-11-17 backtest
+(the stronger player takes 55% at 90%, 52% at 95% and 49% at 100%). It is not solved for
+at each re-estimate. It changes only if the target changes, or if the stronger player's
+share drifts from it: `golf-ratings backtest` reports the share's range across resampled
+rosters and says when it no longer holds 55%. On 2026-11-17 that range is 45% to 63%, so
+only a large drift shows until rounds accumulate.
+
+The spike's numbers on the 2026-11-12 database:
 
 | Allowance | Stronger player's match score | Strongest player's match points |
 |-----------|-------------------------------|---------------------------------|
@@ -288,12 +440,74 @@ for individual stroke play.
 ### New players
 
 **Problem.** One round says little. A rating is about 6 strokes off after one round and 2
-to 3.5 after two or three.
+to 3.5 after two or three. A provisional period, whose rounds feed the index but count
+in no result, makes those rounds free to throw: a few bad ones inflate the first index,
+and the player cashes it in later.
 
-**Proposal.** A player is provisional until they have 3 rounds that count toward their
-index, which for a player who joins after launch means 3 dailies (see Sandbagging). A
-provisional player plays the daily and sees their own results, but is left out of the
-day's standing and skins and of other players' records.
+**Decision** (jdharms, 2026-11-17). No provisional period. Every player starts at
+scratch, a starting index of 0, which counts as 4 rounds in their index, half the
+window. It fades as their own rounds fill the window, by half a round with each, so it is
+gone once they have 8 and the index never jumps.
+
+| | After round 1 | After round 4 | After round 8 |
+|---|---|---|---|
+| A +20 player, playing honestly | +4.4 | +12.0 | +20 |
+| A -10 player, playing honestly | -2.7 | -6.8 | -10.7, back to -10 as the cut rounds age out |
+| A scratch player who throws round 1 at +35 | +7.8 | -0.2 | -0.2: by round 3 the thrown round is the one dropped |
+
+The -10 player's index falls faster than the starting index alone would take it, since
+each of their first rounds is 10 strokes better than the index they held, an exceptional
+score (Sandbagging).
+
+- **Every player is in every result** from their first daily: the standing, the matches
+  and the skins. Fields of 3 to 6 cannot spare anyone.
+- **Scratch is chosen for being simple** and for erring against the newcomer. A strong
+  player new to the site, or a strong player's second account, should not take dailies
+  on strokes a starting index gave them; a weak newcomer receives fewer strokes than they
+  need for their first several dailies, softened by their index rising after each one
+  (jdharms). On the 2026-11-17 backtest a new player's round averages 4.6 strokes worse
+  than their index predicts while the starting index lasts.
+- **A thrown early round costs that day's result and buys little**: dropped by best 8 of
+  10 and diluted by the starting index, a round thrown by 15 strokes as a player's first
+  buys 10 strokes of index over the next 8 rounds, against 22 with no starting index.
+- **Starting values of +4.5 and +9, and a weight of 2 rounds, predict new players' rounds
+  better**, +4.5 and a weight of 2 clearly. They are turned down for the reason above:
+  the starting index is there to keep strong newcomers from cleaning up, not to predict
+  the typical one.
+
+No scheme closes the hole while early rounds feed the index; golf accepts it too.
+
+### Setting the numbers
+
+**Decision** (jdharms, 2026-11-17). The backtest (implementation task 9) starts every
+number from the World Handicap System's value, and changes one only when another value
+wins clearly: in nearly all of many rosters resampled from the site's players with
+replacement. The allowance is the exception: it is set by a target (The allowance), and
+every comparison measures fairness against that target. Its pairings come from few players, three of them in most, so a few points
+between two settings is noise, and a number kept for no clear reason should be the one a
+golfer recognizes.
+
+| Number | World Handicap System | Here |
+|--------|-----------------------|------|
+| Rounds in the index | Best 8 of the last 20 | Best 8 of the last 10 (The handicap index) |
+| Allowance | 95% in individual stroke play | 90%, for a target (The allowance) |
+| Hole cap for the index | Net double bogey | The same |
+| Exceptional score reduction | A differential 7.0 better than the index takes 1.0 off the record, 10.0 better takes 2.0 | The same |
+| Low-mark caps | A rise past 3 counts half; never more than 5 | The same |
+| Low mark's window | 365 days | The same |
+| Rounds before a low mark exists | 20 | The same |
+| New players | An index after 54 holes | Starting index 0, worth 4 rounds (New players) |
+
+Fairness is measured at the steady state, between players who both have a full record
+of 10 rounds (jdharms): the rules are for a league of regulars, and new players' early
+rounds are the starting index's business. On the 2026-11-17 database (`golf-ratings
+backtest`: 262 rounds replayed, 18 players, 1,000 rosters, 153 steady-state pairs) the
+stronger player takes 55% of their net matches; without handicaps, 87%. No alternative
+brings that share clearly nearer the target: the last 8, best 8 of 20, no exceptional
+score reduction, no caps, a low mark after 8 rounds, stroke indexes by spread, other
+starting values and weights, or another allowance. In all pairs, new players' early
+rounds included, it is 65%: the price of a starting index that errs against the
+newcomer. The numbers live in `golf/ratings/data/parameters.json`.
 
 ## Formats
 
@@ -324,24 +538,41 @@ Turned down: gross play of any kind as the main competition, by constraint 1.
 **Problem.** A handicap built from recent rounds can be raised by playing badly. With the
 last 8 rounds, one round thrown by 15 strokes moves an index about 2 strokes.
 
-**Proposal.** Three rules, all golf's own:
+**Decision** (jdharms, 2026-11-17). Golf's own rules:
 
 - **Every result counts.** No format drops a player's worst days, so a thrown daily costs
   that day's standing and every match in it.
 - **A cap on each hole.** For the index, a hole counts no worse than a net double bogey.
 - **A cap above the low mark.** Past 3 strokes over a player's low mark, a rise in index
   counts half; it never exceeds 5 over. The numbers are the World Handicap System's and
-  need tuning for a field that is still improving.
+  need tuning for a field that is still improving. A low mark exists once a player has
+  20 rounds.
+- **Every round that counts toward an index counts in results** (New players), so no
+  round is free to throw.
+- **Exceptional score reduction.** A round 7 or more strokes better than the player's
+  index takes 1 stroke off every differential in their record, 10 or more takes 2, so
+  an index catches a player who is better than it says at once, and the cut fades as
+  those rounds age out. Its main use here is a strong player new to the site.
+- **Best 8 of 10** (The handicap index): a thrown round is usually one of the two
+  dropped.
 
-Our estimate is that a thrown daily about breaks even without the caps and loses with
-them. That estimate is not backtested.
+On the 2026-11-17 backtest, one round thrown by 15 strokes raises the index by 4 to 10
+strokes summed over the next 8 rounds, far fewer handicap strokes than it threw away,
+and it costs that day's result. With the last 8 it bought 13 to 19. The low-mark caps
+barely change it, since they need 20 rounds; they change 12 of the 102 indexes that have
+a low mark, honest players' slumps included.
 
 Rounds on other seeds are the remaining hole: a thrown round there costs nothing. So
-only daily rounds count toward an index.
+only daily rounds count toward an index (jdharms, 2026-11-17).
 
-- At launch, each current player's index is seeded from all of their rounds on any seed.
-  From then on only their daily rounds are added.
-- A player who joins after launch has an index from daily rounds alone.
+- **Every player starts from the starting index**, the site's current players as well
+  as anyone who joins later: no round on another seed counts, before launch or after.
+  Daily rounds from before handicaps launch (Milestone A) count, since they are daily
+  rounds; their seeds are rated at launch.
+- **The first dailies after launch favor the strong.** A regular who has played few
+  dailies starts near scratch, so a weak regular receives far fewer strokes than they
+  need until about 8 daily rounds have replaced the starting index, as any newcomer
+  does (New players).
 - Hole ratings still use every round on every seed.
 
 ### Seasons
@@ -398,8 +629,15 @@ practice a seed before the round they submit. Until now nothing rewarded it.
 
 **Proposal.** Flag by statistics and review by hand. The model gives every round an
 expected score and a spread, so a round far better than expected goes to an admin, who
-can already flag and void rounds. The threshold is to be set by backtest; 3 standard
-errors is probably too loose.
+can already flag and void rounds. On the 2026-11-17 backtest a round's total less its
+expected score averages +2.2 strokes, since an index reads optimistic (The handicap
+index), with a spread of 6.5 strokes; measured from that average, no round of 236 was
+more than 2 spreads better than expected. The spread is far wider for weaker players, so
+the threshold is per index band and measured from the average (implementation task 28).
+
+The flag is not what stops sandbagging or a strong player's new account: best 8 of 10,
+the starting index and exceptional score reduction are. A run of rounds far worse than
+expected is flagged for review too; a single bad round cannot be told from a bad day.
 
 Turned down: linking Twitch accounts and requiring a stream of the daily. It is more
 data about players, and a requirement to stream is a reason not to play.
@@ -424,7 +662,7 @@ later net result.
 |----------|---------|
 | A daily's settings: course mode, transforms, wind, club rules | A request per weekday, as in The week: an arc from Monday to Saturday, Casual Friday's par 3s, and Sunday Classic as the one day that needs only the US ROM |
 | Calendar months or a rolling 30 days for records | Calendar months, per jdharms; to be tested |
-| The numbers: 8 rounds, 90%, 3 rounds provisional, the caps, the flag threshold | Set by backtest before launch, then left alone |
+| The numbers | Set on the 2026-11-17 backtest (Setting the numbers); run again on a fresh database before launch, then left alone |
 | Whether a player's page is public | Undecided |
 
 ## Evidence
@@ -453,3 +691,5 @@ Its limits:
   fast improver's results as permanent.
 - The caps and the daily-rounds-only rule are untested. The backtest's indexes come from
   rounds on every seed.
+- Its ratings are measured against the field, not the reference holes, it has a
+  provisional period rather than a starting index, and its stroke index ranks by spread.

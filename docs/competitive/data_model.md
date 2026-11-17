@@ -1,7 +1,7 @@
 # Competitive play: data model
 
 > **Note**: This document was written by Claude, from a design session with jdharms on
-> 2026-11-16. It is the storage for [design.md](design.md): what a daily, its ratings and
+> 2026-11-16, updated for the ratings decisions of 2026-11-17. It is the storage for [design.md](design.md): what a daily, its ratings and
 > its results keep, and when each is fixed. Milestone A's tables are built (migration 9:
 > `dailies`, `daily_seeds` and `daily_cards` without handicaps, in `server/dailies.py`);
 > the rest are proposed, their column lists the shape and not the final migration.
@@ -9,15 +9,16 @@
 ## The rule
 
 Every result is reproducible from rows that were written once and never changed. What a
-daily depends on keeps changing: hole ratings and player indexes are refit nightly, the
-rules' numbers are tuned after the backtest, and the weekday requests and rollover hour
-may change. A daily therefore points at an immutable ratings run and copies everything
-else it uses at three moments:
+daily depends on keeps changing: hole ratings are refitted daily, player indexes move as
+rounds are scanned, the rules' numbers are tuned after the backtest, and the weekday
+requests and rollover hour may change. A daily therefore copies what it uses at the
+moments it is fixed:
 
 | Moment | What is fixed | Tables |
 |--------|---------------|--------|
-| Open | The day's window, request, seed, ratings run, the seed's ratings, the scoring rules | `dailies`, `daily_seeds`, `daily_seed_holes` |
-| Scan | A player's index, handicap and net card | `daily_cards`, `daily_card_holes` |
+| A seed's generation | Its course rating, slope and hole ratings, never redone | `seed_ratings`, `seed_hole_ratings` |
+| Open | The day's window, request, seed, the scoring and index rules | `dailies`, `daily_seeds` |
+| Scan | The index the round is scored with, the handicap, the net card, and the player's index after it | `daily_cards`, `daily_card_holes` |
 | Close, and any later void or restore | The standing, matches and skins | `daily_results`, `daily_matches` |
 
 This follows ADR 0024, where a seed is what the site stored rather than a recipe to
@@ -29,30 +30,40 @@ as every other page does.
 
 ## Ratings runs
 
-The nightly job (task 11) writes a new run and never edits an earlier one.
+The daily refit (task 11), at the rollover in the app's loop, writes a new run and never
+edits an earlier one.
 
 | Table | Holds |
 |-------|-------|
-| `ratings_runs` | id, created_at, the model version, the parameters file's hash and a JSON copy of its values, the fitted baseline coefficients (par, distance, wind), the index rules used (window, hole cap, low-mark caps, provisional threshold), the latest `received_at` the fit saw, the number of rounds it used |
+| `ratings_runs` | id, created_at, the model version, the parameters file's hash and a JSON copy of its values, the fitted baseline coefficients (par, distance, wind, mirrored) and the field's skill, the latest `received_at` the fit saw, the number of rounds it used |
 | `hole_ratings` | run, hole id, data hash, pin index: the fitted layout, terrain and pin effects combined into the hole's rating and spread factor. Only levels the run saw rounds for; any other hole is rated from the run's baseline coefficients |
-| `player_indexes` | run, user: handicap index, low mark, rounds counted, provisional. One row per player the run could rate. This is the index history: the runs are nightly, so a player's rows by run are their index by day |
-| `seed_ratings_current` | seed, position: rating, spread factor, stroke index, under the latest run only, with the seed's course rating and slope. Replaced each night. It serves a player's handicap for any seed (task 24); a daily copies its own instead |
+| `seed_ratings` | seed (primary key), the run that rated it, rated_at, course rating, slope. Written once and never rewritten (implementation D47) |
+| `seed_hole_ratings` | seed, position: rating, spread factor, stroke index |
+
+A seed is rated when it is generated, under the latest run: its hole ratings, or the
+run's baseline coefficients for a level the run has not seen. That is lookups and
+arithmetic, not a fit, so it can happen in the request that makes the seed. A seed made
+before ratings existed is rated once at launch (task 12). Its stored ratings
+are what every round on it is scored against, daily or not: a round's differential uses
+them, so it never changes, and a player's index moves only when they play. They also
+serve a player's handicap for any seed (task 24).
 
 The hole keys are the spike model's (`tools/spikes/player_skill.md`): `hole_id`,
-`data_hash` and the pin index, all on `seed_holes`.
+`data_hash` and the pin index, all on `seed_holes`. A hole mirrored and otherwise
+unchanged is keyed by its unmirrored twin's data hash (design.md, Rating holes and
+courses).
 
 Every run is kept, hole ratings included: about a thousand rows a night at the 2026-11
-catalog size, a few megabytes a year. A daily copies its own seed's ratings, so nothing
-depends on an old run's hole ratings, but they show how a hole's rating moved and let a
-backtest or a question about an old day be answered from the database.
+catalog size, a few megabytes a year. A seed keeps its own ratings, so nothing depends on
+an old run's hole ratings, but they show how a hole's rating moved and let a backtest or
+a question about an old day be answered from the database.
 
 ## Dailies
 
 | Table | Holds |
 |-------|-------|
-| `dailies` | `day` (primary key: the daily's own date, `YYYY-MM-DD`), the theme of the schedule entry it came from (a weekday or a dated override) as it was then: `theme_name` and the optional `theme_description`, the request as it was read (ADR 0016), `opens_at` and `closes_at` in UTC, created_at, withdrawn_at. Milestones C and D add `ratings_run_id`, `rules` and closed_at |
+| `dailies` | `day` (primary key: the daily's own date, `YYYY-MM-DD`), the theme of the schedule entry it came from (a weekday or a dated override) as it was then: `theme_name` and the optional `theme_description`, the request as it was read (ADR 0016), `opens_at` and `closes_at` in UTC, created_at, withdrawn_at. Milestone D adds `rules` and closed_at |
 | `daily_seeds` | day, attempt (1, or 2 for a rerun), seed (unique), replaced_at. The day's seed is the one not replaced. A seed's pages know it is a daily, and hide its scores, from this table |
-| `daily_seed_holes` | seed, position: rating, spread factor and stroke index under the daily's run; course rating and slope on `daily_seeds` |
 
 - **The request is copied** because the checked-in weekday requests change, and a past
   day keeps the request it was drawn from. The concrete settings are already in the
@@ -63,9 +74,10 @@ backtest or a question about an old day be answered from the database.
 - **Open and closed are read from the window**, not stored: a day is open from
   `opens_at` until `closes_at`. Milestone D's close (task 22) adds closed_at, when the
   day's results are first fixed.
-- **`rules`** is a JSON copy of the scoring numbers in force at open: the allowance, the
-  Stableford table and the formats scored. The index rules belong to the ratings run, not
-  to the daily.
+- **`rules`** is a JSON copy of the numbers in force at open: the allowance, the
+  Stableford table, the formats scored, and the index rules a scan on the day applies
+  (the window, the starting index and its weight, the hole cap, exceptional score
+  reduction, the low-mark caps, and the low mark's window and minimum rounds).
 - **The PRNG seed** is a keyed hash of the date under the server secret, cut to the
   manifest's 16 hex characters. The manifest publishes it, so it must not reveal the
   secret or any other day's.
@@ -94,7 +106,7 @@ know who played it.
 
 | Table | Holds |
 |-------|-------|
-| `daily_cards` | day, user (unique together), the round's `public_id`, created_at. Milestone D adds the index, low mark and provisional flag from the daily's run, and the daily handicap |
+| `daily_cards` | day, user (unique together), the round's `public_id`, created_at. Milestone D adds the index the round was scored with, the daily handicap, and the player's index and low mark after it |
 | `daily_card_holes` | day, user, position: handicap strokes received, net score, Stableford points. Milestone D |
 
 - **The round is referenced by `public_id`**, which a void and restore keep, not by row
@@ -104,48 +116,50 @@ know who played it.
   received while the day is open, takes the card over.
 - **A round after close** is an ordinary round on the seed and gets no card, as does a
   round on a withdrawn day.
-- **The nightly fit reads daily rounds from cards** on days not withdrawn, so a change to a day's window never
-  changes which rounds counted toward an index.
-- **A provisional player gets a card.** The flag keeps them out of others' standing,
-  skins and records.
+- **A player's counted rounds** are their rounds with a card on a day not withdrawn,
+  Milestone A's dailies included, and no others: every player's index starts from the
+  starting index. A change to a day's window never changes which rounds counted.
+- **An index is a pure function** of a player's counted rounds, in the order received,
+  their seeds' stored ratings and the index rules. A scan recomputes it from them, which
+  is cheap, rather than updating a stored value, so a void, a restore, a withdrawn day
+  and the launch need nothing special. The index on the card before the round is the
+  one it was scored with: the player's index after their previous counted round, so
+  with one daily a day, the index they held when the daily opened. A player who scans
+  the older daily in the hour two overlap carries its update into the newer one.
+- **A player's cards are their index history**, one row per counted round: the low mark
+  is read from it.
 
-The values on a card could be computed again from the run, the rules and the round. They
-are stored because they are what the player was shown that day, and so records are plain
-SQL over rows.
+The values on a card could be computed again from the rounds, the seeds' ratings and the
+rules. They are stored because they are what the player was shown that day, and so
+records are plain SQL over rows.
 
 ## Results
 
 | Table | Holds |
 |-------|-------|
-| `daily_results` | date, user: Stableford points, position among the counting players (ties shared; NULL for a provisional player), skins won, whether they won the day, whether the row counts (not provisional) |
-| `daily_matches` | date, the two users: holes won by each, the result (win, half, loss) and its margin. Every pair of cards, provisional included, so a provisional player sees their own matches |
+| `daily_results` | date, user: Stableford points, position (ties shared), skins won, whether they won the day |
+| `daily_matches` | date, the two users: holes won by each, the result (win, half, loss) and its margin. Every pair of cards |
 
-- **Scoring is a pure function** of the day's counting cards and `rules`. It runs when a
+- **Scoring is a pure function** of the day's cards whose rounds are recorded, and `rules`. It runs when a
   card is written, and in the transaction of any void or restore of a round with a card,
   before or after close. A void after close rescores the day, so a voided round's winner
   loses the win and its opponents lose the losses.
 - **Closing** sets the status and stops new cards. It does not freeze results against a
   later void.
-- **A rescore changes no handicap or index.** Other players' cards keep the indexes they
-  had at open; the next nightly fit sees the void.
+- **A rescore changes no card's index or handicap.** Every card keeps the index it was
+  scored with. A void or restore changes the player's own index from that round on, which
+  their next scan uses.
 
 ## Records
 
 Career counts, head-to-head and monthly records (tasks 25 and 26) are SQL views over
 `daily_results`, `daily_matches` and `daily_card_holes` joined to live rounds, for closed
-days only, with both players counting. Months follow the daily's date. Views keep a
+days only. Months follow the daily's date. Views keep a
 rescore from leaving counts stale; a counter table can replace one if it proves slow.
 
 ## Before ratings exist
 
 Milestone A ships dailies before Milestone C has ratings runs. Those days have no
-`ratings_run_id`, `rules`, seed ratings or card handicaps, and no results. They still
-write cards, which record who played each day. Task 12 seeds each player's first index
-from every round recorded up to then, A's daily rounds among them, and from then on only
-cards are added.
-
-## Open questions
-
-| Question | Leaning |
-|----------|---------|
-| Whether `seed_ratings_current` is a table or computed on request | A table, rewritten nightly; a request should not run the model |
+`rules`, seed ratings or card handicaps, and no results. They still write cards, which
+record who played each day. Those daily rounds count toward their players' indexes once
+their seeds are rated at launch (task 12); no other round does.
