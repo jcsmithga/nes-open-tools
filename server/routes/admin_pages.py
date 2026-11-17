@@ -10,19 +10,23 @@ docs/randomizer_devplan.md, "Users and access".
 import csv
 import io
 from collections.abc import Sequence
+from datetime import date
 from typing import Annotated
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
 from ..admin import (
+    DAILIES_DAYS,
     METRICS_DAYS,
     TREND_DAYS,
     SeedScores,
     actions_page,
     counts,
+    dailies_view,
     metrics_view,
     round_detail,
     rounds_page,
@@ -34,7 +38,13 @@ from ..admin import (
     voided_page,
 )
 from ..auth import current_user
-from ..builder import SeedBuilder
+from ..builder import BuilderUnavailableError, SeedBuilder
+from ..dailies import (
+    DailyError,
+    replace_daily,
+    restore_daily,
+    withdraw_daily,
+)
 from ..db import Database
 from ..rounds import (
     SlotTakenError,
@@ -198,6 +208,77 @@ def admin_router(templates: Jinja2Templates) -> APIRouter:
                 request, seed_id, "Not restored: the seed is already active.", 409
             )
         return _redirect(f"/admin/seeds/{seed_id}", "seed_restored")
+
+    def dailies_page(
+        request: Request, error: str | None = None, status_code: int = 200
+    ):
+        view = dailies_view(db_of(request), request.app.state.clock())
+        return render(
+            request,
+            "dailies.html",
+            {
+                "dailies": view,
+                "days": DAILIES_DAYS,
+                "enabled": request.app.state.config.dailies_enabled,
+                "error": error,
+            },
+            status_code=status_code,
+        )
+
+    def parse_day(day: str) -> date:
+        try:
+            return date.fromisoformat(day)
+        except ValueError:
+            raise not_found() from None
+
+    @router.get("/dailies", response_class=HTMLResponse)
+    def dailies(request: Request):
+        return dailies_page(request)
+
+    @router.post("/dailies/{day}/replace")
+    async def replace(request: Request, day: str, admin: Admin, note: Note = ""):
+        config = request.app.state.config
+        if not config.dailies_enabled:
+            return dailies_page(
+                request, "Not replaced: the site has no daily secret.", 409
+            )
+        try:
+            await run_in_threadpool(
+                replace_daily,
+                db_of(request),
+                request.app.state.builder,
+                config.daily_secret,
+                parse_day(day),
+                admin.id,
+                note,
+            )
+        except KeyError:
+            raise not_found() from None
+        except DailyError as refused:
+            return dailies_page(request, f"Not replaced: {refused}.", 409)
+        except BuilderUnavailableError as problem:
+            return dailies_page(request, f"Not replaced: {problem}.", 503)
+        return _redirect("/admin/dailies", "daily_replaced")
+
+    @router.post("/dailies/{day}/withdraw")
+    def withdraw_day(request: Request, day: str, admin: Admin, note: Note = ""):
+        try:
+            withdraw_daily(db_of(request), parse_day(day), admin.id, note)
+        except KeyError:
+            raise not_found() from None
+        except DailyError as refused:
+            return dailies_page(request, f"Not withdrawn: {refused}.", 409)
+        return _redirect("/admin/dailies", "daily_withdrawn")
+
+    @router.post("/dailies/{day}/restore")
+    def restore_day(request: Request, day: str, admin: Admin):
+        try:
+            restore_daily(db_of(request), parse_day(day), admin.id)
+        except KeyError:
+            raise not_found() from None
+        except DailyError as refused:
+            return dailies_page(request, f"Not restored: {refused}.", 409)
+        return _redirect("/admin/dailies", "daily_restored")
 
     @router.get("/rounds", response_class=HTMLResponse)
     def rounds(request: Request, page: PageNumber = 1, flagged: bool = False):

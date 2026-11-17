@@ -1,0 +1,63 @@
+# Daily seed strings: the calendar of dailies (daily_calendar.html). A day's theme is not
+# here: it is data in golf/randomizer/data/daily_schedule.json, stored with the day.
+# Format: see common.toml, and server/CLAUDE.md "Player-facing text".
+
+[daily.calendar.page_title]
+note = "plain: browser tab title of the calendar of past dailies"
+text = "Calendar - NES Open Randomizer"
+
+[daily.calendar.heading]
+note = "calendar page h1; a calendar of every daily seed so far, one per day"
+text = "Daily Seed Calendar"
+
+[daily.calendar.months_label]
+note = "plain: accessible name of the links to the previous and next months"
+text = "Months"
+
+[daily.calendar.previous]
+note = "link to the month before the one shown"
+text = "Previous"
+
+[daily.calendar.next]
+note = "link to the month after the one shown"
+text = "Next"
+
+[daily.calendar.weekday.monday]
+note = "calendar column heading for Monday; a column is narrow, so short"
+text = "Mon"
+
+[daily.calendar.weekday.tuesday]
+note = "calendar column heading for Tuesday; a column is narrow, so short"
+text = "Tue"
+
+[daily.calendar.weekday.wednesday]
+note = "calendar column heading for Wednesday; a column is narrow, so short"
+text = "Wed"
+
+[daily.calendar.weekday.thursday]
+note = "calendar column heading for Thursday; a column is narrow, so short"
+text = "Thurs"
+
+[daily.calendar.weekday.friday]
+note = "calendar column heading for Friday; a column is narrow, so short"
+text = "Fri"
+
+[daily.calendar.weekday.saturday]
+note = "calendar column heading for Saturday; a column is narrow, so short"
+text = "Sat"
+
+[daily.calendar.weekday.sunday]
+note = "calendar column heading for Sunday; a column is narrow, so short"
+text = "Sun"
+
+[daily.calendar.players]
+note = "under a day's theme in its calendar cell; {count} how many players recorded a round on that daily while it was open, 0 or 2 and up (1 is daily.calendar.players_one)"
+text = "{count} players"
+
+[daily.calendar.players_one]
+note = "as daily.calendar.players, when exactly one player recorded a round on that daily"
+text = "1 player"
+
+[daily.calendar.withdrawn]
+note = "under a day's theme in its calendar cell, in place of the player count; the day was withdrawn and counts for nothing"
+text = "X"

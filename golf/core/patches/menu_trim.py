@@ -142,7 +142,9 @@ def _prg(cpu_addr: int) -> int:
 RENDERABLE_CHARS = string.ascii_uppercase + string.digits + ".$?_"
 
 DEFAULT_WORDS = ("OPEN", "GOLF", "RANDO")
-MIN_WORD_LENGTH = 4
+# 3 fits: each word is padded to a MAX_WORD_LENGTH slot. A daily's date (`MON NOV 16TH`)
+# uses 3; the word bank keeps its own 4-character minimum (golf/randomizer/words.py).
+MIN_WORD_LENGTH = 3
 MAX_WORD_LENGTH = 6
 
 # Vanilla menu $02's "PLEASE SELECT" / "COURSE" positions.

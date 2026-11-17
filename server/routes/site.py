@@ -8,6 +8,8 @@ from fastapi.templating import Jinja2Templates
 from golf.randomizer.roms import VANILLA_ROMS
 from golf.rendering.rangefinder import METADATA
 
+from ..auth import current_user
+from ..dailies import card_for, daily_seed
 from ..pages import ContentPage, PageCatalog
 from ..static_files import FAVICON, REVALIDATE, STATIC_DIR
 from ..strings import Strings
@@ -29,6 +31,13 @@ def site_router(templates: Jinja2Templates, pages: PageCatalog) -> APIRouter:
     def home(request: Request):
         updates = pages.get(LATEST_UPDATE_PAGE)
         latest = updates.newest if updates is not None else None
+        db = request.app.state.db
+        daily = daily_seed(db, request.app.state.clock())
+        user = current_user(request)
+        # the viewer's own round on it, which spoils nothing for them
+        card = (
+            None if daily is None or user is None else card_for(db, daily.day, user.id)
+        )
         return templates.TemplateResponse(
             request,
             "home.html",
@@ -36,6 +45,8 @@ def site_router(templates: Jinja2Templates, pages: PageCatalog) -> APIRouter:
                 "page": "home",
                 "latest_update_page": LATEST_UPDATE_PAGE,
                 "latest_update": latest if latest and latest.summary else None,
+                "daily": daily,
+                "daily_card": card,
             },
         )
 

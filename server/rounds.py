@@ -14,7 +14,8 @@ scorecard. See docs/randomizer_devplan.md, "Data model".
 An admin can flag a round, which leaves it counted and marked, or void it. A voided round
 moves to `voided_rounds` with its public id, freeing its slot for a different round, and a
 scan of its payload is refused until an admin restores it. Each admin action writes its
-audit row through `server/audit.py` in the same transaction.
+audit row through `server/audit.py` in the same transaction. Recording a round on a
+daily's seed gives it a card in the same transaction (`server/dailies.py`).
 """
 
 import json
@@ -25,6 +26,7 @@ from golf.qr import payload
 from golf.randomizer.manifest import StoredManifest
 
 from . import audit
+from .dailies import card_round
 from .db import Database
 from .ids import is_id, new_id
 from .seeds import utc_now
@@ -262,6 +264,15 @@ def record_round(
     )
     recorded = _load_round(conn, "rounds.id = ?", (round_id,))
     assert recorded is not None
+    # a player's own round on an open daily's seed counts toward the day
+    card_round(
+        conn,
+        recorded.public_id,
+        recorded.seed_id,
+        recorded.user_id,
+        recorded.slot,
+        received_at,
+    )
     return recorded
 
 

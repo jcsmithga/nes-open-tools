@@ -40,6 +40,7 @@ def test_scorecard_title_joins_the_words():
     [
         (["ball", "Ball", "golf"], "already in the bank"),
         (["ball", "par", "golf"], "4-6 characters"),
+        (["ball", "putters", "golf"], "4-6 characters"),
         (["ball", "tee-up", "golf"], "cannot draw"),
         (["ball", "", "golf"], "at least 3"),
     ],
@@ -52,8 +53,18 @@ def test_rejects_bad_banks(tmp_path, lines, message):
 
 
 @pytest.mark.parametrize(
-    "words", [("BALL", "GOLF"), ("BALL", "BALL", "GOLF"), ("BALL", "GOLF", "PUTTERS")]
+    "words",
+    [
+        ("BALL", "GOLF"),
+        ("BALL", "BALL", "GOLF"),
+        ("BALL", "GOLF", "PUTTERS"),
+        ("BALL", "GOLF", "GO"),
+    ],
 )
 def test_rejects_bad_magic_words(words):
     with pytest.raises(MagicWordsError):
         check_magic_words(words)
+
+
+def test_magic_words_may_be_three_characters_as_a_daily_date_is():
+    assert check_magic_words(("mon", "nov", "16th")) == ("MON", "NOV", "16TH")

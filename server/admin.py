@@ -18,9 +18,11 @@ from itertools import groupby
 
 from golf.qr import payload
 from golf.randomizer.catalog import Catalog, CatalogError
+from golf.randomizer.daily import daily_date
 from golf.randomizer.wind import compass
 
 from . import audit
+from .dailies import Daily, opened_dailies
 from .db import Database
 from .rounds import Round, find_round
 from .seeds import SeedRow, load_seed
@@ -173,6 +175,10 @@ def _resolve(conn: sqlite3.Connection, entry: AdminAction) -> ActionTarget:
         return ActionTarget(
             f"/host/{entry.target_id}",
             "hosted " + " ".join(_magic_words(row["manifest"])),
+        )
+    if entry.target_type == audit.DAILY:
+        return ActionTarget(
+            f"/admin/dailies#daily-{entry.target_id}", f"daily {entry.target_id}"
         )
     if entry.target_type == audit.ROUND:
         for table, path in (
@@ -823,3 +829,32 @@ def metrics_view(
         outcomes=outcomes,
         trend=trend,
     )
+
+
+#: how many days back the admin dailies page lists
+DAILIES_DAYS = 60
+
+
+@dataclass(frozen=True)
+class AdminDaily:
+    daily: Daily
+    #: cards for the day, counted or not: a card blocks a rerun even when its round is voided
+    cards: int
+    open: bool
+
+
+def dailies_view(db: Database, now: datetime) -> list[AdminDaily]:
+    """The last DAILIES_DAYS dailies that have opened, newest first."""
+    today = daily_date(now)
+    found = opened_dailies(db, today - timedelta(days=DAILIES_DAYS - 1), today, now)
+    with db.transaction() as conn:
+        cards = {
+            row["day"]: row["cards"]
+            for row in conn.execute(
+                "SELECT day, count(*) AS cards FROM daily_cards GROUP BY day"
+            )
+        }
+    return [
+        AdminDaily(daily, cards.get(daily.day.isoformat(), 0), daily.is_open(now))
+        for daily in reversed(found)
+    ]

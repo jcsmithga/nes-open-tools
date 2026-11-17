@@ -284,4 +284,38 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (hosted_rom_id, slot)
     );
     """,
+    # 9: the daily seed (docs/competitive/data_model.md, ADR 0033). A day's window is
+    # stored as it was, so a later change to the rollover leaves past days alone, and so is
+    # its theme, so a later change to the schedule leaves past days' names alone. A day's
+    # seed is its latest attempt: 2 is the rerun that replaced 1. A card is a player's own
+    # round on the day's seed while it was open; it is kept when its round is voided, and
+    # counts only while the round is recorded.
+    """
+    CREATE TABLE dailies (
+        day TEXT PRIMARY KEY CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+        theme_name TEXT NOT NULL CHECK (theme_name <> ''),
+        theme_description TEXT CHECK (theme_description <> ''),
+        request TEXT NOT NULL CHECK (json_valid(request) AND json_type(request) = 'object'),
+        opens_at TEXT NOT NULL,
+        closes_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        withdrawn_at TEXT
+    );
+
+    CREATE TABLE daily_seeds (
+        day TEXT NOT NULL REFERENCES dailies (day),
+        attempt INTEGER NOT NULL CHECK (attempt IN (1, 2)),
+        seed_id TEXT NOT NULL UNIQUE REFERENCES seeds (id),
+        replaced_at TEXT,
+        PRIMARY KEY (day, attempt)
+    );
+
+    CREATE TABLE daily_cards (
+        day TEXT NOT NULL REFERENCES dailies (day),
+        user_id INTEGER NOT NULL REFERENCES users (id),
+        round_public_id TEXT NOT NULL UNIQUE CHECK (length(round_public_id) = 10),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (day, user_id)
+    );
+    """,
 ]

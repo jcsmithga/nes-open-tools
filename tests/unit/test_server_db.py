@@ -9,6 +9,9 @@ from server.migrations import APPLICATION_ID, MIGRATIONS
 
 SCHEMA_TABLES = {
     "admin_actions",
+    "daily_cards",
+    "daily_seeds",
+    "dailies",
     "download_settings",
     "entries",
     "hole_data",

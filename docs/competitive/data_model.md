@@ -1,9 +1,10 @@
 # Competitive play: data model
 
 > **Note**: This document was written by Claude, from a design session with jdharms on
-> 2026-11-16. It is the proposed storage for [design.md](design.md): what a daily, its
-> ratings and its results keep, and when each is fixed. Nothing in it is built. Column
-> lists are the shape, not the final migration.
+> 2026-11-16. It is the storage for [design.md](design.md): what a daily, its ratings and
+> its results keep, and when each is fixed. Milestone A's tables are built (migration 9:
+> `dailies`, `daily_seeds` and `daily_cards` without handicaps, in `server/dailies.py`);
+> the rest are proposed, their column lists the shape and not the final migration.
 
 ## The rule
 
@@ -49,8 +50,8 @@ backtest or a question about an old day be answered from the database.
 
 | Table | Holds |
 |-------|-------|
-| `dailies` | date (primary key: the daily's own date, `YYYY-MM-DD`), the schedule key it came from (a weekday or a dated override), the request as it was read (ADR 0016), `opens_at` and `closes_at` in UTC, status (`open`, `closed`, `withdrawn`), `ratings_run_id`, `rules`, closed_at |
-| `daily_seeds` | date, attempt (1, or 2 for a rerun), seed (unique), replaced_at. The day's seed is its latest attempt. A seed's pages know it is a daily, and hide its scores, from this table |
+| `dailies` | `day` (primary key: the daily's own date, `YYYY-MM-DD`), the theme of the schedule entry it came from (a weekday or a dated override) as it was then: `theme_name` and the optional `theme_description`, the request as it was read (ADR 0016), `opens_at` and `closes_at` in UTC, created_at, withdrawn_at. Milestones C and D add `ratings_run_id`, `rules` and closed_at |
+| `daily_seeds` | day, attempt (1, or 2 for a rerun), seed (unique), replaced_at. The day's seed is the one not replaced. A seed's pages know it is a daily, and hide its scores, from this table |
 | `daily_seed_holes` | seed, position: rating, spread factor and stroke index under the daily's run; course rating and slope on `daily_seeds` |
 
 - **The request is copied** because the checked-in weekday requests change, and a past
@@ -58,7 +59,10 @@ backtest or a question about an old day be answered from the database.
   seed's manifest.
 - **The window is stored per day**, so a later change to the rollover hour or the
   window's length leaves past days as they ran. Windows overlap by an hour (design.md,
-  The window); the Daily Seed is the open one with the latest date.
+  The window); the Daily Seed is the open one, not withdrawn, with the latest date.
+- **Open and closed are read from the window**, not stored: a day is open from
+  `opens_at` until `closes_at`. Milestone D's close (task 22) adds closed_at, when the
+  day's results are first fixed.
 - **`rules`** is a JSON copy of the scoring numbers in force at open: the allowance, the
   Stableford table and the formats scored. The index rules belong to the ratings run, not
   to the daily.
@@ -83,18 +87,21 @@ Both actions go through the audit log.
 
 ## Cards
 
-A card is written when the server accepts a round on the day's current seed while the
-day is open. Its existence is what makes a round a daily round.
+A card is written when the server accepts a player's own round (slot 0) on the day's
+current seed while the day is open and not withdrawn. Its existence is what makes a round
+a daily round. A teammate's round on someone's ROM (slot 1) gets none: the site does not
+know who played it.
 
 | Table | Holds |
 |-------|-------|
-| `daily_cards` | date, user (unique together), the round's `public_id`, the index, low mark and provisional flag from the daily's run, the daily handicap, created_at |
-| `daily_card_holes` | date, user, position: handicap strokes received, net score, Stableford points |
+| `daily_cards` | day, user (unique together), the round's `public_id`, created_at. Milestone D adds the index, low mark and provisional flag from the daily's run, and the daily handicap |
+| `daily_card_holes` | day, user, position: handicap strokes received, net score, Stableford points. Milestone D |
 
 - **The round is referenced by `public_id`**, which a void and restore keep, not by row
   id, which they change.
 - **A card is never deleted.** It counts while its round is in `rounds`; a voided round's
-  card is ignored until the round is restored.
+  card is ignored until the round is restored. A new round in the slot the void freed,
+  received while the day is open, takes the card over.
 - **A round after close** is an ordinary round on the seed and gets no card, as does a
   round on a withdrawn day.
 - **The nightly fit reads daily rounds from cards** on days not withdrawn, so a change to a day's window never

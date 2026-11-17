@@ -5,6 +5,7 @@
     <ul>
       <li><a href="/admin">Admin</a></li>
       <li><a href="/admin/seeds">Seeds</a></li>
+      <li><a href="/admin/dailies">Dailies</a></li>
       <li><a href="/admin/rounds">Rounds</a></li>
       <li><a href="/admin/rounds?flagged=true">Flagged</a></li>
       <li><a href="/admin/users">Users</a></li>
@@ -29,6 +30,12 @@
     <p class="admin-result"><ins>Seed withdrawn.</ins></p>
   {% elif result == "seed_restored" %}
     <p class="admin-result"><ins>Seed restored.</ins></p>
+  {% elif result == "daily_replaced" %}
+    <p class="admin-result"><ins>Daily replaced by its rerun; the old seed is withdrawn.</ins></p>
+  {% elif result == "daily_withdrawn" %}
+    <p class="admin-result"><ins>Daily withdrawn.</ins></p>
+  {% elif result == "daily_restored" %}
+    <p class="admin-result"><ins>Daily restored.</ins></p>
   {% elif result == "slot_taken" %}
     <p class="admin-result"><del>Not restored: that entry's slot already has a round. Void it first.</del></p>
   {% endif %}
@@ -159,6 +166,7 @@
   {%- elif entry.action == "void" %}voided
   {%- elif entry.action == "restore" %}restored
   {%- elif entry.action == "withdraw" %}withdrawn
+  {%- elif entry.action == "replace" %}replaced by a rerun
   {%- elif entry.action == "host" %}hosted
   {%- elif entry.action == "release" %}slot released
   {%- elif entry.action == "hosted_download" %}hosted ROM downloaded

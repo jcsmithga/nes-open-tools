@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ t_plain("daily.calendar.page_title") }}{% endblock %}
+{% block content %}
+  <hgroup>
+    <h1>{{ t("daily.calendar.heading") }}</h1>
+    <p class="daily-calendar-month">{{ calendar.month | calendar_month }}</p>
+  </hgroup>
+
+  <nav class="daily-calendar-months"
+       aria-label="{{ t_plain('daily.calendar.months_label') }}">
+    <ul>
+      <li>
+        {% if calendar.previous %}
+          <a href="/daily/calendar?month={{ calendar.previous.strftime('%Y-%m') }}"
+             rel="prev">{{ t("daily.calendar.previous") }}</a>
+        {% endif %}
+      </li>
+    </ul>
+    <ul>
+      <li>
+        {% if calendar.following %}
+          <a href="/daily/calendar?month={{ calendar.following.strftime('%Y-%m') }}"
+             rel="next">{{ t("daily.calendar.next") }}</a>
+        {% endif %}
+      </li>
+    </ul>
+  </nav>
+
+  <div class="overflow-auto">
+    <table class="daily-calendar">
+      <thead>
+        <tr>
+          <th scope="col">{{ t("daily.calendar.weekday.monday") }}</th>
+          <th scope="col">{{ t("daily.calendar.weekday.tuesday") }}</th>
+          <th scope="col">{{ t("daily.calendar.weekday.wednesday") }}</th>
+          <th scope="col">{{ t("daily.calendar.weekday.thursday") }}</th>
+          <th scope="col">{{ t("daily.calendar.weekday.friday") }}</th>
+          <th scope="col">{{ t("daily.calendar.weekday.saturday") }}</th>
+          <th scope="col">{{ t("daily.calendar.weekday.sunday") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for week in calendar.weeks %}
+          <tr>
+            {% for cell in week %}
+              {% if cell is none %}
+                <td class="daily-calendar-blank"></td>
+              {% elif cell.daily is none %}
+                <td data-day="{{ cell.day.isoformat() }}">
+                  <span class="daily-calendar-number">{{ cell.day.day }}</span>
+                </td>
+              {% else %}
+                {% set day = cell.daily %}
+                <td data-day="{{ cell.day.isoformat() }}"
+                    data-players="{{ day.players }}"
+                    data-state="{% if day.withdrawn %}withdrawn{% else %}played{% endif %}">
+                  <span class="daily-calendar-number">{{ cell.day.day }}</span>
+                  <a href="/daily/{{ cell.day.isoformat() }}">{{ day.theme.name }}</a>
+                  {% if day.withdrawn %}
+                    <small>{{ t("daily.calendar.withdrawn") }}</small>
+                  {% else %}
+                    <small>{% if day.players == 1 %}{{ t("daily.calendar.players_one") }}{% else %}{{ t("daily.calendar.players", count=day.players) }}{% endif %}</small>
+                  {% endif %}
+                </td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

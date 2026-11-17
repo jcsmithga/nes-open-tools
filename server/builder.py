@@ -13,6 +13,7 @@ import hashlib
 import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from golf.core.patches import QrCredentials
@@ -32,6 +33,7 @@ from golf.randomizer.catalog import (
     HoleStore,
 )
 from golf.randomizer.curation import DEFAULT_CURATION, CurationSnapshot
+from golf.randomizer.daily import DayPlan, generate_daily
 from golf.randomizer.generate import generate
 from golf.randomizer.manifest import Manifest, Settings, StoredManifest
 from golf.randomizer.roms import vanilla_rom
@@ -113,6 +115,12 @@ class SeedBuilder:
     def generate(self, settings: Settings, request: dict | None = None) -> Manifest:
         """A seed's manifest; `request` is what the settings were resolved from."""
         return generate(self.catalog, self.curation, settings, request)
+
+    def generate_daily(
+        self, plan: DayPlan, secret: str, day: date, attempt: int
+    ) -> Manifest:
+        """A daily's manifest (`golf/randomizer/daily.py`)."""
+        return generate_daily(self.catalog, self.curation, plan, secret, day, attempt)
 
     def build(self, manifest: Manifest, sample: Sample | None = None) -> BuiltSeed:
         """The seed's unfinished IPS and built holes, what `insert_seed` stores.

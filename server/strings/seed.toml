@@ -542,3 +542,31 @@ text = "Yardage Book"
 [seed.manifest_link]
 note = "link to the seed's manifest JSON; for the curious and for tools"
 text = "manifest"
+
+[seed.daily.mark]
+note = "on a daily's seed page, under the h1: this seed is a daily; {theme} the day's theme name, {date} its date"
+text = "Daily Seed: {date} ({theme})"
+
+[seed.daily.rerun]
+note = "as seed.daily.mark, for the rerun that replaced the day's first seed, which nobody could complete; {theme}, {date}"
+text = "Daily Seed: {date} (redo)"
+
+[seed.daily.replaced]
+note = "on the seed a rerun replaced: this was the daily for {date}, but nobody could complete it, so another seed took its place; followed by seed.daily.replaced_link"
+text = "Seed removed"
+
+[seed.daily.replaced_link]
+note = "link from a replaced daily seed to the day's seed now"
+text = "Updated Daily Seed"
+
+[seed.daily.withdrawn]
+note = "marker beside seed.daily.mark: the day was withdrawn and counts for nothing; the seed still plays as any seed"
+text = "(withdrawn daily seed)"
+
+[seed.daily.calendar]
+note = "link from a daily's seed page to the calendar of dailies, at its month"
+text = "Calendar"
+
+[seed.rounds.hidden_daily]
+note = "in place of the rounds table while a daily is open, to a viewer who has not recorded a round on it: scores show once they submit their own"
+text = "This is an official Daily Seed, so scorecards are hidden until you've submitted one yourself."

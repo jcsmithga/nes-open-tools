@@ -66,3 +66,31 @@ phone will submit your scorecard, and your completed round
 will show up on the seed page and on your account page.
 Stats, analytics, and leaderboards are coming soon!
 """
+
+[home.daily.heading]
+note = "plain: small label above the Daily Seed box's title, which is the day's theme name (as Easy Monday), with the date under it"
+text = "Daily Seed"
+
+[home.daily.closes]
+note = "in the Daily Seed box, when the daily stops taking rounds; {time} counts down to it in the viewer's language, as \"in 6 hours\" or \"in 40 minutes\" (shown as the UTC time when scripts are off), with the local time on hover"
+text = "Closes {time}."
+
+[home.daily.players]
+note = "in the Daily Seed box, beside the closing time; {count} how many players have recorded a round on today's daily so far, 0 or 2 and up (1 is home.daily.players_one)"
+text = "{count} scorecards submitted so far."
+
+[home.daily.players_one]
+note = "as home.daily.players, when exactly one player has recorded a round on today's daily"
+text = "1 scorecard submitted so far."
+
+[home.daily.your_round]
+note = "in the Daily Seed box, only for a signed-in player who has recorded their own round on today's daily (nothing to spoil); links to that round. {strokes} the round's total, {to_par} against par as +2, E or -1"
+text = "You shot {strokes} ({to_par})"
+
+[home.daily.play]
+note = "button to the Daily Seed's seed page"
+text = "Play"
+
+[home.daily.calendar]
+note = "link to the calendar of past dailies, beside the date under the Daily Seed box's title"
+text = "Full Calendar"

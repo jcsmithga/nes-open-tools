@@ -436,6 +436,10 @@ checked-in bank. Three words joined by spaces are at most 20 characters, within 
 scorecard title's 26. The words tell a player at a glance that they have the right ROM;
 they do not identify a seed uniquely.
 
+A manifest's magic words may be 3 to 6 characters, which both fonts and the menu's
+6-character slots allow: a daily's are its date, such as `MON NOV 16TH`
+(`golf/randomizer/daily.py`, ADR 0033). Only the bank holds to 4.
+
 ## golf-randomize
 
 ```bash

@@ -15,8 +15,9 @@ in this package.
 
 - `server/app.py` has `create_app(config)`, a factory: the lifespan, the middleware, the
   templates, the static mounts and the error pages. Shared objects live on `app.state`:
-  `config`, `strings`, `pages`, `discord`, `rate_limiter` and `renders` (the yardage
-  books' render cache), and `db`, `builder` and `timings` once the lifespan has started. Nothing is module-level state, so each test
+  `config`, `strings`, `pages`, `discord`, `rate_limiter`, `renders` (the yardage
+  books' render cache), `schedule` (the daily seed's weekly schedule) and `clock`, and
+  `db`, `builder` and `timings` once the lifespan has started. Nothing is module-level state, so each test
   builds its own app.
 - The routes are in `server/routes/`, one module per part of the URL space, each with a
   function that takes the app's `templates` and builds the `APIRouter` `create_app`
@@ -27,6 +28,8 @@ in this package.
     an uploaded request file, ADR 0016; not found unless `Config.mystery_seeds`) and `/h/<id>`, with its manifest, its IPS
     download and its yardage book
   - `server/routes/round_pages.py` (`round_router`): `/s/<scan>` and `/r/<id>`
+  - `server/routes/daily_pages.py` (`daily_router`): `/daily`, `/daily/<YYYY-MM-DD>` and
+    `/daily/calendar`, the daily seed's addresses
   - `server/routes/account.py` (`account_router`): `/me` and `/auth/`
   - `server/routes/admin_pages.py` (`admin_router`): `/admin/` (see "Admin" below)
   - `server/routes/host_pages.py` (`host_router`): `/host/` (see "Hosting" below)
@@ -58,6 +61,13 @@ in this package.
   `server/views.py` (what a page shows, as dataclasses, and the download file name),
   `server/yardage_book.py` (a seed's yardage book as rangefinder metadata;
   `docs/yardage_book.md`) and `server/ratelimit.py`.
+- `app.state.clock()` is the time a page that depends on it reads, such as which daily is
+  open; `create_app(clock=...)` fixes it in tests. Never call `datetime.now` in a route.
+- With `Config.daily_secret` (`GOLF_DAILY_SECRET`), the lifespan runs the daily rollover
+  (`roll_over_periodically` in `server/dailies.py`) as a task: a look every
+  `ROLLOVER_SECONDS` by the app's clock generates the day's daily in the threadpool if it
+  is not stored yet. `create_app(rollover_seconds=None)` runs none, for tests that make
+  dailies by hand with `ensure_daily`.
 - `server/auth.py` holds sign-in: `DiscordClient` (the two OAuth2 calls), `safe_next` for
   return paths, and `current_user(request)`, the one way a route gets the signed-in
   `User`. Templates get `user`, `sign_in_enabled` and `return_path` from the context
@@ -151,6 +161,15 @@ in this package.
   tokens never go in a log. Creating, releasing and downloading log themselves through
   `server/audit.py` under the host's `users.id`, who need not be an admin; claims are kept
   on the slot instead.
+- `server/dailies.py` is the only code that writes `dailies`, `daily_seeds` and
+  `daily_cards` (ADR 0033, `docs/competitive/data_model.md`). The library half, the
+  window, schedule, PRNG seed and magic words, is `golf/randomizer/daily.py`. A card is
+  written by `card_round` in the transaction `record_round` records the round in; it is
+  never deleted, and counts while its round is recorded. `scores_hidden` is the one rule
+  for hiding an open daily's scores from a viewer who has not played it, on the seed
+  page and other players' round pages. A rerun and a day's withdrawal and restoration
+  are admin actions here, logged through `server/audit.py`; a rerun withdraws the old
+  seed's downloads through `withdraw_seed_on`, in its transaction.
 - `server/submissions.py` is the only place a scan is decoded and verified. It writes
   nothing itself: an accepted scan becomes a round through `server/rounds.py`, and a
   rejected one is stored nowhere. Its rejection reasons deliberately do not say which lookup
@@ -291,7 +310,9 @@ in this package.
   minute, and `server/static/localtime.js`, which `base.html` loads on every page, rewrites
   its text with `Intl.DateTimeFormat` into the viewer's time zone and locale, keeping the
   UTC text as the title. A timestamp passed into `t()` goes through the filter too; its
-  `Markup` passes through unescaped.
+  `Markup` passes through unescaped. The `countdown` filter renders a time to come the
+  same way, marked `data-countdown`, which the script rewrites as how long until then
+  (`Intl.RelativeTimeFormat`, "in 6 hours"), with the local time as the title.
 - The ROM store is IndexedDB database `golf-randomizer`, object store `roms`, records
   `{id, sha1, bytes}` keyed by catalog ROM id. It holds only bytes whose SHA-1 matched: `rom.js`
   retries a mismatched file with the catalog ROM's iNES header (`golf/randomizer/roms.py`)
@@ -344,8 +365,11 @@ strings catalog.
 - The catalog is the TOML files under `server/strings/`: `common.toml` for the elements on
   every page (`base.html`), and one file per template named for it - `home.toml`,
   `rom.toml`, `generate.toml`, `mystery.toml`, `seed.toml`, `me.toml`, `not_found.toml`, `server_error.toml`, `sign_in_failed.toml`,
-  `round.toml`, `scan_rejected.toml`, `round_voided.toml`, `yardage_book.toml`, `claim.toml`, and `wind.toml` for the profile
-  names `_wind.html`'s macros give both the generate form and the seed page. Every file under the
+  `round.toml`, `scan_rejected.toml`, `round_voided.toml`, `yardage_book.toml`, `claim.toml`, `wind.toml` for the profile
+  names `_wind.html`'s macros give both the generate form and the seed page, and
+  `daily.toml` for the calendar of dailies. A daily's theme is not a string: its name
+  and optional description are data in `golf/randomizer/data/daily_schedule.json`,
+  stored with the day, so they are written there. Every file under the
   directory is loaded and merged, subdirectories included. Entries carry their full dotted
   key (`[home.about]`), so a file name is organization only and a key still greps to its
   entry. A top-level namespace lives in exactly one file, and a new template-backed page's
@@ -419,6 +443,8 @@ directly.
 - `test_saved_settings.py`: the download cookie and the account's copy, across the seed
   page, the download and `/me`
 - `test_rounds.py`: `server/routes/round_pages.py`
+- `test_daily.py`: `server/dailies.py` and `server/routes/daily_pages.py` - making a
+  day, cards, the pages, hidden scores and the admin actions on a day
 - `test_account.py`: `server/routes/account.py`
 - `test_claim.py`: `server/routes/claim_pages.py`
 - `conftest.py`: the fixtures they share (`client`, `unwritten_client`, `fake_builder`)

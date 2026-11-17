@@ -227,6 +227,7 @@ variables:
 | `GOLF_DEV_LOGIN` | off | Development-only sign-in bypass (`1`, `true`, `yes` or `on`) |
 | `GOLF_LOG_LEVEL` | `INFO` | The level the site logs at, as a `logging` level name; the log is JSON lines on stderr |
 | `GOLF_MYSTERY_SEEDS` | off | The mystery seed page, `/mystery`, and the generate page's link to it (`1`, `true`, `yes` or `on`); off, `/mystery` is not found |
+| `GOLF_DAILY_SECRET` | unset | The key the daily seed's PRNG seed is hashed under (ADR 0033). Set, the site generates each day's daily at 09:00 UTC; unset, it generates none. Keep it private and fixed |
 | `GOLF_PREWARM_TRANSFORMS` | off | Fill the hole transform caches for the whole catalog in the background at startup, giving way to builds (`1`, `true`, `yes` or `on`); off, each hole fills when a seed first draws it (`docs/hole_transforms.md`) |
 
 For development, keep these in a `.env` file in the repository root (gitignored) and run

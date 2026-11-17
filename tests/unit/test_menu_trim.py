@@ -21,10 +21,15 @@ def test_wrong_word_count_is_rejected(words):
         normalize_words(words)
 
 
-@pytest.mark.parametrize("word", ["GOL", "RANDOMS"])
-def test_word_length_is_4_to_6(word):
-    with pytest.raises(ValueError, match="4-6 characters"):
+@pytest.mark.parametrize("word", ["GO", "RANDOMS"])
+def test_word_length_is_3_to_6(word):
+    with pytest.raises(ValueError, match="3-6 characters"):
         normalize_words(["OPEN", "GOLF", word])
+
+
+def test_a_three_character_word_pads_to_its_slot():
+    assert normalize_words(["mon", "nov", "16th"]) == ("MON", "NOV", "16TH")
+    assert header_lines(["MON", "NOV", "16TH"]) == ("MON    NOV   ", "16TH  ")
 
 
 def test_unrenderable_word_is_rejected():

@@ -65,8 +65,9 @@ table of dated overrides for events, holidays or a day of newly published holes.
   its seed page once it opens.
 - A seed is never regenerated until its rating fits its day.
 
-The current requests and the reasons for each are in `docs/competitive/schedule.md`.
-They are tuned there, and a change to them is not a change to this record.
+The current requests are in `golf/randomizer/data/daily_schedule.json`, and the reasons
+for each are in `docs/competitive/schedule.md`. They are tuned there, and a change to them
+is not a change to this record.
 
 **The PRNG seed** is a keyed hash of the date under a server secret, cut to the
 manifest's 16 hex characters. The date makes generation idempotent, so a missed run

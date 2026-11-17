@@ -851,3 +851,71 @@ p.download-guest {
     var(--pico-card-sectioning-background-color)
   );
 }
+
+/* The calendar of dailies: a month as weeks from Monday, each day's theme and players. */
+table.daily-calendar {
+  table-layout: fixed;
+  min-width: 36rem;
+}
+
+table.daily-calendar td {
+  vertical-align: top;
+  height: 5rem;
+}
+
+table.daily-calendar td > a,
+table.daily-calendar td > small {
+  display: block;
+}
+
+.daily-calendar-number {
+  display: block;
+  color: var(--pico-muted-color);
+}
+
+table.daily-calendar td[data-state="withdrawn"] > a {
+  text-decoration: line-through;
+}
+
+.daily-calendar-months {
+  justify-content: space-between;
+}
+
+/* The home page's Daily Seed box: the theme as its title, then its facts in a row. */
+.daily-seed hgroup {
+  margin-bottom: 0;
+}
+
+.daily-seed hgroup > p:first-child {
+  margin-bottom: 0.25rem;
+  color: var(--pico-muted-color);
+  font-size: 0.875em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.daily-seed hgroup > h2 {
+  margin-bottom: 0.25rem;
+}
+
+/* the date, then the calendar link after a dot */
+.daily-seed-date > span {
+  margin: 0 0.25em;
+}
+
+.daily-seed-play {
+  margin-bottom: 0;
+}
+
+ul.daily-seed-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5em;
+  padding: 0;
+}
+
+ul.daily-seed-facts > li {
+  list-style: none;
+  margin: 0;
+}

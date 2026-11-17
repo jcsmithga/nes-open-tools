@@ -59,6 +59,9 @@ class Config:
     #: fill the transform caches for every catalog hole in the background at startup,
     #: giving way to builds (`SeedBuilder.prewarm`); off, each hole fills on first use
     prewarm_transforms: bool = False
+    #: the key a daily's PRNG seed is hashed under (`golf/randomizer/daily.py`); without
+    #: one the site generates no dailies
+    daily_secret: str | None = None
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] = os.environ) -> "Config":
@@ -87,11 +90,16 @@ class Config:
             mystery_seeds=(get("mystery_seeds") or "").strip().lower() in TRUE_WORDS,
             prewarm_transforms=(get("prewarm_transforms") or "").strip().lower()
             in TRUE_WORDS,
+            daily_secret=get("daily_secret"),
         )
 
     @property
     def discord_enabled(self) -> bool:
         return bool(self.discord_client_id and self.discord_client_secret)
+
+    @property
+    def dailies_enabled(self) -> bool:
+        return bool(self.daily_secret)
 
     @property
     def sign_in_enabled(self) -> bool:

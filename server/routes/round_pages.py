@@ -5,6 +5,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from ..auth import current_user
+from ..dailies import scores_hidden
 from ..db import Database
 from ..rounds import VoidedRound, find_round
 from ..seeds import load_seed
@@ -68,12 +70,25 @@ def round_router(templates: Jinja2Templates) -> APIRouter:
                 status_code=410,
             )
         recorded = RECORDED in request.query_params
+        viewer = current_user(request)
+        # another player's scores on an open daily wait until the viewer has played it.
+        # The scan that recorded the round shows it, since the phone that scanned may not
+        # be signed in; hiding is a courtesy against spoilers, not a lock.
+        hidden = (
+            not recorded and (viewer is None or viewer.id != found.user_id)
+        ) and scores_hidden(
+            db,
+            found.seed_id,
+            None if viewer is None else viewer.id,
+            request.app.state.clock(),
+        )
         return templates.TemplateResponse(
             request,
             "round.html",
             {
                 "page": None,
                 "round": round_view(row, found, player.display_name, recorded),
+                "scores_hidden": hidden,
             },
         )
 

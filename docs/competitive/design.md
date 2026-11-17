@@ -115,18 +115,21 @@ closing at 10:00 UTC the next day.
 
 **Decision** (jdharms, 2026-11-16).
 
-- **The home page** shows the Daily Seed, the latest open daily, with its theme and a
-  link to its seed page.
+- **The home page** shows the Daily Seed, the latest open daily, titled by its theme,
+  with its date, how long until it closes, how many players have played it, and a link
+  to its seed page. A signed-in player who has played it also sees their own round's
+  score, linking to the round: nothing is spoiled for them.
 - **`/daily`** redirects to the Daily Seed's page, a link that never goes stale.
   **`/daily/<date>`** redirects to that day's seed, the replacement after a rerun.
 - **The calendar of past dailies** shows each day's theme and how many players it drew,
   which shows activity without spoiling a score, and links to `/daily/<date>`.
 - **A daily's seed page** says it is a daily, with its date and theme, and links to the
   calendar, so a link shared on its own still says what it is.
-- **A theme is a name and an optional one-line description**, both from the site's
-  strings by the day's schedule key (`server/CLAUDE.md`, "Player-facing text"). Weekday
-  themes may need only a name; the description is for special dailies, such as a
-  quarterly major or another event set by a dated override.
+- **A theme is a name and an optional one-line description**, written in the schedule
+  beside each request and stored with the day when it is made, so renaming a weekday's
+  theme leaves past days alone. Weekday themes may need only a name; the description is
+  for special dailies, such as a quarterly major or another event set by a dated
+  override, which names itself.
 - **Signed-out players** may download a daily as a guest ROM, as any seed (ADR 0003). The
   seed page's guest marker says it cannot submit, and its scores are hidden from them as
   from any viewer who has not submitted.

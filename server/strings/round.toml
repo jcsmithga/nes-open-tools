@@ -88,3 +88,7 @@ text = "{hit}/{possible}"
 [round.penalty_strokes]
 note = "line under the round tables; {count} the round's penalty strokes, one each for a ball in the water or out of bounds (0 included). Only on rounds from ROMs that record it"
 text = "Penalty Strokes: {count}"
+
+[round.hidden_daily]
+note = "in place of the scorecard: another player's round on a daily that is still open, which the viewer has not played; it shows once they submit their own or the day closes"
+text = "Hidden"

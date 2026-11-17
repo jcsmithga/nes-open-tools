@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_daily.html" as daily_theme %}
 {% block content %}
   <hgroup>
     <h1>{{ t("home.heading") }}</h1>
@@ -6,6 +7,37 @@
   </hgroup>
 
   <p>{{ t("home.about") }}</p>
+
+  {% if daily %}
+    <article class="daily-seed" data-day="{{ daily.day.isoformat() }}">
+      <header>
+        <hgroup>
+          <p>{{ t("home.daily.heading") }}</p>
+          <h2>{{ daily.theme.name }}</h2>
+          <p class="daily-seed-date">
+            {{ daily.day | calendar_date }}
+            <span aria-hidden="true">·</span>
+            <a href="/daily/calendar">{{ t("home.daily.calendar") }}</a>
+          </p>
+        </hgroup>
+      </header>
+      {{ daily_theme.description_paragraph(daily.theme) }}
+      <ul class="daily-seed-facts" role="list">
+        <li class="daily-seed-closes">{{ t("home.daily.closes", time=daily.closes_at | countdown) }}</li>
+        <li class="daily-seed-players" data-players="{{ daily.players }}">{% if daily.players == 1 %}{{ t("home.daily.players_one") }}{% else %}{{ t("home.daily.players", count=daily.players) }}{% endif %}</li>
+      </ul>
+      {% if daily_card %}
+        <p class="daily-seed-card"
+           data-strokes="{{ daily_card.strokes }}"
+           data-to-par="{{ daily_card.to_par }}">
+          <a href="/r/{{ daily_card.public_id }}">{{ t("home.daily.your_round", strokes=daily_card.strokes, to_par=daily_card.to_par) }}</a>
+        </p>
+      {% endif %}
+      <p class="daily-seed-play">
+        <a href="/h/{{ daily.seed_id }}" role="button">{{ t("home.daily.play") }}</a>
+      </p>
+    </article>
+  {% endif %}
 
   {% if latest_update %}
     <p class="latest-update">

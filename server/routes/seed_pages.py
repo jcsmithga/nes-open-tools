@@ -16,6 +16,7 @@ from golf.randomizer.request import RequestError, check_request, resolve
 
 from ..auth import current_user
 from ..builder import BuilderUnavailableError, SeedBuilder
+from ..dailies import daily_for_seed, scores_hidden
 from ..db import Database
 from ..download_settings import save_settings
 from ..entries import load_entry, upsert_entry
@@ -297,14 +298,21 @@ def seed_router(templates: Jinja2Templates, mystery_seeds: bool = False) -> APIR
             seed_builder.curation,
             starting_settings(request, seed_id),
         )
-        rounds = rounds_for_seed(request.app.state.db, seed_id)
         user = current_user(request)
+        db: Database = request.app.state.db
+        hidden = scores_hidden(
+            db, seed_id, None if user is None else user.id, request.app.state.clock()
+        )
+        # an open daily's scores never reach the page of a viewer who has not played it
+        rounds = [] if hidden else rounds_for_seed(db, seed_id)
         return templates.TemplateResponse(
             request,
             "seed.html",
             {
                 "page": "seed",
                 "seed": view,
+                "seed_daily": daily_for_seed(db, seed_id),
+                "scores_hidden": hidden,
                 "rounds": rounds,
                 # scores stay collapsed, so as not to spoil the seed, until the viewer
                 # has recorded a round of their own on it

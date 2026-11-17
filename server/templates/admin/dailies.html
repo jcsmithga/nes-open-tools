@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% import "admin/_admin.html" as admin %}
+{% block title %}Dailies - Admin{% endblock %}
+{% block content %}
+  {{ admin.nav() }}
+  <hgroup>
+    <h1>Dailies</h1>
+    <p>The last {{ days }} days. <a href="/daily/calendar">Calendar</a></p>
+  </hgroup>
+  {{ admin.result_notice(result) }}
+  {% if error %}<p class="admin-result"><del>{{ error }}</del></p>{% endif %}
+  {% if not enabled %}
+    <p><mark>No daily secret (GOLF_DAILY_SECRET) is set, so the site generates no dailies and cannot rerun one.</mark></p>
+  {% endif %}
+
+  <p>
+    A rerun replaces a day's seed that nobody can complete, at most once, while the day is open and before anyone has recorded a round on it.
+    It withdraws the old seed's downloads. A day some players can complete is withdrawn instead: it then counts toward nothing, and its seed plays as any seed.
+  </p>
+
+  {% if dailies %}
+    <div class="overflow-auto">
+      <table class="striped">
+        <thead>
+          <tr>
+            <th scope="col">Day</th>
+            <th scope="col">Theme</th>
+            <th scope="col">Seed</th>
+            <th scope="col" class="num">Players</th>
+            <th scope="col" class="num">Cards</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in dailies %}
+            {% set day = row.daily %}
+            <tr id="daily-{{ day.day.isoformat() }}">
+              <td>{{ day.day.isoformat() }}</td>
+              <td>{{ day.theme.name }}</td>
+              <td>
+                <a href="/admin/seeds/{{ day.seed_id }}"><code>{{ day.seed_id }}</code></a>{% if day.rerun %} rerun{% endif %}
+                {% if day.replaced_seed_id %}<br><small>replaced <a href="/admin/seeds/{{ day.replaced_seed_id }}"><code>{{ day.replaced_seed_id }}</code></a></small>{% endif %}
+              </td>
+              <td class="num">{{ day.players }}</td>
+              <td class="num">{{ row.cards }}</td>
+              <td>
+                {% if day.withdrawn %}<del>withdrawn</del> at {{ day.withdrawn_at|timestamp }}
+          {% elif row.open %}open until {{ day.closes_at|timestamp }}
+  {% else %}closed{% endif %}
+    </td>
+    <td>
+      {% if day.withdrawn %}
+        <form method="post"
+              action="/admin/dailies/{{ day.day.isoformat() }}/restore">
+          <button type="submit" class="secondary">Restore</button>
+        </form>
+      {% else %}
+        {% if row.open and not day.rerun and row.cards == 0 %}
+          <form method="post"
+                action="/admin/dailies/{{ day.day.isoformat() }}/replace">
+            <label for="replace-note-{{ day.day.isoformat() }}">Note</label>
+            <input type="text"
+                   id="replace-note-{{ day.day.isoformat() }}"
+                   name="note"
+                   autocomplete="off">
+            <button type="submit">Rerun</button>
+          </form>
+        {% endif %}
+        <form method="post"
+              action="/admin/dailies/{{ day.day.isoformat() }}/withdraw">
+          <label for="withdraw-note-{{ day.day.isoformat() }}">Note</label>
+          <input type="text"
+                 id="withdraw-note-{{ day.day.isoformat() }}"
+                 name="note"
+                 autocomplete="off">
+          <button type="submit" class="secondary">Withdraw</button>
+        </form>
+      {% endif %}
+    </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+  </table>
+  </div>
+{% else %}
+  <p>No daily has opened in the last {{ days }} days.</p>
+{% endif %}
+{% endblock %}

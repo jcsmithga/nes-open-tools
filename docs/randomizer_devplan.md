@@ -157,6 +157,9 @@ cannot submit.
 | `voided_rounds` | A round an admin voided: its `public_id`, entry, slot, the payload (unique, and holding every hole, so no hole rows), received_at, its flag and note, voided_at, an admin-only note. A scan of a voided payload is refused; restoring moves it back while its slot is empty |
 | `timings` | One row per request: created_at, request ID (indexed for lookup from `X-Request-Id`), the matched route template, method, status, total milliseconds, an outcome naming what a status cannot tell apart, and a JSON detail holding the phases inside the request. Written in batches by `server/timings.py`, kept 30 days |
 | `timing_day` | The daily rollup of `timings`, per day, route and method: count, errors and the p50, p90, p99 and maximum of that day. Kept for good. Each row's percentiles are exact for its own day and are never re-aggregated into a longer window |
+| `dailies` | One per day (ADR 0033, `docs/competitive/data_model.md`): the daily's date (`day`, `YYYY-MM-DD`), the schedule's theme as it was read (`theme_name`, nullable `theme_description`), the request as it was read, `opens_at` and `closes_at` as they were, created_at and nullable withdrawn_at |
+| `daily_seeds` | A day's seeds: day, attempt (1, or 2 for the rerun), seed (unique) and nullable replaced_at. The day's seed is the one not replaced |
+| `daily_cards` | A player's own round (slot 0) on a day's seed, received while the day was open and not withdrawn: day, user (unique together), the round's `public_id` and created_at. Never deleted; it counts while its round is recorded |
 | `admin_actions` | The audit log: admin, action, target type and id, the admin's note, a JSON detail object, created_at. Who withdrew or restored a seed, who flagged, voided or restored a round, and each target's complete history are read from here rather than from actor columns on the target |
 
 An entry is the record that a signed-in player has entered a seed, in the tournament
@@ -259,10 +262,14 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `GET /me` | The player's entries, rounds and saved download settings. Signed out, redirects to sign-in |
 | `POST /me/download-settings` | Saves the settings form to the account and this browser's `golf_download` cookie, and redirects back with `?result=`; a refused form saves nothing. Signed out, 404 |
 | `POST /me/download-settings/forget` | Deletes the account's saved settings, expires this browser's cookie and redirects back with `?result=`. Signed out, 404 |
-| `GET /admin/...` | Counts, seeds, rounds (flagged filter), users, voided rounds, admin activity, and each seed, round and user. Admins only |
+| `GET /daily` | Redirects to the Daily Seed, the latest open daily that is not withdrawn, or to the calendar when there is none. Uncached (ADR 0033) |
+| `GET /daily/<YYYY-MM-DD>` | Redirects to that day's seed, the rerun after a replacement; not found before the day opens |
+| `GET /daily/calendar` | The calendar of dailies, a month at a time (`?month=YYYY-MM`, the Daily Seed's month by default): each day's theme and how many players it drew |
+| `GET /admin/...` | Counts, seeds, the last 60 days' dailies, rounds (flagged filter), users, voided rounds, admin activity, and each seed, round and user. Admins only |
 | `POST /admin/rounds/<id>/flag`, `.../unflag`, `.../void`, `.../restore` | Flag with a note, clear the flag, void with a note, restore into an empty slot. `<id>` is the round's `public_id` |
 | `GET /admin/seeds/<id>/scores.csv` | Every recorded round on the seed as CSV: a par row, then one row per round with its hole scores, for working out team formats such as best ball in a spreadsheet. Computes nothing and stores nothing |
 | `POST /admin/seeds/<id>/withdraw`, `.../restore` | Refuse or restore downloads without changing the seed's manifest, unfinished IPS, entries or rounds; withdrawal takes an admin-only note |
+| `POST /admin/dailies/<YYYY-MM-DD>/replace`, `.../withdraw`, `.../restore` | Replace an open day's seed with its rerun, at most once and only while the day has no card, withdrawing the old seed's downloads; withdraw a day, which then counts toward nothing; restore it. Each takes an admin-only note but restore |
 | `GET /host`, `POST /host` | A host's hosted ROMs, the site's recent seeds each with a Host button, and a box taking a seed's link or id; POST creates a hosted ROM and redirects to it. Hosts and admins only |
 | `GET /host/<id>` | A hosted ROM: the club-rule warning, its claimants with release buttons, the claim QR code while a slot is free and no download has followed the last release, player 1's name, the download, and Host this seed again |
 | `POST /host/<id>/name`, `.../slots/<slot>/release` | Save player 1's name; free a slot and show the claim code again |
@@ -283,8 +290,10 @@ base; the QR URL prefix is assembled into the port and fixed before the first pu
 ships), the Discord client id and secret `GOLF_DISCORD_CLIENT_ID` and
 `GOLF_DISCORD_CLIENT_SECRET`, the session secret `GOLF_SESSION_SECRET`, the admin users
 `GOLF_ADMIN_USERS`, the host users `GOLF_HOST_USERS`, the development login bypass `GOLF_DEV_LOGIN`, the log level
-`GOLF_LOG_LEVEL`, `GOLF_MYSTERY_SEEDS`, which turns on the mystery seed page, and
-`GOLF_PREWARM_TRANSFORMS`, which fills the hole transform caches at startup.
+`GOLF_LOG_LEVEL`, `GOLF_MYSTERY_SEEDS`, which turns on the mystery seed page,
+`GOLF_PREWARM_TRANSFORMS`, which fills the hole transform caches at startup, and
+`GOLF_DAILY_SECRET`, the key a daily seed's PRNG seed is hashed under, without which the
+site generates no dailies.
 
 ## Development plan
 

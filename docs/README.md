@@ -14,7 +14,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [planning/quick_test_rom.md](planning/quick_test_rom.md) | The editor's quick-test ROM, which boots one hole onto its tee in practice mode and loops there: how it works, what is left, and starting the ball anywhere |
 | [competitive/design.md](competitive/design.md) | Competitive play: the daily, handicaps from the hole model, formats, incentives and the backtest behind them |
 | [competitive/data_model.md](competitive/data_model.md) | Competitive play's storage: immutable ratings runs, and what a daily fixes at open, at each scan and when scored |
-| [competitive/schedule.md](competitive/schedule.md) | The daily's weekly schedule: each weekday's request and the reasons for it |
+| [competitive/schedule.md](competitive/schedule.md) | The daily's weekly schedule: each weekday's feel and the reasons for its settings, which live in `golf/randomizer/data/daily_schedule.json` |
 | [competitive/implementation_plan.md](competitive/implementation_plan.md) | Plan: competitive play as numbered tasks with prerequisites, milestones and a dependency graph |
 | [deployment.md](deployment.md) | Running the randomizer site on its server: setup, releases, rollback and database restores |
 | [test_suite_performance.md](test_suite_performance.md) | Test runtime measurements, slow-test coverage review and workload splitting |

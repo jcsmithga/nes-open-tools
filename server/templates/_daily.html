@@ -1,0 +1,8 @@
+{# A daily's theme is data: the schedule's, stored with the day when it was made
+   (golf/randomizer/data/daily_schedule.json). Its name is used where a day is named; a
+   theme may also have a one-line description, for special dailies such as a major. #}
+
+{# The description in its own paragraph, or nothing for a theme without one. #}
+{% macro description_paragraph(theme) -%}
+  {%- if theme.description %}<p class="daily-theme-description">{{ theme.description }}</p>{% endif -%}
+{%- endmacro %}

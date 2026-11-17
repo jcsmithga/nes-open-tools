@@ -2,6 +2,7 @@
 {% import "_scorecard.html" as scorecard %}
 {% import "_download_settings.html" as controls %}
 {% import "_wind.html" as wind %}
+{% import "_daily.html" as daily_theme %}
 {# A summary value, marked so download.js can copy the control's current value into it. #}
 {% macro summary_value(field, value) -%}
   <span data-summary="{{ field }}">{{ value }}</span>
@@ -35,6 +36,33 @@
     <h1 class="magic-words">{{ seed.magic_words|join(" ") }}</h1>
     <p>{{ t("seed.tagline", id=seed.id, created=seed.created_at|timestamp) }}</p>
   </hgroup>
+
+  {% if seed_daily %}
+    {% set day = seed_daily.daily %}
+    <article class="seed-daily"
+             data-day="{{ day.day.isoformat() }}"
+             data-state="{% if seed_daily.replaced %}replaced{% elif day.withdrawn %}withdrawn{% elif day.rerun %}rerun{% else %}daily{% endif %}">
+      {% if seed_daily.replaced %}
+        <p>
+          {{ t("seed.daily.replaced", date=day.day | calendar_date) }}
+          <a href="/daily/{{ day.day.isoformat() }}">{{ t("seed.daily.replaced_link") }}</a>
+        </p>
+      {% else %}
+        <p>
+          {% if day.rerun %}
+            {{ t("seed.daily.rerun", theme=day.theme.name, date=day.day | calendar_date) }}
+          {% else %}
+            {{ t("seed.daily.mark", theme=day.theme.name, date=day.day | calendar_date) }}
+          {% endif %}
+          {% if day.withdrawn %}<mark>{{ t("seed.daily.withdrawn") }}</mark>{% endif %}
+        </p>
+        {{ daily_theme.description_paragraph(day.theme) }}
+      {% endif %}
+      <p>
+        <a href="/daily/calendar?month={{ day.day.strftime('%Y-%m') }}">{{ t("seed.daily.calendar") }}</a>
+      </p>
+    </article>
+  {% endif %}
 
   {% set download = seed.download %}
   <section>
@@ -106,7 +134,13 @@
   </section>
 
   <section>
-    {% if rounds %}
+    {% if scores_hidden %}
+      {# an open daily's scores, hidden entirely until the viewer records a round on it #}
+      <article class="closing-paragraph" data-state="scores-hidden">
+        <h2>{{ t("seed.rounds.heading") }}</h2>
+        <p>{{ t("seed.rounds.hidden_daily") }}</p>
+      </article>
+    {% elif rounds %}
       <article class="collapsible">
         <details{% if rounds_open %} open{% endif %}>
           <summary>

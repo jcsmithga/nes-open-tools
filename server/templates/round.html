@@ -96,15 +96,20 @@
   <p>{{ t("round.seed") }} <a href="/h/{{ round.seed_id }}"
     class="magic-words">{{ round.magic_words|join(" ") }}</a></p>
 
-  <div class="nines">
-    {{ nine_table(round.front, t("round.holes.front_total")) }}
-    {{ nine_table(round.back, t("round.holes.back_total"), round) }}
-  </div>
-  {% if round.stats_recorded %}
-    <p class="penalty-strokes"
-       data-penalty-strokes="{{ round.penalty_strokes }}">
-      {{- t("round.penalty_strokes", count=round.penalty_strokes) -}}
-    </p>
+  {% if scores_hidden %}
+    {# another player's round on an open daily the viewer has not played #}
+    <p class="round-hidden" data-state="scores-hidden">{{ t("round.hidden_daily") }}</p>
+  {% else %}
+    <div class="nines">
+      {{ nine_table(round.front, t("round.holes.front_total")) }}
+      {{ nine_table(round.back, t("round.holes.back_total"), round) }}
+    </div>
+    {% if round.stats_recorded %}
+      <p class="penalty-strokes"
+         data-penalty-strokes="{{ round.penalty_strokes }}">
+        {{- t("round.penalty_strokes", count=round.penalty_strokes) -}}
+      </p>
+    {% endif %}
   {% endif %}
   {% if round.recorded %}
     {# arrived from the scan that recorded this round: confirm it once, then leave the address

@@ -6,8 +6,10 @@ import logging
 import secrets
 import threading
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
+from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -21,11 +23,13 @@ from starlette.routing import Mount
 
 from golf.randomizer import transform_cache
 from golf.randomizer.catalog import REPO_ROOT
+from golf.randomizer.daily import Schedule
 from golf.rendering.hole_renders import HoleRenders
 
 from .auth import DiscordClient, current_user
 from .builder import BuilderUnavailableError, SeedBuilder
 from .config import Config
+from .dailies import ROLLOVER_SECONDS, roll_over_periodically
 from .db import Database, DatabaseError
 from .logging import request_id
 from .pages import PageCatalog
@@ -33,6 +37,7 @@ from .ratelimit import GENERATE_CAPACITY, GENERATE_REFILL_SECONDS, RateLimiter
 from .routes.account import account_router
 from .routes.admin_pages import admin_router
 from .routes.claim_pages import claim_router
+from .routes.daily_pages import daily_router
 from .routes.host_pages import host_router
 from .routes.round_pages import round_router
 from .routes.seed_pages import seed_router
@@ -48,7 +53,7 @@ from .static_files import (
 from .strings import Strings
 from .timings import EXCEPTION, Sample, TimingSink, flush_periodically
 from .version import site_version as read_site_version
-from .views import calendar_date, timestamp
+from .views import calendar_date, calendar_month, countdown, timestamp
 
 HERE = Path(__file__).resolve().parent
 TEMPLATES_DIR = HERE / "templates"
@@ -109,6 +114,9 @@ def create_app(
     discord: DiscordClient | None = None,
     timings: TimingSink | None = None,
     version: str | None = None,
+    schedule: Schedule | None = None,
+    clock: Callable[[], datetime] | None = None,
+    rollover_seconds: float | None = ROLLOVER_SECONDS,
 ) -> FastAPI:
     """Build the app.
 
@@ -116,7 +124,11 @@ def create_app(
     catalogs; with no builder, makes one from the config when the app starts; with no rate
     limiter, uses the generate limits in `server/ratelimit.py`; with no Discord client,
     makes one when the config has credentials; with no version, asks git for the release
-    the checkout is at. Raises ConfigError for settings the site refuses.
+    the checkout is at; with no schedule, loads the checked-in daily schedule; with no
+    clock, pages that depend on the time, such as which daily is open, read the system's.
+    With a daily secret, the rollover looks for the day's daily every `rollover_seconds`
+    by the clock; None runs no rollover, for tests that make dailies by hand. Raises
+    ConfigError for settings the site refuses.
     """
     config = config if config is not None else Config.from_env()
     config.validate()
@@ -127,6 +139,7 @@ def create_app(
     strings = strings if strings is not None else Strings.load()
     pages = pages if pages is not None else PageCatalog.load()
     site_version = version if version is not None else read_site_version(REPO_ROOT)
+    schedule = schedule if schedule is not None else Schedule.load()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -170,9 +183,27 @@ def create_app(
                 if sink.flush_seconds is not None
                 else None
             )
+            roller = (
+                asyncio.create_task(
+                    roll_over_periodically(
+                        db,
+                        seed_builder,
+                        schedule,
+                        config.daily_secret or "",
+                        app.state.clock,
+                        rollover_seconds,
+                    )
+                )
+                if config.dailies_enabled and rollover_seconds is not None
+                else None
+            )
             try:
                 yield
             finally:
+                if roller is not None:
+                    roller.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await roller
                 # The fill stops between holes, so a restart waits for one at most.
                 stop_prewarm.set()
                 if prewarmer is not None:
@@ -205,6 +236,8 @@ def create_app(
         else RateLimiter(GENERATE_CAPACITY, GENERATE_REFILL_SECONDS)
     )
     app.state.discord = discord
+    app.state.schedule = schedule
+    app.state.clock = clock if clock is not None else partial(datetime.now, UTC)
     app.state.renders = HoleRenders(config.rangefinder_dir)
     # Without a configured secret (development and tests; validate() insists on one for
     # Discord) sessions are signed with a secret that lasts as long as the process.
@@ -290,6 +323,8 @@ def create_app(
     templates.env.globals["logo_size"] = LOGO_SIZE
     templates.env.filters["timestamp"] = timestamp
     templates.env.filters["calendar_date"] = calendar_date
+    templates.env.filters["countdown"] = countdown
+    templates.env.filters["calendar_month"] = calendar_month
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
     # Not checked at startup: golf-site refuses to run without the renders, and tests
     # build apps on a fresh clone that has none.
@@ -304,6 +339,7 @@ def create_app(
     app.include_router(site_router(templates, pages))
     app.include_router(seed_router(templates, mystery_seeds=config.mystery_seeds))
     app.include_router(round_router(templates))
+    app.include_router(daily_router(templates))
     app.include_router(account_router(templates))
 
     @app.exception_handler(StarletteHTTPException)

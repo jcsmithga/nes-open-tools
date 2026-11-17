@@ -1,8 +1,9 @@
 # Competitive play: implementation plan
 
 > **Note**: This document was written by Claude, from a design session with jdharms on
-> 2026-11-12. It orders the work that takes [design.md](design.md) to production. Nothing
-> in it is built.
+> 2026-11-12. It orders the work that takes [design.md](design.md) to production. Tasks
+> 1, 13, 14, 15 and 17 are built (2026-11-16); the decisions made while building them are
+> in [Decisions made in building](#decisions-made-in-building), to be discussed.
 
 Tasks are numbered for reference, not strictly in the order to do them: the
 prerequisites and the graph give the order. Every task that adds a page leaves its
@@ -14,7 +15,7 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 
 | # | Task | Needs |
 |---|------|-------|
-| 1 | Settle the daily's open questions in `design.md` and record them as a proposed ADR. Drafted as ADR 0033: the window, magic words, reruns, bags and the weekly schedule, whose settings live in `schedule.md` | - |
+| 1 | **Done.** Settle the daily's open questions in `design.md` and record them as a proposed ADR. Drafted as ADR 0033: the window, magic words, reruns, bags and the weekly schedule, whose settings live in `schedule.md` | - |
 | 2 | Record the standing decisions as proposed ADRs: competition lives on the site; the daily is the unit and there are no seasons; no handicap leaderboard; scores hidden until a player submits, and a closed daily's standing public | - |
 | 3 | Record the handicap rules as a proposed ADR once task 9 has set the numbers: last 8 rounds, the allowance, the caps, the provisional period, which rounds count | 9 |
 
@@ -41,10 +42,10 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 
 | # | Task | Needs |
 |---|------|-------|
-| 13 | The `dailies` and `daily_seeds` tables, and a card for each round on an open daily without its handicap fields (`data_model.md`), the checked-in weekday requests and dated overrides, and the job that generates the day's seed at rollover from its request, with a PRNG seed from the date and a server secret, and the date as its magic words (`design.md`, Magic words), which lowers a manifest word's minimum length to 3 while the word bank keeps 4 to 6. Idempotent, so a missed run catches up | 1 |
-| 14 | The daily on the site (`design.md`, On the site): the Daily Seed on the home page, `/daily` and `/daily/<date>`, the calendar of past dailies with each day's theme and player count, and the daily's mark on its seed page. Strings keys for each theme's name and optional description | 13 |
-| 15 | Hide a daily's scores from a viewer who has not submitted a round on it: the seed page, other players' round pages and link preview cards | 13 |
-| 17 | Admin actions for a daily: replace a broken seed, whose magic words drop the weekday and end in `RERUN` (`NOV 16TH RERUN`), at most once a day and only while the day has no card; withdraw a day, as when some players complete it or a replacement breaks too. Through the audit log | 13 |
+| 13 | **Done.** The `dailies` and `daily_seeds` tables, and a card for each round on an open daily without its handicap fields (`data_model.md`), the checked-in weekday requests and dated overrides, and the job that generates the day's seed at rollover from its request, with a PRNG seed from the date and a server secret, and the date as its magic words (`design.md`, Magic words), which lowers a manifest word's minimum length to 3 while the word bank keeps 4 to 6. Idempotent, so a missed run catches up | 1 |
+| 14 | **Done.** The daily on the site (`design.md`, On the site): the Daily Seed on the home page, `/daily` and `/daily/<date>`, the calendar of past dailies with each day's theme and player count, and the daily's mark on its seed page. Each theme's name and optional description are schedule data, stored with the day | 13 |
+| 15 | **Done.** Hide a daily's scores from a viewer who has not submitted a round on it: the seed page, other players' round pages and link preview cards | 13 |
+| 17 | **Done.** Admin actions for a daily: replace a broken seed, whose magic words drop the weekday and end in `RERUN` (`NOV 16TH RERUN`), at most once a day and only while the day has no card; withdraw a day, as when some players complete it or a replacement breaks too. Through the audit log | 13 |
 
 ### Handicapped results
 
@@ -178,3 +179,77 @@ flowchart TD
     t2 & t3 & t16 & t17 & t21 & t23 & t28 & t29 & t30 --> t31
     t31 --> t32 & t33
 ```
+
+## Decisions made in building
+
+Tasks 13, 14, 15 and 17 were built on 2026-11-16. These are the questions that came up and
+the call Claude made on each, for jdharms to review. Each is how the code stands.
+
+### The schedule (task 13)
+
+| # | Question | Decision |
+|---|----------|----------|
+| D1 | Where the weekday requests and dated overrides live | One file, `golf/randomizer/data/daily_schedule.json`: `weekdays` (each of the seven, with a `theme` and a `request`) and `overrides` (by `YYYY-MM-DD`, the same shape). A theme is a `name` and an optional `description`, player-facing text, and the day stores both when it is made, so a later rename leaves past days alone and a rerun keeps the day's. `Schedule.load` refuses a missing weekday, a bad date or theme, or a request that does not check, and a test resolves every weekday |
+| D2 | Weights in the schedule's weighted choices | Every choice equally likely |
+| D3 | Sunday's "wind profile such as a storm" | Speed is one of the four storms (`storm_rolling_in`, `storm_passing`, `dying_wind`, `back_nine_pressure`); direction stays `vanilla`. The course is one of the US ROM's three (`nes_us`, `nes_uk`, `nes_japan`), equally likely |
+| D4 | Saturday's "perhaps a 10-club bag" | Thursday's bag is at most 10 clubs, nothing banned (`"clubs": {"max": 10}`); Saturday sets no club rules |
+| D5 | Friday's "any wind" | Every speed profile and every direction profile, equally likely |
+| D6 | Derived and community holes | Friday includes derived holes (ADR 0028), which add forward-tee par 3s to its pool. No other day includes any, so they draw vanilla holes only, as a default seed does. No day includes community holes |
+
+### Making a day (task 13)
+
+| # | Question | Decision |
+|---|----------|----------|
+| D7 | A systemd timer or the app | The app: with `GOLF_DAILY_SECRET` set, the lifespan runs a task that looks every 60 seconds and generates the day's daily in the threadpool if it is not stored. No timer, no second process, and a restart catches up on its first look |
+| D8 | Generating ahead of 09:00 | Not done: a day is generated on the first look at or after its opening, so nothing about it exists before it opens. The build takes seconds, and the previous daily is still open for that hour, so the overlap covers it |
+| D9 | A day missed entirely, as when the site is down past its close | Skipped: only the day open now is generated. The calendar shows a gap |
+| D10 | No secret configured | No dailies are generated and a rerun is refused. The pages work with whatever is stored |
+| D11 | The rerun's request | The one stored on the day, not the schedule's current one, so a schedule change in between does not change the rerun's settings. Its PRNG seed hashes the attempt with the date |
+| D12 | Storing open and closed | Not stored: a day is open from `opens_at` until `closes_at`. `data_model.md`'s status column became `withdrawn_at`; task 22 adds closed_at when results need fixing |
+| D13 | A seed made but its day not stored, if two looks race or a step fails between them | The seed stays an ordinary, unlisted seed, logged. One rollover runs per process, so it should not happen |
+
+### Cards (task 13)
+
+| # | Question | Decision |
+|---|----------|----------|
+| D14 | Whose rounds get a card | Slot 0 only, a player's own round. A teammate's round played as player 2 on someone's ROM gets none, since the site does not know who played it |
+| D15 | A void, then a new round in the freed slot while the day is open | The card passes to the new round; the voided one no longer counts |
+| D16 | Rounds that arrive while a day is withdrawn, if it is restored | They get no card, and restoring does not add them |
+| D17 | A rerun when a card's round has been voided | Still refused: a card shows the seed could be completed, voided or not. The admin page shows cards beside players for this reason |
+
+### Pages (task 14)
+
+| # | Question | Decision |
+|---|----------|----------|
+| D18 | The Daily Seed when today's is withdrawn | Withdrawn days are never the Daily Seed: the home page shows the previous day's while it is open, and otherwise none, and `/daily` goes to the calendar |
+| D19 | The calendar's shape | A month grid from Monday at `/daily/calendar?month=YYYY-MM`, back to the month of the first daily and forward to the Daily Seed's month; any other month is not found. Each day shows its theme (linking to `/daily/<date>`) and its player count, or that it was withdrawn. The month's name is formatted in the viewer's locale by `localtime.js` (the `calendar_month` filter); the weekday headings are strings |
+| D20 | A player count's meaning | Players with a card whose round is still recorded |
+| D21 | A link to the daily in the site header | None yet; the home page and the calendar link it. Adding one is a strings key and a line in `base.html`'s nav macros |
+| D22 | What a daily's seed page says | A box under the heading: the theme and date and a calendar link, or that it is the rerun, or (on the replaced seed) that it was replaced, linking to the day's seed now. A withdrawn day is marked. The link preview card is unchanged |
+| D23 | A theme's optional description | Shown as its own paragraph under the day's name on the home page and the day's seed page, where it has one. The calendar shows names only |
+
+### Hidden scores (task 15)
+
+| # | Question | Decision |
+|---|----------|----------|
+| D24 | Whether a viewer has played | Their entry on the seed has a recorded round, their own or a teammate's: the rule the seed page already used to open its rounds |
+| D25 | Which seeds hide | The day's current seed, while the day's window is open. A replaced seed and a closed day show as any seed. A withdrawn day still hides during its window |
+| D26 | The page a scan redirects to (`/r/<id>?recorded`) | Shows the round even to a viewer not signed in, since the phone that scanned may not be. The plain permalink hides it. Hiding is a courtesy against spoilers, not a lock |
+| D27 | Hidden on the seed page | The rounds are not sent at all: the section says only that scores show once the viewer submits |
+
+### Admin (task 17)
+
+| # | Question | Decision |
+|---|----------|----------|
+| D28 | Where the actions live | `/admin/dailies`: the last 60 days with each day's seed, players, cards and status, and Rerun, Withdraw and Restore. The activity log links a daily's actions to its row |
+| D29 | The replaced seed's downloads | A rerun withdraws them, in its transaction, so nobody downloads a seed that cannot be completed; the audit log records the seed's withdrawal and the day's replacement |
+| D30 | A rerun after the day closes | Refused, since nobody could play it as the day's |
+| D31 | Restoring a withdrawn day | Allowed, as for seeds and rounds, in case of a mistake |
+
+### Still to check
+
+- **A 3-character magic word on screen.** The menu pads each word to a 6-character slot
+  and `MON NOV 16TH` is 12 of the scorecard title's 26 columns, so it should draw, and
+  the screenshot run built a real daily ROM. Nobody has yet looked at its title menu and scorecard in an
+  emulator.
+

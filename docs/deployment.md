@@ -96,7 +96,8 @@ sudo install -m 0600 /opt/golf-site/deploy/golf-site.env.example /etc/golf-site/
 sudoedit /etc/golf-site/env
 ```
 
-A session secret for `GOLF_SESSION_SECRET`:
+A session secret for `GOLF_SESSION_SECRET`, and the same again for the daily seed's
+`GOLF_DAILY_SECRET` (ADR 0033):
 
 ```bash
 python3 -c "import secrets; print(secrets.token_urlsafe(48))"
@@ -341,7 +342,8 @@ time, within the snapshot retention in `deploy/litestream.yml`.
 
 The bucket, its access key and what is kept elsewhere (the ROMs and the secrets in
 `/etc/golf-site/env`) are enough to rebuild the site on a new server. A new
-`GOLF_SESSION_SECRET` works, but signs everyone out.
+`GOLF_SESSION_SECRET` works, but signs everyone out. A new `GOLF_DAILY_SECRET` works too,
+but the day's daily, if not yet generated, comes out a different seed.
 
 The database must be restored before `golf-site` or Litestream first starts. `golf-site`
 creates an empty database when it finds none, and Litestream would replicate that empty

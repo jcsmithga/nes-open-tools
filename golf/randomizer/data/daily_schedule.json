@@ -1,0 +1,364 @@
+{
+  "weekdays": {
+    "monday": {
+      "theme": {
+        "name": "Easy Monday"
+      },
+      "request": {
+        "constraints": [
+          {
+            "rule": "natural_par"
+          },
+          {
+            "rule": "expert_cap",
+            "per_nine": 0
+          }
+        ],
+        "wind_speed_profile": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": "gentle"
+            },
+            {
+              "weight": 1,
+              "value": "vanilla"
+            },
+            {
+              "weight": 1,
+              "value": "moderate"
+            }
+          ]
+        },
+        "mirror_chance": 50,
+        "hazard_chance": 50
+      }
+    },
+    "tuesday": {
+      "theme": {
+        "name": "Standard Tuesday"
+      },
+      "request": {
+        "constraints": [
+          {
+            "rule": "standard"
+          },
+          {
+            "rule": "expert_cap",
+            "per_nine": 1
+          }
+        ],
+        "wind_speed_profile": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": "vanilla"
+            },
+            {
+              "weight": 1,
+              "value": "moderate"
+            }
+          ]
+        },
+        "mirror_chance": 50,
+        "hazard_chance": 50
+      }
+    },
+    "wednesday": {
+      "theme": {
+        "name": "Windy Wednesday"
+      },
+      "request": {
+        "constraints": [
+          {
+            "rule": "standard"
+          },
+          {
+            "rule": "expert_cap",
+            "per_nine": 1
+          }
+        ],
+        "wind_speed_profile": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": "storm_rolling_in"
+            },
+            {
+              "weight": 1,
+              "value": "storm_passing"
+            },
+            {
+              "weight": 1,
+              "value": "dying_wind"
+            },
+            {
+              "weight": 1,
+              "value": "back_nine_pressure"
+            }
+          ]
+        },
+        "mirror_chance": 50,
+        "hazard_chance": 50
+      }
+    },
+    "thursday": {
+      "theme": {
+        "name": "Ten-Club Thursday"
+      },
+      "request": {
+        "constraints": [
+          {
+            "rule": "standard"
+          },
+          {
+            "rule": "expert_cap",
+            "per_nine": 1
+          }
+        ],
+        "wind_speed_profile": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": "strong"
+            },
+            {
+              "weight": 1,
+              "value": "back_nine_pressure"
+            }
+          ]
+        },
+        "wind_direction_profile": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": "prevailing"
+            },
+            {
+              "weight": 1,
+              "value": "out_and_back"
+            },
+            {
+              "weight": 1,
+              "value": "tailwind_out"
+            }
+          ]
+        },
+        "mirror_chance": 50,
+        "hazard_chance": 50,
+        "clubs": {
+          "max": 10
+        }
+      }
+    },
+    "friday": {
+      "theme": {
+        "name": "Casual Friday"
+      },
+      "request": {
+        "include": [
+          "derived"
+        ],
+        "constraints": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": [
+                {
+                  "rule": "par_3"
+                },
+                {
+                  "rule": "expert_cap",
+                  "per_nine": 0
+                }
+              ]
+            },
+            {
+              "weight": 1,
+              "value": [
+                {
+                  "rule": "par_3"
+                },
+                {
+                  "rule": "expert_cap",
+                  "per_nine": 1
+                }
+              ]
+            }
+          ]
+        },
+        "wind_speed_profile": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": "vanilla"
+            },
+            {
+              "weight": 1,
+              "value": "gentle"
+            },
+            {
+              "weight": 1,
+              "value": "moderate"
+            },
+            {
+              "weight": 1,
+              "value": "strong"
+            },
+            {
+              "weight": 1,
+              "value": "storm_rolling_in"
+            },
+            {
+              "weight": 1,
+              "value": "dying_wind"
+            },
+            {
+              "weight": 1,
+              "value": "storm_passing"
+            },
+            {
+              "weight": 1,
+              "value": "back_nine_pressure"
+            }
+          ]
+        },
+        "wind_direction_profile": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": "vanilla"
+            },
+            {
+              "weight": 1,
+              "value": "prevailing"
+            },
+            {
+              "weight": 1,
+              "value": "out_and_back"
+            },
+            {
+              "weight": 1,
+              "value": "headwind_out"
+            },
+            {
+              "weight": 1,
+              "value": "tailwind_out"
+            }
+          ]
+        },
+        "mirror_chance": 50,
+        "hazard_chance": 50
+      }
+    },
+    "saturday": {
+      "theme": {
+        "name": "Saturday Showdown"
+      },
+      "request": {
+        "constraints": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": [
+                {
+                  "rule": "natural_par"
+                },
+                {
+                  "rule": "expert_cap",
+                  "per_nine": 2
+                }
+              ]
+            },
+            {
+              "weight": 1,
+              "value": [
+                {
+                  "rule": "natural_par"
+                }
+              ]
+            }
+          ]
+        },
+        "wind_speed_profile": "strong",
+        "mirror_chance": 50,
+        "hazard_chance": 50
+      }
+    },
+    "sunday": {
+      "theme": {
+        "name": "Sunday Classic"
+      },
+      "request": {
+        "sources": [
+          "nes_open_us"
+        ],
+        "constraints": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": [
+                {
+                  "rule": "vanilla_course",
+                  "course": "nes_us"
+                }
+              ]
+            },
+            {
+              "weight": 1,
+              "value": [
+                {
+                  "rule": "vanilla_course",
+                  "course": "nes_uk"
+                }
+              ]
+            },
+            {
+              "weight": 1,
+              "value": [
+                {
+                  "rule": "vanilla_course",
+                  "course": "nes_japan"
+                }
+              ]
+            }
+          ]
+        },
+        "wind_speed_profile": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": "storm_rolling_in"
+            },
+            {
+              "weight": 1,
+              "value": "storm_passing"
+            },
+            {
+              "weight": 1,
+              "value": "dying_wind"
+            },
+            {
+              "weight": 1,
+              "value": "back_nine_pressure"
+            }
+          ]
+        },
+        "mirror_chance": {
+          "one_of": [
+            {
+              "weight": 1,
+              "value": 0
+            },
+            {
+              "weight": 1,
+              "value": 100
+            }
+          ]
+        },
+        "hazard_chance": 0
+      }
+    }
+  },
+  "overrides": {}
+}

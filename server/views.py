@@ -4,8 +4,9 @@ Nothing here is English: course names, ROM titles, hole ids, club labels and fil
 data. The templates put them into strings from `server/strings/`.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from markupsafe import Markup
 
@@ -19,6 +20,7 @@ from golf.randomizer.music import TRACKS, Track
 from golf.randomizer.roms import VanillaRom, vanilla_rom
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
 
+from .dailies import Daily
 from .forms import (
     CHANCE_CHOICES,
     COURSE_CHOICES,
@@ -135,6 +137,17 @@ def timestamp(stamp: str) -> Markup:
     )
 
 
+def countdown(stamp: str) -> Markup:
+    """A stored UTC time as a `<time>` element counting down to it, for the `countdown`
+    template filter: `server/static/localtime.js` replaces the text with how long until
+    then in the viewer's locale ("in 6 hours"), and the hover title with the local time.
+    Without the script the UTC minute stays."""
+    when = datetime.fromisoformat(stamp)
+    return Markup('<time datetime="{}" data-countdown>{} UTC</time>').format(
+        stamp, when.strftime("%Y-%m-%d %H:%M")
+    )
+
+
 def calendar_date(day: date) -> Markup:
     """A date as a `<time>` element, for the `calendar_date` template filter.
 
@@ -142,6 +155,58 @@ def calendar_date(day: date) -> Markup:
     viewer's locale's format. A date has no time zone, so the script formats it as UTC.
     """
     return Markup('<time datetime="{0}">{0}</time>').format(day.isoformat())
+
+
+@dataclass(frozen=True)
+class CalendarDay:
+    day: date
+    #: the day's daily, when it had one that has opened
+    daily: Daily | None
+
+
+@dataclass(frozen=True)
+class CalendarView:
+    """A month of dailies, as weeks from Monday; days outside the month are None."""
+
+    #: the first of the month shown
+    month: date
+    weeks: tuple[tuple[CalendarDay | None, ...], ...]
+    #: the first of the months to link to, when there is anything there
+    previous: date | None
+    following: date | None
+
+
+def calendar_view(
+    month: date, dailies: Sequence[Daily], first_day: date | None, today: date
+) -> CalendarView:
+    """The calendar of dailies for `month`, from the first day any daily has to the
+    month of `today`, the Daily Seed's date."""
+    month = month.replace(day=1)
+    by_day = {daily.day: daily for daily in dailies}
+    following_month = (month + timedelta(days=32)).replace(day=1)
+    days = [
+        CalendarDay(month + timedelta(days=offset), None)
+        for offset in range((following_month - month).days)
+    ]
+    cells: list[CalendarDay | None] = [None] * month.weekday()
+    cells += [CalendarDay(day.day, by_day.get(day.day)) for day in days]
+    cells += [None] * (-len(cells) % 7)
+    previous_month = (month - timedelta(days=1)).replace(day=1)
+    return CalendarView(
+        month=month,
+        weeks=tuple(tuple(cells[i : i + 7]) for i in range(0, len(cells), 7)),
+        previous=previous_month
+        if first_day is not None and first_day < month
+        else None,
+        following=following_month if following_month <= today else None,
+    )
+
+
+def calendar_month(month: date) -> Markup:
+    """A month as a `<time>` element, for the `calendar_month` template filter: its text
+    is `YYYY-MM`, which `server/static/localtime.js` replaces with the month and year in
+    the viewer's locale."""
+    return Markup('<time datetime="{0}">{0}</time>').format(month.strftime("%Y-%m"))
 
 
 def download_stem(row: SeedRow) -> str:

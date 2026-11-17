@@ -476,28 +476,40 @@ def withdraw_seed(
     Raises KeyError for a missing seed and SeedAlreadyWithdrawnError when it is
     already withdrawn.
     """
+    with db.transaction() as conn:
+        withdraw_seed_on(conn, seed_id, admin_id, note, now)
+
+
+def withdraw_seed_on(
+    conn: sqlite3.Connection,
+    seed_id: str,
+    admin_id: int,
+    note: str | None = None,
+    now: str | None = None,
+) -> None:
+    """`withdraw_seed` inside the caller's transaction, for an action that withdraws a
+    seed as part of something larger, such as replacing a daily's seed."""
     withdrawn_at = now if now is not None else utc_now()
     note = _note(note)
-    with db.transaction() as conn:
-        row = conn.execute(
-            "SELECT withdrawn_at FROM seeds WHERE id = ?", (seed_id,)
-        ).fetchone()
-        if row is None:
-            raise KeyError(seed_id)
-        if row["withdrawn_at"] is not None:
-            raise SeedAlreadyWithdrawnError(seed_id)
-        conn.execute(
-            "UPDATE seeds SET withdrawn_at = ? WHERE id = ?", (withdrawn_at, seed_id)
-        )
-        audit.record(
-            conn,
-            admin_id,
-            audit.WITHDRAW,
-            audit.SEED,
-            seed_id,
-            withdrawn_at,
-            note=note,
-        )
+    row = conn.execute(
+        "SELECT withdrawn_at FROM seeds WHERE id = ?", (seed_id,)
+    ).fetchone()
+    if row is None:
+        raise KeyError(seed_id)
+    if row["withdrawn_at"] is not None:
+        raise SeedAlreadyWithdrawnError(seed_id)
+    conn.execute(
+        "UPDATE seeds SET withdrawn_at = ? WHERE id = ?", (withdrawn_at, seed_id)
+    )
+    audit.record(
+        conn,
+        admin_id,
+        audit.WITHDRAW,
+        audit.SEED,
+        seed_id,
+        withdrawn_at,
+        note=note,
+    )
 
 
 def restore_seed(

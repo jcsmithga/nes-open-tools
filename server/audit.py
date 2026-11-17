@@ -18,6 +18,8 @@ UNFLAG = "unflag"
 VOID = "void"
 RESTORE = "restore"
 WITHDRAW = "withdraw"
+#: a daily's seed replaced by its rerun
+REPLACE = "replace"
 #: a host's actions on a hosted ROM (`server/hosting.py`); a host need not be an admin
 HOST = "host"
 RELEASE = "release"
@@ -31,6 +33,8 @@ SEED = "seed"
 ROUND = "round"
 #: a hosted ROM's public id
 HOSTED_ROM = "hosted_rom"
+#: a daily's date, YYYY-MM-DD
+DAILY = "daily"
 
 
 def record(
