@@ -97,49 +97,52 @@ class SiteData:
     created: dict[str, str]
 
 
+def slot_from(
+    catalog: Catalog,
+    hole_id: str,
+    transforms: str,
+    data_hash: str,
+    pin: int,
+    par: int,
+    distance: int | None,
+    wind: int,
+) -> Slot:
+    """The slot a `seed_holes` row was played as, `transforms` as its JSON text."""
+    twin = catalog[hole_id].content_hash if hole_id in catalog else None
+    terrain, mirrored = terrain_key(json.loads(transforms), data_hash, twin)
+    return Slot(hole_id, terrain, pin, par, distance or 0, wind, mirrored)
+
+
 def load(db_path: Path | str, catalog: Catalog | None = None) -> SiteData:
-    catalog = catalog or Catalog.load()
+    """`read` from a database file, opened read-only."""
     db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
-        seeds: dict[str, list[Slot]] = {}
-        for (
-            seed,
-            _pos,
-            hole_id,
-            transforms,
-            data_hash,
-            pin,
-            par,
-            dist,
-            wind,
-        ) in db.execute(_SLOTS_SQL):
-            twin = catalog[hole_id].content_hash if hole_id in catalog else None
-            terrain, mirrored = terrain_key(json.loads(transforms), data_hash, twin)
-            seeds.setdefault(seed, []).append(
-                Slot(hole_id, terrain, pin, par, dist or 0, wind, mirrored)
-            )
-        live = frozenset(
-            row[0]
-            for row in db.execute("select id from seeds where withdrawn_at is null")
-        )
-        created = dict(db.execute("select id, created_at from seeds").fetchall())
-        tables = {
-            row[0]
-            for row in db.execute("select name from sqlite_master where type='table'")
-        }
-        daily = (
-            {row[0] for row in db.execute(_DAILY_SQL)}
-            if "daily_cards" in tables
-            else set()
-        )
-        holes: dict[str, list] = {}
-        for public_id, user, name, seed, received, _pos, strokes in db.execute(
-            _ROUNDS_SQL
-        ):
-            entry = holes.setdefault(public_id, [str(user), name, seed, received, []])
-            entry[4].append(strokes)
+        return read(db, catalog)
     finally:
         db.close()
+
+
+def read(db: sqlite3.Connection, catalog: Catalog | None = None) -> SiteData:
+    """Every seed's slots and every player's own rounds, from an open connection."""
+    catalog = catalog or Catalog.load()
+    seeds: dict[str, list[Slot]] = {}
+    for seed, _pos, *row in db.execute(_SLOTS_SQL):
+        seeds.setdefault(seed, []).append(slot_from(catalog, *row))
+    live = frozenset(
+        row[0] for row in db.execute("select id from seeds where withdrawn_at is null")
+    )
+    created = dict(db.execute("select id, created_at from seeds").fetchall())
+    tables = {
+        row[0]
+        for row in db.execute("select name from sqlite_master where type='table'")
+    }
+    daily = (
+        {row[0] for row in db.execute(_DAILY_SQL)} if "daily_cards" in tables else set()
+    )
+    holes: dict[str, list] = {}
+    for public_id, user, name, seed, received, _pos, strokes in db.execute(_ROUNDS_SQL):
+        entry = holes.setdefault(public_id, [str(user), name, seed, received, []])
+        entry[4].append(strokes)
     rounds = [
         PlayedRound(
             id=public_id,

@@ -24,6 +24,7 @@ from starlette.routing import Mount
 from golf.randomizer import transform_cache
 from golf.randomizer.catalog import REPO_ROOT
 from golf.randomizer.daily import Schedule
+from golf.ratings.params import Parameters
 from golf.rendering.hole_renders import HoleRenders
 
 from .auth import DiscordClient, current_user
@@ -34,6 +35,7 @@ from .db import Database, DatabaseError
 from .logging import request_id
 from .pages import PageCatalog
 from .ratelimit import GENERATE_CAPACITY, GENERATE_REFILL_SECONDS, RateLimiter
+from .ratings import Ratings
 from .routes.account import account_router
 from .routes.admin_pages import admin_router
 from .routes.claim_pages import claim_router
@@ -117,6 +119,7 @@ def create_app(
     schedule: Schedule | None = None,
     clock: Callable[[], datetime] | None = None,
     rollover_seconds: float | None = ROLLOVER_SECONDS,
+    parameters: Parameters | None = None,
 ) -> FastAPI:
     """Build the app.
 
@@ -125,7 +128,8 @@ def create_app(
     limiter, uses the generate limits in `server/ratelimit.py`; with no Discord client,
     makes one when the config has credentials; with no version, asks git for the release
     the checkout is at; with no schedule, loads the checked-in daily schedule; with no
-    clock, pages that depend on the time, such as which daily is open, read the system's.
+    clock, pages that depend on the time, such as which daily is open, read the system's;
+    with no parameters, the ratings use the checked-in `golf/ratings/data/parameters.json`.
     With a daily secret, the rollover looks for the day's daily every `rollover_seconds`
     by the clock; None runs no rollover, for tests that make dailies by hand. Raises
     ConfigError for settings the site refuses.
@@ -140,6 +144,7 @@ def create_app(
     pages = pages if pages is not None else PageCatalog.load()
     site_version = version if version is not None else read_site_version(REPO_ROOT)
     schedule = schedule if schedule is not None else Schedule.load()
+    parameters = parameters if parameters is not None else Parameters.load()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -163,6 +168,9 @@ def create_app(
             except BuilderUnavailableError as problem:
                 log.error("cannot build seeds until this is fixed: %s", problem)
             app.state.builder = seed_builder
+            ratings = Ratings(seed_builder.catalog, parameters)
+            ratings.load_latest(db)
+            app.state.ratings = ratings
             stop_prewarm = threading.Event()
             prewarmer = (
                 threading.Thread(
@@ -192,6 +200,7 @@ def create_app(
                         config.daily_secret or "",
                         app.state.clock,
                         rollover_seconds,
+                        ratings,
                     )
                 )
                 if config.dailies_enabled and rollover_seconds is not None

@@ -333,6 +333,14 @@ text = "Par"
 note = "hole table column header; distance in yards"
 text = "Distance"
 
+[seed.holes.stroke_index]
+note = "hole table column header; the hole's stroke index, 1 the hole that receives a player's first handicap stroke, to 18"
+text = "HDCP"
+
+[seed.holes.strokes_received]
+note = "hole table column header, signed-in players only; handicap strokes the viewer receives on the hole (negative: gives one back); the footer totals their handicap"
+text = "Strokes"
+
 [seed.holes.source_rom]
 note = "hole table source cell, vanilla hole; {rom} ROM title, {course} course name, {hole} its hole number there"
 text = "{rom}"
@@ -570,3 +578,11 @@ text = "Calendar"
 [seed.rounds.hidden_daily]
 note = "in place of the rounds table while a daily is open, to a viewer who has not recorded a round on it: scores show once they submit their own"
 text = "This is an official Daily Seed, so scorecards are hidden until you've submitted one yourself."
+
+[seed.rating.ratings]
+note = "a rated seed's course rating and slope, golf's numbers; values course_rating (e.g. 71.3), slope (golf's scale, 113 standard)"
+text = "Rating: {course_rating} / Slope {slope}"
+
+[seed.rating.handicap]
+note = "signed-in players only: their handicap on this seed from their index now, at the daily's allowance; values handicap (whole strokes, '+2' better than scratch), index (e.g. 12.4 or +1.3)"
+text = "Your handicap: {handicap} (from index {index})"

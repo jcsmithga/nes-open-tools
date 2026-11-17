@@ -20,7 +20,7 @@ import zlib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from golf.core.rng import predict_hole
 from golf.formats.hole_data import HoleData
@@ -43,6 +43,12 @@ __all__ = ["ALPHABET", "ID_LENGTH"]  # re-exported: a seed id is a base62 id
 MAX_QR_SEED_ID = MAX_VALUE
 #: draws before an insert gives up on finding an unused id
 INSERT_ATTEMPTS = 10
+
+
+class SeedRater(Protocol):
+    """What rates a seed in the transaction that stores it (`server.ratings.Ratings`)."""
+
+    def rate_on(self, conn: sqlite3.Connection, seed_id: str, now: str) -> bool: ...
 
 
 class SeedIdError(ValueError):
@@ -222,12 +228,14 @@ def insert_seed(
     creator_id: int | None = None,
     now: str | None = None,
     draw: Callable[[], int] = new_qr_seed_id,
+    rater: SeedRater | None = None,
 ) -> str:
     """Store a seed and its holes in one transaction, and return its URL id.
 
     `holes` are the 18 the build made (`UnfinishedBuild.holes`), and `catalog` the one it
     built from, which gives each hole's author and source and the seed's required ROMs. A
-    drawn id that is already taken is drawn again, up to INSERT_ATTEMPTS times.
+    drawn id that is already taken is drawn again, up to INSERT_ATTEMPTS times. With a
+    `rater`, the seed is rated in the same transaction, under the latest ratings run.
     """
     return insert_issued_seed(
         db,
@@ -238,6 +246,7 @@ def insert_seed(
         creator_id=creator_id,
         now=now,
         draw=draw,
+        rater=rater,
     )
 
 
@@ -250,6 +259,7 @@ def insert_issued_seed(
     creator_id: int | None = None,
     now: str | None = None,
     draw: Callable[[], int] = new_qr_seed_id,
+    rater: SeedRater | None = None,
 ) -> str:
     """`insert_seed` for a manifest's text as issued, in any schema.
 
@@ -294,6 +304,8 @@ def insert_issued_seed(
                 conn.executemany(
                     _INSERT_SEED_HOLE, hole_rows(seed_id, manifest, stored)
                 )
+                if rater is not None:
+                    rater.rate_on(conn, seed_id, created_at)
         except sqlite3.IntegrityError as problem:
             if _is_id_collision(problem):
                 continue

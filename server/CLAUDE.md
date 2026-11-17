@@ -17,7 +17,8 @@ in this package.
   templates, the static mounts and the error pages. Shared objects live on `app.state`:
   `config`, `strings`, `pages`, `discord`, `rate_limiter`, `renders` (the yardage
   books' render cache), `schedule` (the daily seed's weekly schedule) and `clock`, and
-  `db`, `builder` and `timings` once the lifespan has started. Nothing is module-level state, so each test
+  `db`, `builder`, `ratings` (the latest ratings run, `server/ratings.py`) and `timings`
+  once the lifespan has started. Nothing is module-level state, so each test
   builds its own app.
 - The routes are in `server/routes/`, one module per part of the URL space, each with a
   function that takes the app's `templates` and builds the `APIRouter` `create_app`
@@ -66,8 +67,9 @@ in this package.
 - With `Config.daily_secret` (`GOLF_DAILY_SECRET`), the lifespan runs the daily rollover
   (`roll_over_periodically` in `server/dailies.py`) as a task: a look every
   `ROLLOVER_SECONDS` by the app's clock generates the day's daily in the threadpool if it
-  is not stored yet. `create_app(rollover_seconds=None)` runs none, for tests that make
-  dailies by hand with `ensure_daily`.
+  is not stored yet, first refitting the ratings for the day if it has no run.
+  `create_app(rollover_seconds=None)` runs none, for tests that make dailies by hand with
+  `ensure_daily`.
 - `server/auth.py` holds sign-in: `DiscordClient` (the two OAuth2 calls), `safe_next` for
   return paths, and `current_user(request)`, the one way a route gets the signed-in
   `User`. Templates get `user`, `sign_in_enabled` and `return_path` from the context
@@ -170,6 +172,16 @@ in this package.
   page and other players' round pages. A rerun and a day's withdrawal and restoration
   are admin actions here, logged through `server/audit.py`; a rerun withdraws the old
   seed's downloads through `withdraw_seed_on`, in its transaction.
+- `server/ratings.py` is the only code that writes `ratings_runs`, `ratings_effects`,
+  `seed_ratings` and `seed_hole_ratings` (ADR 0034, `docs/competitive/data_model.md`).
+  The model is `golf/ratings/`. `refit` fits the day's run at the rollover, outside the
+  database lock, and rates every seed not yet rated. `Ratings`, on `app.state.ratings`,
+  holds the latest run rebuilt into its model; a route storing a seed passes it to
+  `insert_seed` as `rater`, which rates the seed in the transaction that stores it. A
+  seed's ratings are written once and never rewritten. A player's index is computed from
+  their counted rounds when a page asks (`player_index`), never stored here. Pages show
+  slope on golf's scale (`golf_slope` in `server/views.py`); every formula uses the
+  model's.
 - `server/submissions.py` is the only place a scan is decoded and verified. It writes
   nothing itself: an accepted scan becomes a round through `server/rounds.py`, and a
   rejected one is stored nowhere. Its rejection reasons deliberately do not say which lookup
@@ -445,6 +457,8 @@ directly.
 - `test_rounds.py`: `server/routes/round_pages.py`
 - `test_daily.py`: `server/dailies.py` and `server/routes/daily_pages.py` - making a
   day, cards, the pages, hidden scores and the admin actions on a day
+- `test_ratings.py`: a seed's ratings and a player's handicap on the seed page, and
+  their index on `/me`
 - `test_account.py`: `server/routes/account.py`
 - `test_claim.py`: `server/routes/claim_pages.py`
 - `conftest.py`: the fixtures they share (`client`, `unwritten_client`, `fake_builder`)

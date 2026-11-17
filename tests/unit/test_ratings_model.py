@@ -1,11 +1,15 @@
 """The hole model on synthetic rounds: it recovers what generated them, is anchored to
 the reference holes, and rates a hole nobody played from its baseline."""
 
+import json
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
 from golf.ratings.model import Observation, Slot, fit
 from golf.ratings.params import ModelParams
+from golf.ratings.run import StoredModel, rebuilt, stored
 from golf.ratings.seed import rate_seed
 from golf.ratings.sitedb import terrain_key
 
@@ -115,3 +119,25 @@ def test_mirror_only_hole_takes_its_twins_terrain():
         False,
     )
     assert terrain_key(["mirror@1"], "flipped", None) == ("flipped", False)
+
+
+def test_a_rebuilt_run_rates_as_the_fitted_model(model):
+    """A run keeps the model's parts, so a rebuilt model rates any slot as the fit does:
+    a new wind, and an unseen terrain falling back on its layout."""
+    kept = stored(model)
+    again = rebuilt(StoredModel.from_parts(kept.header(), kept.effect_rows()), PARAMS)
+    known = HARD[3]
+    redrawn = replace(known, terrain="never-played", wind=9)
+    for slot in (known, redrawn, replace(known, pin=3), replace(REFERENCE[0], wind=4)):
+        assert again.rating(slot) == pytest.approx(model.rating(slot), abs=1e-12)
+    # the unseen terrain still carries its layout's effect, not just the baseline
+    baseline = replace(redrawn, hole_id="never-seen-layout")
+    assert model.rating(redrawn)[0] - model.rating(baseline)[0] == pytest.approx(
+        model.effects["layout"][known.hole_id]
+    )
+
+
+def test_a_stored_model_survives_json(model):
+    kept = stored(model)
+    header = json.loads(json.dumps(kept.header()))
+    assert StoredModel.from_parts(header, kept.effect_rows()) == kept

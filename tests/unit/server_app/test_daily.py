@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from golf.randomizer.daily import DayPlan, Theme, daily_date, magic_words
+from server import dailies
 from server.app import create_app
 from server.config import Config
 from server.dailies import (
@@ -133,6 +134,36 @@ def test_the_rollover_makes_the_day_open_at_the_clock(site, clock):
     state = app_state(site)
     daily = roll_over(state.db, state.builder, state.schedule, SECRET, clock.now)
     assert daily.day == daily_date(clock.now)
+
+
+def test_the_rollover_refits_the_ratings_before_it_makes_the_day(
+    site, clock, monkeypatch
+):
+    state = app_state(site)
+    seen = []
+
+    def refit(db, ratings, day, now):
+        seen.append((ratings, day, load_daily(db, day)))
+
+    monkeypatch.setattr(dailies, "refit", refit)
+    daily = roll_over(
+        state.db, state.builder, state.schedule, SECRET, clock.now, state.ratings
+    )
+    assert seen == [(state.ratings, daily.day, None)]
+
+
+def test_a_failed_refit_still_makes_the_day(site, clock, monkeypatch, caplog):
+    state = app_state(site)
+
+    def refit(*_args):
+        raise RuntimeError("the spreads did not settle")
+
+    monkeypatch.setattr(dailies, "refit", refit)
+    daily = roll_over(
+        state.db, state.builder, state.schedule, SECRET, clock.now, state.ratings
+    )
+    assert load_daily(state.db, daily.day) is not None
+    assert "the ratings refit" in caplog.text
 
 
 def test_the_rollover_runs_in_the_app_when_it_has_a_secret(fake_builder, clock):

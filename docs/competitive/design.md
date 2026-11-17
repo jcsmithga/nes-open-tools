@@ -153,8 +153,8 @@ closing at 10:00 UTC the next day.
   from any viewer who has not submitted.
 - **The host page** lists a daily among the recent seeds like any other, so a host can
   run it at an in-person event; rounds recorded in the window are daily rounds.
-- **`/me` and round pages are unchanged.** A daily round is an ordinary round there,
-  subject to Spoilers below.
+- **Round pages are unchanged.** A daily round is an ordinary round there, subject to
+  Spoilers below. `/me` shows the player's handicap index.
 
 Until handicaps exist (Milestone A), a daily shows its recorded rounds as any seed does,
 to players who have submitted: no standing, no winner and no records. A winner by gross
@@ -295,7 +295,8 @@ averaged, with no wind.
   the field.
 - **The spread term is centered on the reference holes**, so their average spread factor
   is 1.0: a seed of slope 1.0 separates players as much as they do. It is golf's slope
-  of 113, written as 1.0.
+  of 113, written as 1.0. The site shows it on golf's scale, 113 times the slope rounded
+  to a whole number; every formula uses the model's.
 - **A seed's course rating** is an index-0 player's expected score on it. Then
   `index * slope + course rating - par` is the model's expected score over par for that
   player.

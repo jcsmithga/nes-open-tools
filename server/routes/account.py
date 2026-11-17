@@ -26,10 +26,11 @@ from ..db import Database
 from ..download_settings import forget_settings, load_settings, save_settings
 from ..entries import entries_for_user
 from ..forms import DownloadState, FormError, saved_from_state
+from ..ratings import player_index
 from ..rounds import rounds_for_user
 from ..timings import OK
 from ..users import User, sign_in
-from ..views import settings_view
+from ..views import index_view, settings_view
 from .common import (
     DOWNLOAD_COOKIE,
     delete_download_cookie,
@@ -83,6 +84,9 @@ def account_router(templates: Jinja2Templates) -> APIRouter:
                 "entries": entries_for_user(db, user.id),
                 "rounds": rounds_for_user(db, user.id),
                 "settings": settings,
+                "index": index_view(
+                    player_index(db, user.id, request.app.state.ratings.parameters)
+                ),
                 "result": result,
             },
             status_code=status_code,

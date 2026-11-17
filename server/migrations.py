@@ -318,4 +318,47 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (day, user_id)
     );
     """,
+    # 10: ratings (docs/competitive/data_model.md, Ratings runs). A run is the hole model
+    # refitted for one rollover day: its own numbers in `model` and every effect it fitted
+    # in ratings_effects, the parts a new seed is rated from. A seed's ratings are written
+    # once, under the latest run, and never rewritten.
+    """
+    CREATE TABLE ratings_runs (
+        id INTEGER PRIMARY KEY,
+        day TEXT NOT NULL UNIQUE CHECK (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+        created_at TEXT NOT NULL,
+        model_version INTEGER NOT NULL,
+        parameters_hash TEXT NOT NULL CHECK (length(parameters_hash) = 64),
+        parameters TEXT NOT NULL CHECK (json_valid(parameters)),
+        model TEXT NOT NULL CHECK (json_valid(model)),
+        latest_received_at TEXT NOT NULL,
+        n_rounds INTEGER NOT NULL CHECK (n_rounds > 0)
+    );
+
+    CREATE TABLE ratings_effects (
+        run_id INTEGER NOT NULL REFERENCES ratings_runs (id),
+        grp TEXT NOT NULL CHECK (grp IN ('layout', 'terrain', 'pin')),
+        level TEXT NOT NULL,
+        value REAL NOT NULL,
+        PRIMARY KEY (run_id, grp, level)
+    ) WITHOUT ROWID;
+
+    CREATE TABLE seed_ratings (
+        seed_id TEXT PRIMARY KEY REFERENCES seeds (id),
+        run_id INTEGER NOT NULL REFERENCES ratings_runs (id),
+        rated_at TEXT NOT NULL,
+        par INTEGER NOT NULL,
+        course_rating REAL NOT NULL,
+        slope REAL NOT NULL
+    );
+
+    CREATE TABLE seed_hole_ratings (
+        seed_id TEXT NOT NULL REFERENCES seed_ratings (seed_id),
+        position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 18),
+        rating REAL NOT NULL,
+        spread REAL NOT NULL,
+        stroke_index INTEGER NOT NULL CHECK (stroke_index BETWEEN 1 AND 18),
+        PRIMARY KEY (seed_id, position)
+    ) WITHOUT ROWID;
+    """,
 ]

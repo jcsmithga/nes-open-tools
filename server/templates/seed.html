@@ -64,6 +64,20 @@
     </article>
   {% endif %}
 
+  {% if rating %}
+    <article class="seed-rating"
+             data-course-rating="{{ rating.course_rating }}"
+             data-slope="{{ rating.slope }}">
+      <p>{{ t("seed.rating.ratings", course_rating=rating.course_rating, slope=rating.slope) }}</p>
+      {% if rating.handicap %}
+        <p data-index="{{ rating.handicap.index }}"
+           data-handicap="{{ rating.handicap.handicap }}">
+          {{ t("seed.rating.handicap", handicap=rating.handicap.handicap, index=rating.handicap.index) }}
+        </p>
+      {% endif %}
+    </article>
+  {% endif %}
+
   {% set download = seed.download %}
   <section>
     {% if seed.withdrawn_at %}
@@ -233,6 +247,13 @@
                 <th scope="col">{{ t("seed.holes.source") }}</th>
                 <th scope="col" class="num">{{ t("seed.holes.par") }}</th>
                 <th scope="col" class="num">{{ t("seed.holes.distance") }}</th>
+                {% if rating %}
+                  <th scope="col" class="num">{{ t("seed.holes.stroke_index") }}</th>
+                  {% if rating.handicap %}
+                    <th scope="col"
+                        class="num">{{ t("seed.holes.strokes_received") }}</th>
+                  {% endif %}
+                {% endif %}
               </tr>
             </thead>
             <tbody>
@@ -260,6 +281,16 @@
                   </td>
                   <td class="num">{{ hole.par }}</td>
                   <td class="num">{{ hole.distance }}</td>
+                  {% if rating %}
+                    {% set stroke_index = rating.stroke_indexes[loop.index0] %}
+                    <td class="num"
+                        data-stroke-index="{{ stroke_index }}">{{ stroke_index }}</td>
+                    {% if rating.handicap %}
+                      {% set received = rating.handicap.received[loop.index0] %}
+                      <td class="num"
+                          data-received="{{ received }}">{% if received %}{{ received }}{% endif %}</td>
+                    {% endif %}
+                  {% endif %}
                 </tr>
               {% endfor %}
             </tbody>
@@ -268,6 +299,12 @@
                 <th scope="row" colspan="3">{{ t("seed.holes.total") }}</th>
                 <td class="num">{{ seed.total_par }}</td>
                 <td class="num">{{ seed.total_distance }}</td>
+                {% if rating %}
+                  <td></td>
+                  {% if rating.handicap %}
+                    <td class="num">{{ rating.handicap.handicap }}</td>
+                  {% endif %}
+                {% endif %}
               </tr>
             </tfoot>
           </table>

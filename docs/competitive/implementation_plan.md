@@ -3,8 +3,8 @@
 > **Note**: This document was written by Claude, from a design session with jdharms on
 > 2026-11-12, updated for the ratings decisions of 2026-11-17 (design.md, Handicaps). It
 > orders the work that takes [design.md](design.md) to production. Tasks
-> 1, 13, 14, 15 and 17 are built (2026-11-16), and tasks 3 to 9 (2026-11-17); the
-> decisions made while building them are in
+> 1, 13, 14, 15 and 17 are built (2026-11-16), tasks 3 to 9 (2026-11-17), and tasks 10
+> to 12 and 24 (2026-11-17); the decisions made while building them are in
 > [Decisions made in building](#decisions-made-in-building), to be discussed.
 
 Tasks are numbered for reference, not strictly in the order to do them: the
@@ -36,9 +36,9 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 
 | # | Task | Needs |
 |---|------|-------|
-| 10 | Tables for a ratings run, its hole ratings and each seed's stored ratings (`data_model.md`, Ratings runs) | 4 |
-| 11 | The daily refit: at the daily's rollover, in the app's loop that makes the daily (D7), fit the hole ratings under the parameters file and write a run. No timer, no second process; a missed refit leaves the latest run in force | 5, 10 |
-| 12 | Ratings at launch: rate every seed already on the site once, under the first run, and from then on rate each new seed when it is generated, under the latest run. Every player's index starts from the starting index and counts only their daily rounds, Milestone A's included (jdharms) | 7, 11 |
+| 10 | **Done.** Tables for a ratings run, its effects and each seed's stored ratings (`data_model.md`, Ratings runs) | 4 |
+| 11 | **Done.** The daily refit: at the daily's rollover, in the app's loop that makes the daily (D7), fit the hole ratings under the parameters file and write a run, before the day's seed is generated. No timer, no second process; a missed refit leaves the latest run in force | 5, 10 |
+| 12 | **Done.** Ratings at launch: rate every seed already on the site once, under the first run, and from then on rate each new seed when it is generated, under the latest run. Every player's index starts from the starting index and counts only their daily rounds, Milestone A's included (jdharms), and `/me` shows it | 7, 11 |
 
 ### The daily
 
@@ -59,7 +59,7 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 | 22 | Close a daily: stop new cards. A round received later is an ordinary round; a later void or restore still rescores the day | 20 |
 | 16 | When a daily closes, post its standing to Discord by webhook: positions, names, Stableford points and skins, with a link to the daily's page. Show the closed daily's standing on its page to every viewer | 22 |
 | 23 | Show results: a player's net card with strokes received, their matches, the standing and the skins, on the round page and the daily's page, only to players who have submitted while it is open (task 16 opens the standing at close) | 15, 20 |
-| 24 | Show a signed-in player their handicap for any seed on its page, before they play, from their current index and the seed's stored ratings | 8, 12 |
+| 24 | **Done.** Show every seed's course rating, slope and stroke indexes on its page, and a signed-in player their handicap and strokes received, before they play, from their current index and the seed's stored ratings | 8, 12 |
 
 ### Records
 
@@ -300,6 +300,23 @@ Each is how the code stands.
 | D65 | The index rules | Best 8 of the last 10, exceptional score reduction, a starting index of 0 worth 4 rounds, the World Handicap System's caps, and a 90% allowance at the steady state (jdharms). A round thrown by 15 strokes buys 4 to 10 strokes of index over the next 8 rounds, against 13 to 19 with the last 8, and a volatile player's blowups no longer raise their index. An index reads optimistic, as golf's does: a round averages 2.2 strokes worse than it predicts |
 | D66 | Exceptional score reduction's reach | The cut applies to every differential in the record, the last 10, so it fades as they age out, as the World Handicap System applies it to the last 20. It is a step at scan, computed from the index the player held: 7.0 to 9.9 strokes better takes 1.0, 10.0 or more takes 2.0 |
 | D67 | Milestone A's dailies | They count toward their players' indexes, as the only rounds before launch that do (jdharms ruled out every round on another seed). They are daily rounds, played on the day's seed in its window, and nobody knew when playing them that they would count, so nothing rewarded throwing one; their seeds are rated at launch with the rest. Without them every regular would start launch at scratch with no rounds at all |
+
+### Ratings live (tasks 10 to 12 and 24)
+
+Decided with jdharms on 2026-11-17, before building, except D76, which Claude made in
+building.
+
+| # | Question | Decision |
+|---|----------|----------|
+| D68 | What a run stores | The model's parts: the fixed coefficients, distance centers and reference par on `ratings_runs`, and every fitted effect by group and level in `ratings_effects`, not each hole's finished rating. A hole's rating depends on its slot's wind, and a level the run has not seen falls back on its parent, an unseen terrain on its layout and an unseen pin on its terrain, as the fit and the backtest rate it; a finished rating per hole would drop to the baseline for every new redraw |
+| D69 | Which rounds a refit fits | Every recorded slot-0 round on any seed, flagged rounds and withdrawn seeds' (D45) included; a void removes a round. Below 20 rounds no run is written, as the backtest's first fit (D53) |
+| D70 | When a refit runs | Once per rollover day, keyed by the day, so a restart does not fit again, and before the day's seed is generated, so a daily is rated by its own morning's run. A failed fit is logged, the latest run stays in force and the daily is still generated. It runs where the rollover runs, with `GOLF_DAILY_SECRET` set |
+| D71 | Rating a new seed | In the transaction that stores it, under the latest run, which the app holds rebuilt into a model and replaces at each refit. With no run the seed is stored unrated |
+| D72 | The launch backfill | No command: each refit rates every unrated seed, so the first refit after the launch's deploy rates the site, and a seed stored while no run existed is rated by the next |
+| D73 | What a seed page shows | On a rated seed, to every viewer, the course rating, the slope and each hole's stroke index; to a signed-in player too, their daily handicap at the allowance and the strokes it gives on each hole. An unrated seed shows none of it |
+| D74 | The slope's scale on a page | Golf's: 113 times the model's slope, rounded to a whole number. The model's scale is stored and used in every formula; the conversion is exact, since golf's course handicap is `index * slope / 113 + course rating - par` |
+| D75 | `/me` | Shows the player's handicap index, the starting index before any counted round |
+| D76 | How a page writes an index or handicap better than scratch | With a plus sign, as golf does: an index of -1.3 shows as +1.3 and a handicap of -2 as +2, since it gives strokes back. The strings receive the written figure (`golf_figure` in `server/views.py`) |
 
 ### Checked
 

@@ -19,6 +19,9 @@ from golf.randomizer.manifest import SOURCES, ClubRules
 from golf.randomizer.music import TRACKS, Track
 from golf.randomizer.roms import VanillaRom, vanilla_rom
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
+from golf.ratings.handicap import daily_handicap, round_half_up, strokes_received
+from golf.ratings.index import IndexState
+from golf.ratings.seed import SeedRating
 
 from .dailies import Daily
 from .forms import (
@@ -329,6 +332,82 @@ class SeedView:
     required_bag: tuple[str, ...] | None
     required_roms: tuple[VanillaRom, ...]
     download: DownloadView
+
+
+#: golf's slope of a course of standard difficulty: the model's slope 1.0
+GOLF_STANDARD_SLOPE = 113
+
+
+def golf_slope(slope: float) -> int:
+    """A slope on golf's scale, as pages show it; every formula uses the model's."""
+    return round_half_up(GOLF_STANDARD_SLOPE * slope)
+
+
+def golf_figure(value: float, places: int = 1) -> str:
+    """An index or handicap as golf writes it: one better than scratch with a plus sign,
+    since it gives strokes back."""
+    text = f"{abs(value):.{places}f}"
+    if round(value, places) < 0:
+        return "+" + text
+    return text
+
+
+@dataclass(frozen=True)
+class HandicapView:
+    """A signed-in player's handicap on one seed, from their index now."""
+
+    index: str
+    #: the daily handicap, at the allowance, as golf writes it
+    handicap: str
+    #: the strokes it gives on each hole, negative where a plus handicap gives one back
+    received: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class IndexView:
+    """A player's handicap index, as `/me` shows it."""
+
+    index: str
+    #: their counted rounds; 0 while they hold the starting index
+    rounds: int
+
+
+def index_view(state: IndexState) -> IndexView:
+    return IndexView(golf_figure(state.index), state.rounds_counted)
+
+
+@dataclass(frozen=True)
+class RatingView:
+    """A rated seed's ratings, as its page shows them."""
+
+    course_rating: str
+    slope: int
+    stroke_indexes: tuple[int, ...]
+    #: None for a viewer who is not signed in
+    handicap: HandicapView | None
+
+
+def rating_view(
+    rating: SeedRating | None, index: float | None, allowance: float
+) -> RatingView | None:
+    """None for a seed not yet rated."""
+    if rating is None:
+        return None
+    stroke_indexes = tuple(h.stroke_index for h in rating.holes)
+    handicap = None
+    if index is not None:
+        whole = daily_handicap(index, rating, allowance)
+        handicap = HandicapView(
+            index=golf_figure(index),
+            handicap=golf_figure(whole, 0),
+            received=tuple(strokes_received(whole, stroke_indexes)),
+        )
+    return RatingView(
+        course_rating=f"{rating.course_rating:.1f}",
+        slope=golf_slope(rating.slope),
+        stroke_indexes=stroke_indexes,
+        handicap=handicap,
+    )
 
 
 #: what a slot's transforms start with when they mirror it, or shuffle its hazards

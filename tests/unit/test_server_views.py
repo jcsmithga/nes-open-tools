@@ -1,12 +1,13 @@
 """The helpers in server/views.py that templates call directly."""
 
+import pytest
 from markupsafe import Markup, escape
 
 from golf.randomizer.catalog import US_ROM
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.roms import vanilla_rom
 from server.seeds import SeedHole
-from server.views import _hole_view, timestamp
+from server.views import _hole_view, golf_figure, golf_slope, timestamp
 
 
 def test_timestamp_is_a_time_element_holding_the_utc_minute():
@@ -58,3 +59,25 @@ def test_a_hole_view_names_a_source_rom_for_a_vanilla_hole_only():
     assert (derived.rom_title, derived.course, derived.source_hole) == (None,) * 3
     assert (derived.author, derived.par, derived.distance) == ("jdharms", 3, 190)
     assert (derived.number, derived.id) == (2, "jdharms/nes_us_12_short")
+
+
+@pytest.mark.parametrize(
+    ("slope", "shown"), [(1.0, 113), (0.65, 73), (1.15, 130), (0.5, 57)]
+)
+def test_a_slope_shows_on_golfs_scale(slope, shown):
+    assert golf_slope(slope) == shown
+
+
+@pytest.mark.parametrize(
+    ("value", "places", "shown"),
+    [
+        (12.44, 1, "12.4"),
+        (0.0, 1, "0.0"),
+        (-1.3, 1, "+1.3"),
+        (-0.04, 1, "0.0"),
+        (-2, 0, "+2"),
+        (7, 0, "7"),
+    ],
+)
+def test_better_than_scratch_is_written_with_a_plus(value, places, shown):
+    assert golf_figure(value, places) == shown

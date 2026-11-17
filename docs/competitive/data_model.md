@@ -3,8 +3,9 @@
 > **Note**: This document was written by Claude, from a design session with jdharms on
 > 2026-11-16, updated for the ratings decisions of 2026-11-17. It is the storage for [design.md](design.md): what a daily, its ratings and
 > its results keep, and when each is fixed. Milestone A's tables are built (migration 9:
-> `dailies`, `daily_seeds` and `daily_cards` without handicaps, in `server/dailies.py`);
-> the rest are proposed, their column lists the shape and not the final migration.
+> `dailies`, `daily_seeds` and `daily_cards` without handicaps, in `server/dailies.py`),
+> and so are the ratings tables (migration 10, in `server/ratings.py`); the rest are
+> proposed, their column lists the shape and not the final migration.
 
 ## The rule
 
@@ -31,32 +32,39 @@ as every other page does.
 ## Ratings runs
 
 The daily refit (task 11), at the rollover in the app's loop, writes a new run and never
-edits an earlier one.
+edits an earlier one. It fits every recorded slot-0 round on any seed, flagged rounds
+and withdrawn seeds' included, and writes no run below 20 rounds.
 
 | Table | Holds |
 |-------|-------|
-| `ratings_runs` | id, created_at, the model version, the parameters file's hash and a JSON copy of its values, the fitted baseline coefficients (par, distance, wind, mirrored) and the field's skill, the latest `received_at` the fit saw, the number of rounds it used |
-| `hole_ratings` | run, hole id, data hash, pin index: the fitted layout, terrain and pin effects combined into the hole's rating and spread factor. Only levels the run saw rounds for; any other hole is rated from the run's baseline coefficients |
-| `seed_ratings` | seed (primary key), the run that rated it, rated_at, course rating, slope. Written once and never rewritten (implementation D47) |
+| `ratings_runs` | id, the rollover day it was fitted for (unique, so a restart does not fit again), created_at, the model version, the parameters file's hash and a JSON copy of its values, the fitted model's own numbers as JSON (the fixed coefficients for intercept, par, distance, wind and mirrored, the distance centers, the reference holes' mean par, the field's skill, the luck, the iterations and the hole scores used), the latest `received_at` the fit saw, the number of rounds it used |
+| `ratings_effects` | run, group (layout, terrain or pin), level, value: every random effect the run fitted. Only levels the run saw rounds for |
+| `seed_ratings` | seed (primary key), the run that rated it, rated_at, par, course rating, slope. Written once and never rewritten (implementation D47) |
 | `seed_hole_ratings` | seed, position: rating, spread factor, stroke index |
 
-A seed is rated when it is generated, under the latest run: its hole ratings, or the
-run's baseline coefficients for a level the run has not seen. That is lookups and
-arithmetic, not a fit, so it can happen in the request that makes the seed. A seed made
-before ratings existed is rated once at launch (task 12). Its stored ratings
-are what every round on it is scored against, daily or not: a round's differential uses
-them, so it never changes, and a player's index moves only when they play. They also
-serve a player's handicap for any seed (task 24).
+A run keeps the model's parts rather than each hole's finished rating, because a hole's
+rating depends on its slot: the wind is drawn per slot, and a level the run has not seen
+falls back on its parent, an unseen terrain on its layout and an unseen pin on its
+terrain, as in the fit (implementation D68). A run is rebuilt into the fitted model and
+rates a seed as `golf-ratings` and the backtest do.
+
+A seed is rated when it is generated, under the latest run, in the transaction that
+stores it. That is lookups and arithmetic, not a fit. A seed made while no run exists,
+before launch or on a fresh database, is stored unrated, and every refit rates the
+seeds that are, so the first refit after the launch's deploy rates every seed on the
+site (task 12). Its stored ratings are what every round on it is scored against, daily
+or not: a round's differential uses them, so it never changes, and a player's index
+moves only when they play. They also serve a player's handicap for any seed (task 24).
 
 The hole keys are the spike model's (`tools/spikes/player_skill.md`): `hole_id`,
 `data_hash` and the pin index, all on `seed_holes`. A hole mirrored and otherwise
 unchanged is keyed by its unmirrored twin's data hash (design.md, Rating holes and
 courses).
 
-Every run is kept, hole ratings included: about a thousand rows a night at the 2026-11
+Every run is kept, effects included: about two thousand rows a night at the 2026-11
 catalog size, a few megabytes a year. A seed keeps its own ratings, so nothing depends on
-an old run's hole ratings, but they show how a hole's rating moved and let a backtest or
-a question about an old day be answered from the database.
+an old run's effects, but they show how a hole's rating moved and let a backtest or a
+question about an old day be answered from the database.
 
 ## Dailies
 

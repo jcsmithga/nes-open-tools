@@ -251,6 +251,7 @@ def admin_router(templates: Jinja2Templates) -> APIRouter:
                 parse_day(day),
                 admin.id,
                 note,
+                rater=request.app.state.ratings,
             )
         except KeyError:
             raise not_found() from None

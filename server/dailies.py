@@ -45,8 +45,10 @@ from golf.randomizer.daily import (
 from . import audit
 from .builder import BuilderUnavailableError, SeedBuilder
 from .db import Database
+from .ratings import Ratings, refit
 from .seeds import (
     SeedAlreadyWithdrawnError,
+    SeedRater,
     insert_seed,
     utc_now,
     withdraw_seed_on,
@@ -342,8 +344,10 @@ def ensure_daily(
     secret: str,
     day: date,
     now: str | None = None,
+    rater: SeedRater | None = None,
 ) -> Daily:
-    """The day's daily, generated from the schedule, built and stored if it is not yet.
+    """The day's daily, generated from the schedule, built and stored if it is not yet,
+    and rated by `rater` when it has a run.
 
     Building runs outside the database lock. Raises BuilderUnavailableError when the
     server cannot build, and whatever generation raises.
@@ -356,7 +360,13 @@ def ensure_daily(
     manifest = builder.generate_daily(plan, secret, day, FIRST)
     built = builder.build(manifest)
     seed_id = insert_seed(
-        db, manifest, built.unfinished_ips, built.holes, builder.catalog, now=created_at
+        db,
+        manifest,
+        built.unfinished_ips,
+        built.holes,
+        builder.catalog,
+        now=created_at,
+        rater=rater,
     )
     try:
         with db.transaction() as conn:
@@ -397,9 +407,19 @@ def roll_over(
     schedule: Schedule,
     secret: str,
     now: datetime,
+    ratings: Ratings | None = None,
 ) -> Daily:
-    """Make sure the daily open at `now` exists."""
-    return ensure_daily(db, builder, schedule, secret, daily_date(now), utc_text(now))
+    """Make sure the daily open at `now` exists. With `ratings`, first refit the hole
+    model for the day if it has no run, so the daily is rated by its own day's run; a
+    failed refit is logged, and the latest run stays in force."""
+    day = daily_date(now)
+    at = utc_text(now)
+    if ratings is not None:
+        try:
+            refit(db, ratings, day, at)
+        except Exception:
+            log.exception("the ratings refit for %s failed", day)
+    return ensure_daily(db, builder, schedule, secret, day, at, rater=ratings)
 
 
 async def roll_over_periodically(
@@ -409,12 +429,15 @@ async def roll_over_periodically(
     secret: str,
     clock: Callable[[], datetime],
     seconds: float = ROLLOVER_SECONDS,
+    ratings: Ratings | None = None,
 ) -> None:
     """The app's rollover: look now, then every `seconds`, until canceled. A failure is
     logged and tried again at the next look."""
     while True:
         try:
-            await run_in_threadpool(roll_over, db, builder, schedule, secret, clock())
+            await run_in_threadpool(
+                roll_over, db, builder, schedule, secret, clock(), ratings
+            )
         except BuilderUnavailableError as problem:
             log.error("cannot generate the daily until this is fixed: %s", problem)
         except Exception:
@@ -456,9 +479,11 @@ def replace_daily(
     admin_id: int,
     note: str | None = None,
     now: str | None = None,
+    rater: SeedRater | None = None,
 ) -> Daily:
     """Replace a day's seed with its rerun, withdrawing the replaced seed's downloads,
-    and log it. The rerun is generated from the theme and request the day stored.
+    and log it. The rerun is generated from the theme and request the day stored, and
+    rated by `rater` when it has a run.
 
     Raises KeyError for a missing day, and a DailyError when the day is withdrawn,
     already replaced, closed, or has a card. Checked before building and again when
@@ -481,7 +506,13 @@ def replace_daily(
     manifest = builder.generate_daily(plan, secret, day, RERUN)
     built = builder.build(manifest)
     seed_id = insert_seed(
-        db, manifest, built.unfinished_ips, built.holes, builder.catalog, now=at
+        db,
+        manifest,
+        built.unfinished_ips,
+        built.holes,
+        builder.catalog,
+        now=at,
+        rater=rater,
     )
     with db.transaction() as conn:
         replaced = _check_replaceable(conn, day, at)

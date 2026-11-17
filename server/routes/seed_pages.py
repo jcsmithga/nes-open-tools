@@ -31,11 +31,12 @@ from ..forms import (
     to_save,
 )
 from ..ratelimit import client_key
+from ..ratings import Ratings, player_index, seed_rating
 from ..rounds import rounds_for_seed
 from ..seeds import insert_seed, load_seed, load_seed_holes, load_unfinished_ips
 from ..strings import Strings
 from ..timings import OK, Sample
-from ..views import download_stem, generate_options, seed_view
+from ..views import download_stem, generate_options, rating_view, seed_view
 from ..yardage_book import yardage_book
 from .common import (
     json_refusal,
@@ -127,6 +128,7 @@ def seed_router(templates: Jinja2Templates, mystery_seeds: bool = False) -> APIR
                 built.holes,
                 seed_builder.catalog,
                 creator_id=None if user is None else user.id,
+                rater=request.app.state.ratings,
             )
 
     def mystery_page(
@@ -305,6 +307,14 @@ def seed_router(templates: Jinja2Templates, mystery_seeds: bool = False) -> APIR
         )
         # an open daily's scores never reach the page of a viewer who has not played it
         rounds = [] if hidden else rounds_for_seed(db, seed_id)
+        ratings: Ratings = request.app.state.ratings
+        rating = rating_view(
+            seed_rating(db, seed_id),
+            None
+            if user is None
+            else player_index(db, user.id, ratings.parameters).index,
+            ratings.parameters.handicap.allowance,
+        )
         return templates.TemplateResponse(
             request,
             "seed.html",
@@ -312,6 +322,7 @@ def seed_router(templates: Jinja2Templates, mystery_seeds: bool = False) -> APIR
                 "page": "seed",
                 "seed": view,
                 "seed_daily": daily_for_seed(db, seed_id),
+                "rating": rating,
                 "scores_hidden": hidden,
                 "rounds": rounds,
                 # scores stay collapsed, so as not to spoil the seed, until the viewer

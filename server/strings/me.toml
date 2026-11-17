@@ -9,6 +9,10 @@ text = "{name} - NES Open Randomizer"
 note = "h1 of the player's own page; {name} their Discord display name"
 text = "{name}"
 
+[me.index]
+note = "under the h1: the player's handicap index now; values index (e.g. 12.4, or +1.3 better than scratch), rounds (their counted daily rounds; 0 means the starting index)"
+text = "Handicap Index: {index} (from {rounds} rounds)"
+
 [me.entries.heading]
 note = "h2 over the table of seeds the player has entered (downloaded while signed in); the player's rounds are a table of their own below (me.rounds.heading)"
 text = "Downloaded Seeds"

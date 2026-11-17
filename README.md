@@ -140,6 +140,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 | `golf-site [--host H] [--port P] [--reload]` | Run the randomizer website under uvicorn; see "Running the site" below |
 | `golf-site-screenshot [pages] [-o dir] [--viewports ...] [--schemes ...] [--rom ID=PATH] [--generate] [--login NAME] [--expand]` | Render site pages to PNG in headless Chromium at desktop and phone widths, light and dark, and with `--generate` the seed page the generate form lands on, with `--rom` loading the ROMs first so its download form is ready, with `--login` signed in as a development user, and with `--expand` again with collapsed sections open; needs `uv run playwright install chromium` |
 | `golf-site-new-page TITLE [--entry PAGE] [--slug SLUG] [--dir DIR]` | Create a Markdown page stub under `server/content/pages/` with the frontmatter defaults written out, or with `--entry` an entry of the collection page `PAGE`, dated today; `--slug` overrides the file name derived from the title |
+| `golf-site-refit [DB] [--day YYYY-MM-DD] [--min-rounds N]` | Fit a ratings run into a site database now, as the daily rollover does, and rate every seed not yet rated: for a development database made from a copy of production, or to rate the site at launch without waiting for the rollover |
 | `golf-site-strings [--notes] [--dir DIR]` | List the site's unwritten strings (entries in `server/strings/` with empty text), grouped by file, with `--notes` printing what each one has to say |
 | `golf-best-ball CSV` | Pair players from a seed's scores CSV (the admin seed page's download) at a prompt, then print each pair's best-ball scorecard and a leaderboard |
 | `golf-ratings {fit,estimate,backtest} DB` | The competitive ratings from a copy of the site database: every player's index and the vanilla courses' ratings; estimating the hole model's parameters offline into `golf/ratings/data/parameters.json`; and the backtest that sets the handicap rules (`docs/competitive/design.md`) |
@@ -234,6 +235,18 @@ variables:
 For development, keep these in a `.env` file in the repository root (gitignored) and run
 `uv run --env-file .env golf-site --reload`, or set `UV_ENV_FILE=.env` in your shell so
 every `uv run` loads it.
+
+Seeds show a course rating, slope and stroke indexes once a ratings run exists, which the
+daily rollover fits from at least 20 rounds. For a development database that has them, copy
+a production database and fit a run into the copy, then point `GOLF_DATABASE` at it:
+
+```bash
+cp prod_copy.db dev_ratings.db
+uv run golf-site-refit dev_ratings.db
+```
+
+Every seed in the copy is rated, and so is each seed generated on it afterwards. Development
+sign-ins are users of their own, with no daily rounds, so they hold the starting index.
 
 Discord sign-in needs the client id, secret and session secret, and the Discord
 application's OAuth2 redirect URI registered as `<GOLF_BASE_URL>/auth/callback`. Without a
