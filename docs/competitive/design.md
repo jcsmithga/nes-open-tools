@@ -2,7 +2,7 @@
 
 > **Note**: This document was written by Claude, from a design session with jdharms on
 > 2026-11-12. It records the problems competitive play has to solve and the current
-> proposal for each. Nothing in it is built. The ordered work is in
+> proposal for each. The ordered work is in
 > [implementation_plan.md](implementation_plan.md).
 
 ## Goal
@@ -163,10 +163,10 @@ month and the day, in US order, such as `MON NOV 16TH`.
 - Every other draw is unchanged: magic words have their own stream of the PRNG seed, so
   the daily job sets them without moving the holes, wind or music.
 
-Magic words today must be 4 to 6 characters, and `MON` and `NOV` are 3. The menu pads
-every word to a 6-character slot and the scorecard title has 26 columns, so the fonts and
-layout allow 3. The minimum drops to 3 for a manifest's words while the word bank keeps
-4 to 6. A ROM with a 3-character word has not been built yet.
+`MON` and `NOV` are 3 characters, below the word bank's 4 to 6. The menu pads every word
+to a 6-character slot and the scorecard title has 26 columns, so the fonts and layout
+allow 3. A manifest's words may be 3 to 6 characters while the word bank keeps 4 to 6.
+`TUES NOV 17TH` was checked in an emulator on 2026-11-17 and draws correctly.
 
 ### The week
 

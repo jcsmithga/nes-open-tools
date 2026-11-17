@@ -246,10 +246,9 @@ the call Claude made on each, for jdharms to review. Each is how the code stands
 | D30 | A rerun after the day closes | Refused, since nobody could play it as the day's |
 | D31 | Restoring a withdrawn day | Allowed, as for seeds and rounds, in case of a mistake |
 
-### Still to check
+### Checked
 
 - **A 3-character magic word on screen.** The menu pads each word to a 6-character slot
-  and `MON NOV 16TH` is 12 of the scorecard title's 26 columns, so it should draw, and
-  the screenshot run built a real daily ROM. Nobody has yet looked at its title menu and scorecard in an
-  emulator.
+  and `MON NOV 16TH` is 12 of the scorecard title's 26 columns. jdharms checked
+  `TUES NOV 17TH`, the first daily, in an emulator on 2026-11-17, and it draws correctly.
 
