@@ -5,6 +5,7 @@ Shared constants for NES color palettes and course dimensions used
 across all tools (editor, visualizer, analyzer).
 """
 
+import random
 from collections.abc import Sequence
 from typing import NamedTuple
 
@@ -36,15 +37,30 @@ def distinct_nes_entries() -> list[int]:
 
 
 class ColorFamily(NamedTuple):
-    """A named group of NES colors that read as one color, e.g. "green"."""
+    """A named group of NES colors that read as one color, e.g. "green".
+
+    `weight` is how likely `draw_family_color` is to pick the family, relative to the
+    others in its tuple.
+    """
 
     name: str
     colors: tuple[int, ...]
+    weight: float = 1.0
 
 
 def family_colors(families: Sequence[ColorFamily]) -> tuple[int, ...]:
     """Every color in `families`, the families concatenated in order."""
     return tuple(color for family in families for color in family.colors)
+
+
+def draw_family_color(families: Sequence[ColorFamily], rng: random.Random) -> int:
+    """A family drawn by weight, then one of its colors drawn uniformly.
+
+    Drawing the family first keeps a hue the NES has many shades of from crowding out
+    the rest.
+    """
+    (family,) = rng.choices(families, weights=[family.weight for family in families])
+    return rng.choice(family.colors)
 
 
 NES_SYSTEM_PALETTE: list[RGBColor] = [

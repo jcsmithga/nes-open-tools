@@ -35,11 +35,10 @@ startup, and fail builds when it was missing.
   from the Mario Open ROM, and a test compares the two when that ROM is present.
 - `course_intro_sky` takes its sky from an image (`read_sky_image`), that one by
   default. The patch never reads the Mario Open ROM.
-- The randomizer will put the patch in every seed, under a new unfinished build
-  version. It is not in the stack yet: jdharms is holding it to ship with the Peach
-  dress color change.
-- `required_roms` will not count the sky. A seed with no Mario Open hole or music asks
-  for the US ROM only, and its patch will still carry the sky: 71 tiles of pattern data
+- The randomizer puts the patch in every seed, from unfinished build version 8, which
+  also brought the Peach dress and signpost colors.
+- `required_roms` does not count the sky. A seed with no Mario Open hole or music asks
+  for the US ROM only, and its patch still carries the sky: 71 tiles of pattern data
   and their arrangement, about 1.3 KB compressed.
 
 jdharms decided on 2026-10-07 that shipping this artwork to every player is acceptable,
@@ -61,10 +60,10 @@ at least for now.
 
 ## Consequences
 
-- The builder will still read one ROM. Built once per process, as the signpost step
-  is, the sky costs a build about 2 ms.
-- "A patch holds nothing from a ROM the player has not shown" gets one exception when
-  the patch joins the stack, and the repository holds one image taken from a ROM now. Another such exception should
+- The builder still reads one ROM. Built once per process, as the signpost step is,
+  the sky costs a build about 2 ms.
+- "A patch holds nothing from a ROM the player has not shown" has one exception, the
+  sky, and the repository holds one image taken from a ROM now. Another such exception should
   get its own record and not lean on this one.
 - `docs/randomizer.md`, which jdharms wrote alone, says a ROM check gates the vanilla
   data a patch sends. It does not describe the sky.

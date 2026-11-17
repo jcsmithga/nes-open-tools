@@ -6,7 +6,9 @@ from itertools import pairwise
 
 import pytest
 
+from golf.core.patches.peach_dress import DRESS_COLORS
 from golf.core.patches.seeded_wind import derive_hole_seeds
+from golf.core.patches.signpost_color import SIGNPOST_COLORS
 from golf.core.patches.sram_defaults import Club, magic_bytes
 from golf.randomizer.build import BUILD_VERSION, FINISH_ABI_VERSION
 from golf.randomizer.catalog import (
@@ -78,9 +80,9 @@ def test_draws_a_prng_seed_when_the_settings_have_none(real_catalog, real_curati
 
 def test_records_versions_and_round_trips(real_catalog, real_curation):
     manifest = generate(real_catalog, real_curation, Settings(prng_seed="abc"))
-    assert manifest.schema == SCHEMA == 5
+    assert manifest.schema == SCHEMA == 6
     assert manifest.generator_version == GENERATOR_VERSION
-    assert manifest.build_version == BUILD_VERSION == 7
+    assert manifest.build_version == BUILD_VERSION == 8
     assert manifest.finish_abi_version == FINISH_ABI_VERSION == 2
     assert manifest.catalog_version == real_catalog.version
     assert manifest.curation_stamp == real_curation.stamp
@@ -175,6 +177,8 @@ def test_each_draw_has_its_own_stream(real_catalog, real_curation):
     ).course
     assert both.magic_words == us_only.magic_words
     assert both.sram_magic == us_only.sram_magic
+    assert both.dress_color == us_only.dress_color
+    assert both.signpost_color == us_only.signpost_color
     assert [s.wind_seed for s in both.holes] == [s.wind_seed for s in us_only.holes]
 
 
@@ -190,6 +194,19 @@ def test_sram_magic_is_drawn_per_seed_and_never_holds_a_blank_sram_byte(
     for magic in magics:
         assert all(byte not in (0x00, 0xFF) for byte in magic_bytes(magic))
     assert len(set(magics)) > 1
+
+
+def test_the_colors_are_drawn_per_seed_from_the_curated_ones(
+    real_catalog, real_curation
+):
+    courses = [
+        generate(real_catalog, real_curation, Settings(prng_seed=str(seed))).course
+        for seed in range(40)
+    ]
+    dresses = {course.dress_color for course in courses}
+    signposts = {course.signpost_color for course in courses}
+    assert dresses <= set(DRESS_COLORS) and len(dresses) > 1
+    assert signposts <= set(SIGNPOST_COLORS) and len(signposts) > 1
 
 
 def test_nes_open_seeds_use_nes_open_music(real_catalog, real_curation):

@@ -12,6 +12,8 @@ SCHEMA_4_SETTINGS = ("include",)
 #: settings fields schema 5 added beside `constraints`, which stands where `par` and
 #: `draw_rule` did
 SCHEMA_5_SETTINGS = ("mirror_chance", "hazard_chance")
+#: course fields schema 6 added
+SCHEMA_6_COURSE = ("dress_color", "signpost_color")
 STANDARD = {"rule": "standard"}
 
 
@@ -26,8 +28,9 @@ def draw_rule(settings: dict) -> dict:
 
 
 def as_schema(data: dict, schema: int) -> dict:
-    """A current manifest's JSON reshaped as schema 1 to 4: the fields it lacks removed,
-    and the standard course's `par` and `draw_rule` in place of `constraints`.
+    """A current manifest's JSON reshaped as schema 1 to 5: the fields it lacks removed,
+    and for schema 1 to 4 the standard course's `par` and `draw_rule` in place of
+    `constraints`.
 
     The manifest should have been generated as that schema's seeds were, or what a stored
     reader supplies for the missing fields is not what it was made with: as a standard
@@ -37,6 +40,10 @@ def as_schema(data: dict, schema: int) -> dict:
     """
     data = copy.deepcopy(data)
     data["schema"] = schema
+    for key in SCHEMA_6_COURSE:
+        del data["course"][key]
+    if schema == 5:
+        return data
     settings = data["settings"]
     rule = draw_rule(settings)
     reshaped = {"prng_seed": settings["prng_seed"], "par": 72}

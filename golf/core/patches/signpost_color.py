@@ -16,8 +16,8 @@ Only the curated colors below are accepted: the non-black NES colors less the
 banner's own white and sky, less every color the white letters are hard to read
 against (the whole pale row and the faintest of the `$2x` row), and less one of each
 pair that looks the same as another. `SIGNPOST_COLOR_FAMILIES` groups them by the
-color they read as, so a caller that wants each family equally likely picks a family
-first, then a color within it.
+color they read as, and a random brick comes from `draw_family_color`, which picks a
+family first, then a color within it, so each family is equally likely.
 
 `SIGNPOST_DANGEROUS_COLORS` holds colors set aside on feedback, kept for a later look.
 The patch rejects them too.
@@ -32,8 +32,8 @@ PALETTE_BANK = 12
 BANNER_COLOR_ADDR = 0xADCB  # signpost palette $ADC4 + 7: subpalette 1, color 3
 VANILLA_BANNER_COLOR = 0x15
 
-#: the curated colors, grouped by the color each family reads as; pick a family
-#: with random.choice, then a color from its `colors`
+#: the curated colors, grouped by the color each family reads as; draw one with
+#: palettes.draw_family_color
 SIGNPOST_COLOR_FAMILIES: tuple[ColorFamily, ...] = (
     ColorFamily("green", (0x0B, 0x19)),
     ColorFamily("blue", (0x01, 0x11, 0x12)),

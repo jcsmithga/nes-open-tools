@@ -17,9 +17,9 @@ With the hole list trimmed to one of its 18 slots:
 
 ```json
 {
-  "schema": 5,
-  "generator_version": 4,
-  "build_version": 7,
+  "schema": 6,
+  "generator_version": 5,
+  "build_version": 8,
   "finish_abi_version": 2,
   "catalog_version": 1,
   "curation_stamp": "f640f8d1…",
@@ -49,7 +49,9 @@ With the hole list trimmed to one of its 18 slots:
     "mercy_point": 9,
     "clubs": {"max": 14, "banned": [], "required_bag": null},
     "magic_words": ["DIVOT", "CADDY", "BOGEY"],
-    "sram_magic": 21063
+    "sram_magic": 21063,
+    "dress_color": 22,
+    "signpost_color": 11
   }
 }
 ```
@@ -111,7 +113,8 @@ strictly, and a stored seed's is read tolerantly (**Reading stored manifests**, 
 | 3 | 6 | 2 | `settings` gains `draw_rule`, `wind_speed_profile` and `wind_direction_profile`, and each hole gains `wind_direction` and `wind_speed`, which the unfinished stack's `wind_anchors` patch writes into the ROM (ADR 0017). Schema 3 is the last without `include`: its pools held vanilla holes only. |
 | 4 | 6 | 2 | `settings` gains `include`, the kinds of hole added to the pool beside the vanilla ones (ADR 0023). The unfinished buildchain is unchanged. Schema 4 is the last without `constraints` and the last with `draw_rule`: its courses were standard ones of the settings' par. |
 | 5 | 6 | 2 | `settings` gains `constraints`, the course's mode and expert cap, and loses `par` and `draw_rule`; it gains `mirror_chance` and `hazard_chance`, and the manifest gains `request` (ADR 0016, ADR 0025). The unfinished buildchain is unchanged. |
-| 5 | 7 | 2 | The unfinished stack adds `swing_speed_hud`, which shows the swing speed (S/M/F) beside the club on the swing view HUD (`docs/swing_speed_hud.md`). This is the current schema and unfinished buildchain. |
+| 5 | 7 | 2 | The unfinished stack adds `swing_speed_hud`, which shows the swing speed (S/M/F) beside the club on the swing view HUD (`docs/swing_speed_hud.md`). |
+| 6 | 8 | 2 | `course` gains `dress_color` and `signpost_color`, which the unfinished stack's new `peach_dress` and `signpost_color` steps write. The stack also adds `course_intro_sky`, Mario Open's sky over the course name on the course intro scene, in every seed (ADR 0019). This is the current schema and unfinished buildchain. |
 
 Every stored seed of these schemas is read as described below, and finishes through the
 ABI its row names. None is rebuilt.
@@ -248,6 +251,8 @@ hole's `over_par` in `data/difficulty/holes.json` over 3,000 seeds a cap
 | `clubs` | Copied from the settings |
 | `magic_words` | Three words for the title menus, the scorecard title and the seed page |
 | `sram_magic` | The 16-bit value that marks a save as this seed's, neither byte `$00` or `$FF` |
+| `dress_color` | Peach's dress in the putting view, an NES color from `DRESS_COLOR_FAMILIES` (`golf/core/patches/peach_dress.py`) |
+| `signpost_color` | The brick behind the signpost's banner, an NES color from `SIGNPOST_COLOR_FAMILIES` (`golf/core/patches/signpost_color.py`) |
 
 A slot is a catalog hole `id`, its `par` (a copy of the catalog's, for readability),
 `transforms`, a `wind_seed`, and the hole's wind anchors: `wind_direction`, a multiple of
@@ -307,7 +312,8 @@ data is already in the ROM, and imports a Mario Open theme from its dump (`music
   player's entry and the finishing stage.
 - **Required ROMs.** `required_roms` computes them from the holes and the music: the US
   ROM always, and the Mario Open ROM when any hole, the base of any derived hole or the
-  theme comes from it. The site stores them on the seed row when the seed is made.
+  theme comes from it. The course intro sky is Mario Open's in every seed and does not
+  count (ADR 0019). The site stores them on the seed row when the seed is made.
 
 ## What a stored seed depends on
 
@@ -417,8 +423,11 @@ given beside the settings it resolved to.
    the hole's wind seed deals.
 8. **Magic words.** Three distinct words from `golf/randomizer/data/word_bank.txt`.
 9. **SRAM magic.** Two bytes, each uniform over `$01`-`$FE`, high byte first.
+10. **Colors.** The dress and the signpost brick each come from `draw_family_color`
+    (`golf/core/palettes.py`): a family drawn by its weight, then one of its colors
+    uniformly. Every family weighs 1 but the dress's `white`, which weighs 0.5.
 
-The par mix, the holes, the two transforms, the wind directions, wind speeds, music, magic words and SRAM magic each draw from their own generator,
+The par mix, the holes, the two transforms, the wind directions, wind speeds, music, magic words, SRAM magic, dress color and signpost color each draw from their own generator,
 `random.Random(f"{purpose}\0{prng_seed}")`, and the wind seeds from their own hash, so a
 change to one draw leaves the others as they were.
 

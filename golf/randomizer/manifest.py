@@ -8,7 +8,8 @@ Three parts:
 - `settings`: every input to generation, the PRNG seed and the course's rules included,
   as a record of what the seed was made from. Nothing regenerates a stored seed (ADR 0024).
 - `course`: concrete values, and the only part the recipe reads after version checks.
-  Hole ids, never filters; a music slug, never "random".
+  Hole ids, never filters; a music slug, never "random"; the dress and signpost colors
+  as NES color values.
 
 The patches every seed gets are implied by `build_version`; the interface their unfinished
 artifact exposes to personalization is `finish_abi_version`.
@@ -23,6 +24,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, TypeGuard
 
+from golf.core.patches.peach_dress import DRESS_COLORS
+from golf.core.patches.signpost_color import SIGNPOST_COLORS
 from golf.core.patches.sram_defaults import BAG_SIZE, Club, magic_bytes, parse_club
 from golf.core.patches.wind_anchors import DIRECTIONS as WIND_DIRECTIONS
 from golf.core.patches.wind_anchors import SPEEDS as WIND_SPEEDS
@@ -44,7 +47,7 @@ from .transforms import TransformError, parse_transform
 from .wind import DIRECTION_PROFILES, SPEED_PROFILES, VANILLA
 from .words import MagicWordsError, check_magic_words
 
-SCHEMA = 5
+SCHEMA = 6
 #: what a stored manifest without `build_version` or `finish_abi_version`, as schema 1's
 #: are, was built with and exposes
 LEGACY_BUILD_VERSION = 1
@@ -504,6 +507,10 @@ class Course:
     magic_words: tuple[str, ...]
     #: marks a save as this seed's; a save holding any other magic is rebuilt at boot
     sram_magic: int
+    #: Peach's dress in the putting view, one of `peach_dress.DRESS_COLORS`
+    dress_color: int
+    #: the brick behind the signpost's banner, one of `signpost_color.SIGNPOST_COLORS`
+    signpost_color: int
 
     def __post_init__(self):
         object.__setattr__(self, "holes", tuple(self.holes))
@@ -535,6 +542,12 @@ class Course:
             raise ManifestError(f"magic_words must be uppercase, got {list(words)}")
         object.__setattr__(self, "magic_words", words)
         check_sram_magic(self.sram_magic)
+        for what, value, allowed in (
+            ("dress_color", self.dress_color, DRESS_COLORS),
+            ("signpost_color", self.signpost_color, SIGNPOST_COLORS),
+        ):
+            if not _is_int(value) or value not in allowed:
+                raise ManifestError(f"{what} {value!r} is not a curated color")
 
     @property
     def layout(self) -> tuple[int, ...]:
@@ -552,13 +565,24 @@ class Course:
             "clubs": self.clubs.to_json(),
             "magic_words": list(self.magic_words),
             "sram_magic": self.sram_magic,
+            "dress_color": self.dress_color,
+            "signpost_color": self.signpost_color,
         }
 
     @classmethod
     def from_json(cls, data: object) -> "Course":
         data = _fields(
             data,
-            ("holes", "music", "mercy_point", "clubs", "magic_words", "sram_magic"),
+            (
+                "holes",
+                "music",
+                "mercy_point",
+                "clubs",
+                "magic_words",
+                "sram_magic",
+                "dress_color",
+                "signpost_color",
+            ),
             "course",
         )
         if not isinstance(data["holes"], list):
@@ -574,6 +598,8 @@ class Course:
             clubs=ClubRules.from_json(data["clubs"]),
             magic_words=tuple(data["magic_words"]),
             sram_magic=data["sram_magic"],
+            dress_color=data["dress_color"],
+            signpost_color=data["signpost_color"],
         )
 
 

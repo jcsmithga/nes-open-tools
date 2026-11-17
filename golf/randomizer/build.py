@@ -6,9 +6,10 @@ The two-stage build: a manifest into an unfinished ROM, and an unfinished ROM in
   mercy tap-in, the green detail view and scorecard shortcuts, the swing speed on the
   swing view HUD, the round stats the QR code
   sends (fairways hit and penalty strokes), the scorecard QR image with
-  its credential placeholders at the fill, the signpost banner, the magic words on the
-  menus and scorecard, and the new-save options routine with its table at the vanilla
-  values. A seed with club rules leaves CHOOSE CLUBS out of the club house, so the bag
+  its credential placeholders at the fill, the signpost banner and the seed's color for
+  its brick, the seed's color for Peach's dress, Mario Open's sky over the course name
+  on the course intro scene (ADR 0019), the magic words on the menus and scorecard, and
+  the new-save options routine with its table at the vanilla values. A seed with club rules leaves CHOOSE CLUBS out of the club house, so the bag
   the finisher writes is the bag the save keeps. Everything it reads is
   the manifest's `course`, the catalog and the hole store. The site stores the result as an
   IPS against the vanilla ROM.
@@ -43,22 +44,27 @@ from golf.core.patches import (
     WIND_FIX_PATCH,
     WRAM_EXPANSION_PATCH,
     CompositePatch,
+    CourseIntroSkyPatch,
     CoursePatch,
     CourseWriteStats,
     PatchStack,
     QrCredentials,
     ROMPatch,
+    course_intro_sky_patch,
     course_theme_patch,
     green_shortcut_patch,
     menu_trim_patch,
     mercy_tap_in_patches,
     music_import_patch,
+    peach_dress_patch,
     qr_credentials_patch,
     scorecard_course_name_patch,
     seeded_wind_patch,
+    signpost_color_patch,
     sram_defaults_patch,
     wind_anchors_patch,
 )
+from golf.core.patches.course_intro_sky import MARIO_OPEN_SKY_IMAGE, read_sky_image
 from golf.core.patches.extended_sram_defaults import (
     EXTENDED_SRAM_DEFAULTS_PATCH,
     BallSpin,
@@ -90,7 +96,7 @@ SIGNPOST_ART = (
 MAX_SEED_ID = (1 << (8 * payload.SEED_ID_LEN)) - 1
 MAX_PLAYER_ID = (1 << (8 * payload.PLAYER_ID_LEN)) - 1
 #: the unfinished-ROM recipe this release implements
-BUILD_VERSION = 7
+BUILD_VERSION = 8
 #: the interface current unfinished ROMs expose to the per-download finisher
 FINISH_ABI_VERSION = 2
 
@@ -236,6 +242,12 @@ def signpost_step(vanilla: bytes) -> ROMPatch:
     return signpost_banner_patch(RomReader.from_bytes(vanilla), SIGNPOST_ART)
 
 
+@lru_cache(maxsize=1)
+def intro_sky_step() -> CourseIntroSkyPatch:
+    """Mario Open's sky on the course intro scene, the same for every seed (ADR 0019)."""
+    return course_intro_sky_patch(read_sky_image(MARIO_OPEN_SKY_IMAGE))
+
+
 def unfinished_steps(
     manifest: Manifest, catalog: Catalog, store: HoleStore, vanilla: bytes
 ) -> list[ROMPatch]:
@@ -269,6 +281,9 @@ def unfinished_steps(
         ROUND_STATS_PATCH,
         SCORECARD_QR_PATCH,
         signpost_step(vanilla),
+        signpost_color_patch(course.signpost_color),
+        peach_dress_patch(course.dress_color),
+        intro_sky_step(),
         scorecard_course_name_patch(title=scorecard_title(course.magic_words)),
         menu_trim_patch(
             list(course.magic_words), choose_clubs=course.clubs == ClubRules()

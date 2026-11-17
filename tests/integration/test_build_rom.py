@@ -9,12 +9,14 @@ import pytest
 from golf.algorithms import hazards
 from golf.algorithms.mirror import mirror_hole
 from golf.core import ips
-from golf.core.patches import PatchStack, StackError
+from golf.core.patches import PatchStack, StackError, peach_dress, signpost_color
 from golf.core.patches.course import CoursePatch
 from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.qr_credentials import PLACEHOLDERS, placeholder_offset
 from golf.core.patches.scorecard_qr import SCORECARD_QR_PATCH
 from golf.core.patches.sram_defaults import MAGIC_CHECK_ADDRS, Club, magic_bytes
+from golf.core.rom_utils import cpu_to_prg_switched
+from golf.core.rom_writer import RomWriter
 from golf.qr import port
 from golf.randomizer.build import (
     BUILD_VERSION,
@@ -24,6 +26,7 @@ from golf.randomizer.build import (
     credentials_for,
     finish,
     finishing_steps,
+    intro_sky_step,
     unfinished_steps,
 )
 from golf.randomizer.catalog import US_ROM, Catalog, HoleStore
@@ -61,6 +64,9 @@ UNFINISHED_ORDER = [
     "round_stats",
     "scorecard_qr",
     "signpost_random_banner",
+    "signpost_color",
+    "peach_dress",
+    "course_intro_sky",
     "scorecard_course_name",
     "menu_trim",
     "extended_sram_defaults",
@@ -200,19 +206,33 @@ def test_the_unfinished_build_is_deterministic(
     assert build_unfinished(jp_manifest, catalog, store, vanilla).ips == unfinished.ips
 
 
-def test_build_version_seven_golden_unfinished_ips_hashes(
+def test_build_version_eight_golden_unfinished_ips_hashes(
     unfinished, jp_manifest, nes_manifest, catalog, store, vanilla
 ):
-    assert BUILD_VERSION == 7
+    assert BUILD_VERSION == 8
     assert any(str(slot.id) == "jp_france/18" for slot in jp_manifest.course.holes)
     nes = build_unfinished(nes_manifest, catalog, store, vanilla)
     assert {
         "jp_france_18": hashlib.sha256(unfinished.ips).hexdigest(),
         "nes_only": hashlib.sha256(nes.ips).hexdigest(),
     } == {
-        "jp_france_18": "cedaa3aac2bf56703fa226f0116ad2e0bc6143df922ac818f3a9bd4e5d9328dd",
-        "nes_only": "4b2e1cb4ba9552dd4f7258967ac4d5fada2e3ef0155088fe2ac7de78e09cbb92",
+        "jp_france_18": "4a89ac9b4386157ea813708be2f20a2a9ba6b90d5b999e8cf352ffbd178d7287",
+        "nes_only": "797a1aadbf476a40cf1d52525ae95249a60838d9e2a6ba16cbf721851111cbe2",
     }
+
+
+def test_the_unfinished_rom_has_the_seeds_colors_and_the_sky(unfinished, jp_manifest):
+    course = jp_manifest.course
+    for addr, bank, color in (
+        (peach_dress.DRESS_COLOR_ADDR, peach_dress.PALETTE_BANK, course.dress_color),
+        (
+            signpost_color.BANNER_COLOR_ADDR,
+            signpost_color.PALETTE_BANK,
+            course.signpost_color,
+        ),
+    ):
+        assert unfinished.rom[HEADER + cpu_to_prg_switched(addr, bank)] == color
+    assert intro_sky_step().is_applied(RomWriter.from_bytes(unfinished.rom))
 
 
 def test_the_unfinished_rom_holds_the_placeholder_fill(unfinished):

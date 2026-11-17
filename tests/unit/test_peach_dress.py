@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from golf.core import rom_utils
-from golf.core.palettes import NES_BLACK_ENTRIES
+from golf.core.palettes import NES_BLACK_ENTRIES, draw_family_color
 from golf.core.patches import (
     DRESS_COLOR_FAMILIES,
     DRESS_COLORS,
@@ -39,10 +39,23 @@ class TestColors:
     def test_no_black_hair_or_skin(self):
         assert not set(DRESS_COLORS) & (NES_BLACK_ENTRIES | {HAIR, SKIN})
 
-    def test_random_choice_works_on_both_exports(self):
+    def test_white_is_its_own_family_at_half_weight(self):
+        weights = {family.name: family.weight for family in DRESS_COLOR_FAMILIES}
+        (white,) = [f for f in DRESS_COLOR_FAMILIES if f.name == "white"]
+        assert white.colors == (0x30,)
+        assert weights.pop("white") == 0.5
+        assert set(weights.values()) == {1.0}
+
+    def test_draw_family_color_draws_a_curated_color(self):
         rng = random.Random(0)
-        assert rng.choice(rng.choice(DRESS_COLOR_FAMILIES).colors) in DRESS_COLORS
-        assert rng.choice(DRESS_COLORS) in DRESS_COLORS
+        draws = [draw_family_color(DRESS_COLOR_FAMILIES, rng) for _ in range(2000)]
+        assert set(draws) <= set(DRESS_COLORS)
+        # nine families at weight 1 and white at 0.5: white 0.5/9.5, red 1/9.5
+        white = draws.count(0x30) / len(draws)
+        red = sum(draws.count(color) for color in (0x06, 0x16, 0x26)) / len(draws)
+        assert 0.035 < white < 0.07
+        assert 0.085 < red < 0.125
+        assert white < red
 
     def test_every_color_is_an_nes_color(self):
         assert all(0 <= color <= 0x3F for color in DRESS_COLORS)

@@ -59,6 +59,8 @@ def course(**overrides) -> Course:
         clubs=ClubRules(),
         magic_words=("DIVOT", "CADDY", "BOGEY"),
         sram_magic=0x5247,
+        dress_color=0x16,
+        signpost_color=0x0B,
     )
     return Course(**(fields | overrides))
 
@@ -573,7 +575,7 @@ def issued(schema: int, **overrides) -> dict:
     return value.to_json() if schema == SCHEMA else as_schema(value.to_json(), schema)
 
 
-@pytest.mark.parametrize("schema", [1, 2, 3, 4, SCHEMA])
+@pytest.mark.parametrize("schema", [1, 2, 3, 4, 5, SCHEMA])
 def test_a_stored_manifest_of_any_schema_reads_as_its_seed_was_made(schema):
     stored = StoredManifest.from_json(issued(schema))
     made = manifest(settings=UNIFORM_SETTINGS)
@@ -589,7 +591,7 @@ def test_a_stored_manifest_of_any_schema_reads_as_its_seed_was_made(schema):
             made.finish_abi_version,
         )
     settings = stored.settings
-    assert (settings.prng_seed, settings.par) == ("abc", None if schema == 5 else 72)
+    assert (settings.prng_seed, settings.par) == ("abc", None if schema >= 5 else 72)
     assert settings.sources == made.settings.sources
     assert settings.include == frozenset()
     assert settings.draw_rule == StoredDrawRule("uniform")

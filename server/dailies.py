@@ -410,7 +410,7 @@ async def roll_over_periodically(
     clock: Callable[[], datetime],
     seconds: float = ROLLOVER_SECONDS,
 ) -> None:
-    """The app's rollover: look now, then every `seconds`, until cancelled. A failure is
+    """The app's rollover: look now, then every `seconds`, until canceled. A failure is
     logged and tried again at the next look."""
     while True:
         try:
