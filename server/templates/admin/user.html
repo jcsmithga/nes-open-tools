@@ -35,6 +35,124 @@
     </div>
   </section>
 
+  <section id="handicap-index">
+    <h2>Handicap index</h2>
+    {% set state = handicap.state %}
+    <p data-index="{{ state.index }}"
+       data-counted="{{ state.rounds_counted }}">
+      {% if state.rounds_counted %}
+        Index <strong>{{ state.index|golf_figure }}</strong> from {{ state.rounds_counted }} counted round{{ 's' if state.rounds_counted != 1 }}.
+      {% else %}
+        No counted rounds: the starting index is {{ state.index|golf_figure }}.
+      {% endif %}
+      {% if state.low_mark is not none %}
+        Low mark {{ state.low_mark|golf_figure }}.
+      {% else %}
+        {{ handicap.rounds_to_low_mark }} more round{{ 's' if handicap.rounds_to_low_mark != 1 }} before a low mark.
+      {% endif %}
+      {% if handicap.start_weight %}Starting index still worth {{ '%.1f' % handicap.start_weight }} rounds.{% endif %}
+      <br>
+      <small>Recomputed under the current rules (parameters <code>{{ handicap.parameters_hash[:12] }}</code>); "card" columns are what each card stored when it was filled.</small>
+    </p>
+    {% if handicap.rows %}
+      {% if state.rounds_counted > handicap.rows|length %}
+        <p>The last {{ handicap.rows|length }} of {{ state.rounds_counted }} counted rounds, newest first.</p>
+      {% endif %}
+      <div class="overflow-auto">
+        <table class="striped admin-index">
+          <thead>
+            <tr>
+              <th scope="col">Day</th>
+              <th scope="col" class="num">Gross</th>
+              <th scope="col" class="num">Adj.</th>
+              <th scope="col" class="num">CR</th>
+              <th scope="col" class="num">Slope</th>
+              <th scope="col" class="num">
+                Index before
+                <br>
+                <small>card / now</small>
+              </th>
+              <th scope="col" class="num">Hcp</th>
+              <th scope="col" class="num">
+                Diff
+                <br>
+                <small>scan / now</small>
+              </th>
+              <th scope="col" class="num">Cut</th>
+              <th scope="col">Counts</th>
+              <th scope="col" class="num">Low mark</th>
+              <th scope="col" class="num">
+                Index after
+                <br>
+                <small>card / now</small>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in handicap.rows %}
+              <tr data-round="{{ row.public_id }}"
+                  data-counts="{{ 'true' if row.counts else 'false' }}"
+                  {% if row.mismatch %}data-state="mismatch"{% endif %}>
+                <td><a href="/admin/rounds/{{ row.public_id }}">{{ row.day }}</a></td>
+                <td class="num">{{ row.gross }}</td>
+                <td class="num">{{ row.adjusted_gross }}</td>
+                <td class="num">{{ '%.1f' % row.course_rating }}</td>
+                <td class="num">{{ row.slope|golf_slope }}</td>
+                <td class="num" data-card-now>
+                  {% if row.card_index_before is not none %}{{ row.card_index_before|golf_figure }}{% else %}—{% endif %}
+                  / {{ row.index_before|golf_figure }}
+                </td>
+                <td class="num" data-card-now>
+                  {% if row.card_handicap is not none %}{{ row.card_handicap|golf_figure(0) }}{% else %}—{% endif %}
+                </td>
+                <td class="num" data-differential="{{ row.differential_now }}">
+                  {{ row.differential|golf_figure }} / {{ row.differential_now|golf_figure }}
+                </td>
+                <td class="num">{% if row.cut %}{{ '%.1f' % row.cut }}{% endif %}</td>
+                <td>{% if row.counts %}yes{% endif %}</td>
+                <td class="num">
+                  {% if row.low_mark is not none %}{{ row.low_mark|golf_figure }}{% else %}—{% endif %}
+                </td>
+                <td class="num" data-card-now data-index-after="{{ row.index_after }}">
+                  {% if row.card_index_after is not none %}{{ row.card_index_after|golf_figure }}{% else %}—{% endif %}
+                  / {{ row.index_after|golf_figure }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p><small>A highlighted row is one whose card and the current rules disagree: an earlier round voided or restored since it was filled, or rules changed.</small></p>
+    {% endif %}
+    {% if handicap.uncounted %}
+      <h3>Daily cards that do not count</h3>
+      <div class="overflow-auto">
+        <table class="striped">
+          <thead>
+            <tr>
+              <th scope="col">Day</th>
+              <th scope="col">Round</th>
+              <th scope="col">Why</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for card in handicap.uncounted %}
+              <tr data-uncounted="{{ card.reason }}">
+                <td>{{ card.day }}</td>
+                <td><code>{{ card.public_id }}</code></td>
+                <td>
+                  {% if card.reason == "withdrawn" %}the day is withdrawn
+                  {% elif card.reason == "voided" %}the round is voided
+            {% else %}the seed is not rated{% endif %}
+              </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </section>
+
   <section>
     <h2>Rounds</h2>
     {% if detail.rounds %}{{ admin.rounds_table(detail.rounds, show_player=false) }}{% else %}<p>No rounds.</p>{% endif %}

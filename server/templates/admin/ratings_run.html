@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% import "admin/_admin.html" as admin %}
+{% set run = detail.run %}
+{% macro level_cell(effect) %}
+  {% if effect.label %}
+    {{ effect.label }}
+    <br>
+    <small><code>{{ effect.level[:12] }}</code></small>
+  {% else %}
+    <code>{{ effect.level }}</code>
+  {% endif %}
+{% endmacro %}
+{% block title %}Run {{ run.id }} - Admin{% endblock %}
+{% block content %}
+  {{ admin.nav() }}
+  <hgroup>
+    <h1>Ratings run {{ run.id }}</h1>
+    <p>For {{ run.day }} · <a href="/admin/ratings">All runs</a></p>
+  </hgroup>
+
+  <section>
+    <h2>Run</h2>
+    <div class="overflow-auto">
+      <table>
+        <tbody>
+          <tr>
+            <th scope="row">Fitted</th>
+            <td>{{ run.created_at|timestamp }}</td>
+          </tr>
+          <tr>
+            <th scope="row">Rounds</th>
+            <td>{{ run.n_rounds }} ({{ run.n_scores }} hole scores), the latest received {{ run.latest_received_at|timestamp }}</td>
+          </tr>
+          <tr>
+            <th scope="row">Seeds rated</th>
+            <td>{{ run.seeds_rated }}</td>
+          </tr>
+          <tr>
+            <th scope="row">Model version</th>
+            <td>{{ run.model_version }}</td>
+          </tr>
+          <tr>
+            <th scope="row">Parameters</th>
+            <td><code>{{ run.parameters_hash }}</code>{% if run.parameters_changed %} <mark>changed since the run before</mark>{% endif %}</td>
+          </tr>
+          <tr>
+            <th scope="row">Run before</th>
+            <td>{% if detail.previous %}<a href="/admin/ratings/{{ detail.previous.id }}">run {{ detail.previous.id }}</a> ({{ detail.previous.day }}){% else %}none{% endif %}</td>
+          </tr>
+          <tr>
+            <th scope="row">Fixed effects</th>
+            <td>
+              {% for name, value in detail.fixed.items() %}<code>{{ name }}</code> {{ '%.4f' % value }}{% if not loop.last %} · {% endif %}{% endfor %}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Distance centers</th>
+            <td>
+              {% for par, value in detail.centers.items() %}par {{ par }}: {{ '%.1f' % value }}{% if not loop.last %} · {% endif %}{% endfor %}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Reference par</th>
+            <td>{{ '%.4f' % detail.reference_par }}</td>
+          </tr>
+          <tr>
+            <th scope="row">Field skill</th>
+            <td>{{ '%.4f' % detail.field }}</td>
+          </tr>
+          <tr>
+            <th scope="row">Luck (sigma)</th>
+            <td>{{ '%.4f' % detail.sigma }}</td>
+          </tr>
+          <tr>
+            <th scope="row">Iterations</th>
+            <td>{{ detail.iterations }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% for group in detail.groups %}
+    <section data-group="{{ group.group }}">
+      <h2>{{ group.group|capitalize }} effects</h2>
+      <p>{{ group.levels }} levels fitted.</p>
+      {% if detail.previous %}
+        {% if group.movers %}
+          <h3>Moved most since run {{ detail.previous.id }}</h3>
+          <div class="overflow-auto">
+            <table class="striped">
+              <thead>
+                <tr>
+                  <th scope="col">Level</th>
+                  <th scope="col" class="num">Before</th>
+                  <th scope="col" class="num">After</th>
+                  <th scope="col" class="num">Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for change in group.movers %}
+                  <tr data-level="{{ change.level }}" data-delta="{{ change.delta }}">
+                    <td>{{ level_cell(change) }}</td>
+                    <td class="num">{{ '%+.3f' % change.before }}</td>
+                    <td class="num">{{ '%+.3f' % change.after }}</td>
+                    <td class="num">{{ '%+.3f' % change.delta }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      {% endif %}
+      {% if group.new %}
+        <h3>{% if detail.previous %}New in this run{% else %}Fitted{% endif %}</h3>
+        {% if group.new_count > group.new|length %}
+          <p>The largest {{ group.new|length }} of {{ group.new_count }}.</p>
+        {% endif %}
+        <div class="overflow-auto">
+          <table class="striped">
+            <thead>
+              <tr>
+                <th scope="col">Level</th>
+                <th scope="col" class="num">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for effect in group.new %}
+                <tr data-new-level="{{ effect.level }}">
+                  <td>{{ level_cell(effect) }}</td>
+                  <td class="num">{{ '%+.3f' % effect.value }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </section>
+  {% endfor %}
+{% endblock %}

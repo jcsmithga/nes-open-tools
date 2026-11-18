@@ -19,6 +19,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
+from golf.ratings.params import Parameters
+
 from ..admin import (
     DAILIES_DAYS,
     METRICS_DAYS,
@@ -36,6 +38,15 @@ from ..admin import (
     user_detail,
     users_page,
     voided_page,
+)
+from ..admin_ratings import (
+    RATINGS_DAYS,
+    player_indexes,
+    ratings_health,
+    ratings_runs_view,
+    run_detail,
+    seed_rating_detail,
+    user_index,
 )
 from ..auth import current_user
 from ..builder import BuilderUnavailableError, SeedBuilder
@@ -143,9 +154,19 @@ def admin_router(templates: Jinja2Templates) -> APIRouter:
     def not_found() -> HTTPException:
         return HTTPException(status_code=404)
 
+    def parameters_of(request: Request) -> Parameters:
+        return request.app.state.ratings.parameters
+
     @router.get("", response_class=HTMLResponse)
     def index(request: Request):
-        return render(request, "index.html", {"counts": counts(db_of(request))})
+        health = ratings_health(
+            db_of(request),
+            request.app.state.clock(),
+            request.app.state.config.dailies_enabled,
+        )
+        return render(
+            request, "index.html", {"counts": counts(db_of(request)), "health": health}
+        )
 
     @router.get("/seeds", response_class=HTMLResponse)
     def seeds(request: Request, page: PageNumber = 1):
@@ -163,7 +184,11 @@ def admin_router(templates: Jinja2Templates) -> APIRouter:
         return render(
             request,
             "seed.html",
-            {"detail": detail, "error": error},
+            {
+                "detail": detail,
+                "rating": seed_rating_detail(db_of(request), seed_id),
+                "error": error,
+            },
             status_code=status_code,
         )
 
@@ -329,16 +354,21 @@ def admin_router(templates: Jinja2Templates) -> APIRouter:
 
     @router.get("/users", response_class=HTMLResponse)
     def users(request: Request, page: PageNumber = 1):
-        return render(
-            request, "users.html", {"listing": users_page(db_of(request), page)}
+        listing = users_page(db_of(request), page)
+        indexes = player_indexes(
+            db_of(request),
+            [item.user.id for item in listing.items],
+            parameters_of(request),
         )
+        return render(request, "users.html", {"listing": listing, "indexes": indexes})
 
     @router.get("/users/{user_id}", response_class=HTMLResponse)
     def user(request: Request, user_id: int):
         detail = user_detail(db_of(request), user_id)
         if detail is None:
             raise not_found()
-        return render(request, "user.html", {"detail": detail})
+        handicap = user_index(db_of(request), user_id, parameters_of(request))
+        return render(request, "user.html", {"detail": detail, "handicap": handicap})
 
     @router.get("/metrics", response_class=HTMLResponse)
     def metrics(request: Request, days: MetricsDays = METRICS_DAYS):
@@ -351,6 +381,27 @@ def admin_router(templates: Jinja2Templates) -> APIRouter:
                 "trend_days": TREND_DAYS,
             },
         )
+
+    @router.get("/ratings", response_class=HTMLResponse)
+    def ratings(request: Request):
+        rows = ratings_runs_view(db_of(request), request.app.state.clock())
+        return render(
+            request,
+            "ratings.html",
+            {
+                "rows": rows,
+                "days": RATINGS_DAYS,
+                "enabled": request.app.state.config.dailies_enabled,
+            },
+        )
+
+    @router.get("/ratings/{run_id}", response_class=HTMLResponse)
+    def ratings_run(request: Request, run_id: int):
+        seed_builder: SeedBuilder = request.app.state.builder
+        detail = run_detail(db_of(request), run_id, seed_builder.catalog)
+        if detail is None:
+            raise not_found()
+        return render(request, "ratings_run.html", {"detail": detail})
 
     @router.get("/activity", response_class=HTMLResponse)
     def activity(request: Request, page: PageNumber = 1):

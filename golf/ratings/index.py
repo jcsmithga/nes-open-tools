@@ -68,15 +68,24 @@ def start_weight(rules: IndexRules, rounds: int) -> float:
     return max(0.0, rules.start_weight * (1 - rounds / rules.window))
 
 
+def counting(differentials: Sequence[float], rules: IndexRules) -> list[int]:
+    """The positions, oldest first, of the differentials the index counts."""
+    if not differentials:
+        return []
+    if rules.best_of is None:
+        return list(
+            range(max(0, len(differentials) - rules.window), len(differentials))
+        )
+    recent = range(max(0, len(differentials) - rules.best_of), len(differentials))
+    # a short record keeps the same share: 8 of 10 keeps 80% of its rounds
+    take = max(1, int(len(recent) * rules.window / rules.best_of + 0.5))
+    best = sorted(recent, key=lambda i: (differentials[i], i))[:take]
+    return sorted(best)
+
+
 def blend(differentials: Sequence[float], rules: IndexRules) -> float:
     """The uncapped index from every differential so far, oldest first."""
-    if rules.best_of is None:
-        counted = list(differentials[-rules.window :])
-    else:
-        recent = sorted(differentials[-rules.best_of :])
-        # a short record keeps the same share: 8 of 10 keeps 80% of its rounds
-        take = max(1, int(len(recent) * rules.window / rules.best_of + 0.5))
-        counted = recent[:take]
+    counted = [differentials[i] for i in counting(differentials, rules)]
     weight = start_weight(rules, len(differentials))
     return (weight * rules.start_index + sum(counted)) / (weight + len(counted))
 
@@ -114,24 +123,68 @@ def exceptional_cut(diff: float, index_before: float, rules: IndexRules) -> floa
     return 0.0
 
 
+@dataclass(frozen=True)
+class RoundStep:
+    """One round's part in an index: what it was scored with and what it made."""
+
+    played_at: datetime
+    gross: int
+    adjusted_gross: int
+    index_before: float
+    #: the differential as the round was scored, before any cut
+    differential: float
+    #: the exceptional score reduction this round took off the record, 0 if none
+    cut: float
+    low_mark: float | None
+    #: the index before the caps above the low mark
+    uncapped: float
+    index_after: float
+
+
 def initial(rules: IndexRules) -> IndexState:
     return IndexState(rules.start_index, None, 0, (), ())
 
 
-def compute(rounds: Sequence[ScoredRound], rules: IndexRules) -> IndexState:
-    """The index after every round, in the order played."""
+def compute_steps(
+    rounds: Sequence[ScoredRound], rules: IndexRules
+) -> tuple[IndexState, tuple[RoundStep, ...]]:
+    """The index after every round, in the order played, and each round's step."""
     state = initial(rules)
     diffs: list[float] = []
     history: list[tuple[datetime, float]] = []
+    steps: list[RoundStep] = []
     low = None
     record = rules.best_of or rules.window
     for r in sorted(rounds, key=lambda r: r.played_at):
+        adjusted = sum(
+            capped_holes(r.strokes, r.rating, state.index, rules.hole_cap_over_par)
+        )
         diffs.append(differential(r.strokes, r.rating, state.index, rules))
-        cut = exceptional_cut(diffs[-1], state.index, rules)
+        raw = diffs[-1]
+        cut = exceptional_cut(raw, state.index, rules)
         for i in range(max(0, len(diffs) - record), len(diffs)):
             diffs[i] -= cut
         low = low_mark(history, r.played_at, rules)
-        index = capped(blend(diffs, rules), low, rules)
+        uncapped = blend(diffs, rules)
+        index = capped(uncapped, low, rules)
+        steps.append(
+            RoundStep(
+                r.played_at,
+                sum(r.strokes),
+                adjusted,
+                state.index,
+                raw,
+                cut,
+                low,
+                uncapped,
+                index,
+            )
+        )
         history.append((r.played_at, index))
         state = IndexState(index, low, len(diffs), tuple(diffs), tuple(history))
-    return state
+    return state, tuple(steps)
+
+
+def compute(rounds: Sequence[ScoredRound], rules: IndexRules) -> IndexState:
+    """The index after every round, in the order played."""
+    return compute_steps(rounds, rules)[0]

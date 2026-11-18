@@ -1031,3 +1031,31 @@ article.daily-results table.skins-list th,
 article.daily-results table.skins-list td {
   padding-inline: calc(var(--pico-spacing) * 0.5);
 }
+
+/* Admin ratings: a count or run that needs looking at, a day the refit missed, and an
+   index row whose card and the current rules disagree. */
+.admin-counts tr[data-state="attention"] th,
+.admin-counts tr[data-state="attention"] td,
+td[data-state="attention"],
+tr[data-state="missing"] td,
+table.admin-index tr[data-state="mismatch"] td[data-card-now] {
+  color: var(--pico-del-color);
+}
+
+table.admin-index td,
+table.admin-runs td {
+  white-space: nowrap;
+}
+
+table.admin-index {
+  font-size: 0.875em;
+}
+
+table.admin-index th,
+table.admin-index td {
+  padding-inline: calc(var(--pico-spacing) * 0.5);
+}
+
+table.admin-index tr[data-state="mismatch"] td:first-child {
+  box-shadow: inset 3px 0 0 var(--pico-del-color);
+}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% import "admin/_admin.html" as admin %}
+{% block title %}Ratings - Admin{% endblock %}
+{% block content %}
+  {{ admin.nav() }}
+  <hgroup>
+    <h1>Ratings runs</h1>
+    <p>The last {{ days }} days, newest first.</p>
+  </hgroup>
+  {% if not enabled %}
+    <p><mark>No daily secret (GOLF_DAILY_SECRET) is set, so the site runs no rollover and fits no runs.</mark></p>
+  {% endif %}
+  <p>
+    The rollover fits one run a day, before the day's seed is made, from every recorded round played on a player's own entry. A day with a daily but no run is marked: its refit failed or had too few rounds, and the run before stayed in force.
+  </p>
+  {% if rows %}
+    <div class="overflow-auto">
+      <table class="striped admin-runs">
+        <thead>
+          <tr>
+            <th scope="col">Day</th>
+            <th scope="col">Run</th>
+            <th scope="col">Fitted</th>
+            <th scope="col" class="num">Rounds</th>
+            <th scope="col" class="num">Hole scores</th>
+            <th scope="col">Latest round seen</th>
+            <th scope="col" class="num">Seeds rated</th>
+            <th scope="col" class="num">Model</th>
+            <th scope="col">Parameters</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            {% set run = row.run %}
+            {% if run %}
+              <tr data-run="{{ run.id }}">
+                <td>{{ row.day }}</td>
+                <td><a href="/admin/ratings/{{ run.id }}">{{ run.id }}</a></td>
+                <td>{{ run.created_at|timestamp }}</td>
+                <td class="num">{{ run.n_rounds }}</td>
+                <td class="num">{{ run.n_scores }}</td>
+                <td>{{ run.latest_received_at|timestamp }}</td>
+                <td class="num">{{ run.seeds_rated }}</td>
+                <td class="num">{{ run.model_version }}</td>
+                <td {% if run.parameters_changed %}data-state="attention"{% endif %}>
+                  <code>{{ run.parameters_hash[:12] }}</code>{% if run.parameters_changed %} changed{% endif %}
+                </td>
+              </tr>
+            {% else %}
+              <tr data-state="missing" data-day="{{ row.day }}">
+                <td>{{ row.day }}</td>
+                <td colspan="8">no run</td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>No run in the last {{ days }} days.</p>
+  {% endif %}
+{% endblock %}

@@ -20,6 +20,7 @@ This is the only code that writes `ratings_runs`, `ratings_effects`, `seed_ratin
 import json
 import logging
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
@@ -241,13 +242,38 @@ def seed_rating(db: Database, seed_id: str) -> SeedRating | None:
 
 
 _COUNTED_SQL = """
-SELECT r.id, r.public_id, r.received_at, e.seed_id
+SELECT c.user_id, r.id, r.public_id, r.received_at, e.seed_id
 FROM daily_cards c
 JOIN dailies d ON d.day = c.day
 JOIN rounds r ON r.public_id = c.round_public_id
 JOIN entries e ON e.id = r.entry_id
-WHERE c.user_id = ? AND d.withdrawn_at IS NULL
-ORDER BY r.received_at, r.id
+WHERE c.user_id IN ({users}) AND d.withdrawn_at IS NULL
+ORDER BY c.user_id, r.received_at, r.id
+"""
+
+_COUNTED_HOLES_SQL = """
+SELECT h.round_id, h.strokes
+FROM daily_cards c
+JOIN dailies d ON d.day = c.day
+JOIN rounds r ON r.public_id = c.round_public_id
+JOIN round_holes h ON h.round_id = r.id
+WHERE c.user_id IN ({users}) AND d.withdrawn_at IS NULL
+ORDER BY h.round_id, h.position
+"""
+
+_COUNTED_RATINGS_SQL = """
+SELECT r.seed_id, h.par, r.rating, r.spread, r.stroke_index
+FROM seed_hole_ratings r
+JOIN seed_holes h ON h.seed_id = r.seed_id AND h.position = r.position
+WHERE r.seed_id IN (
+    SELECT e.seed_id
+    FROM daily_cards c
+    JOIN dailies d ON d.day = c.day
+    JOIN rounds rd ON rd.public_id = c.round_public_id
+    JOIN entries e ON e.id = rd.entry_id
+    WHERE c.user_id IN ({users}) AND d.withdrawn_at IS NULL
+)
+ORDER BY r.seed_id, r.position
 """
 
 
@@ -261,24 +287,36 @@ def counted_rounds(conn: sqlite3.Connection, user_id: int) -> list[CountedRound]
     """A player's counted rounds in the order received: their cards on days not
     withdrawn whose rounds are still recorded, each with its seed's stored ratings. A
     round on a seed not yet rated is left out until it is."""
-    out = []
-    ratings: dict[str, SeedRating | None] = {}
-    for row in conn.execute(_COUNTED_SQL, (user_id,)).fetchall():
-        seed = row["seed_id"]
-        if seed not in ratings:
-            ratings[seed] = seed_rating_on(conn, seed)
-        rating = ratings[seed]
+    return counted_rounds_for(conn, [user_id])[user_id]
+
+
+def counted_rounds_for(
+    conn: sqlite3.Connection, user_ids: Sequence[int]
+) -> dict[int, list[CountedRound]]:
+    """`counted_rounds` for several players in three queries, whatever their history:
+    every player asked for has a list, empty when they have no counted round."""
+    out: dict[int, list[CountedRound]] = {user_id: [] for user_id in user_ids}
+    if not out:
+        return out
+    ids = list(out)
+    users = ", ".join("?" * len(ids))
+    strokes: dict[int, list[int]] = {}
+    for row in conn.execute(_COUNTED_HOLES_SQL.format(users=users), ids):
+        strokes.setdefault(row["round_id"], []).append(row["strokes"])
+    holes: dict[str, list[HoleRating]] = {}
+    for row in conn.execute(_COUNTED_RATINGS_SQL.format(users=users), ids):
+        holes.setdefault(row["seed_id"], []).append(
+            HoleRating(row["par"], row["rating"], row["spread"], row["stroke_index"])
+        )
+    ratings = {seed: SeedRating(tuple(h)) for seed, h in holes.items()}
+    for row in conn.execute(_COUNTED_SQL.format(users=users), ids).fetchall():
+        rating = ratings.get(row["seed_id"])
         if rating is None:
             continue
-        strokes = tuple(
-            r["strokes"]
-            for r in conn.execute(
-                "SELECT strokes FROM round_holes WHERE round_id = ? ORDER BY position",
-                (row["id"],),
-            )
+        scored = ScoredRound(
+            played_at(row["received_at"]), rating, tuple(strokes[row["id"]])
         )
-        scored = ScoredRound(played_at(row["received_at"]), rating, strokes)
-        out.append(CountedRound(row["public_id"], scored))
+        out[row["user_id"]].append(CountedRound(row["public_id"], scored))
     return out
 
 

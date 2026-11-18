@@ -266,7 +266,7 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `GET /daily` | Redirects to the Daily Seed, the latest open daily that is not withdrawn, or to the calendar when there is none. Uncached (ADR 0033) |
 | `GET /daily/<YYYY-MM-DD>` | Redirects to that day's seed, the rerun after a replacement; not found before the day opens |
 | `GET /daily/calendar` | The calendar of dailies, a month at a time (`?month=YYYY-MM`, the Daily Seed's month by default): each day's theme and how many players it drew |
-| `GET /admin/...` | Counts, seeds, the last 60 days' dailies, rounds (flagged filter), users, voided rounds, admin activity, and each seed, round and user. Admins only |
+| `GET /admin/...` | Counts and the ratings' health, seeds, the last 60 days' dailies and ratings runs, rounds (flagged filter), users with their handicap indexes, voided rounds, admin activity, and each seed (with its ratings), ratings run, round and user (with their index round by round). Admins only |
 | `POST /admin/rounds/<id>/flag`, `.../unflag`, `.../void`, `.../restore` | Flag with a note, clear the flag, void with a note, restore into an empty slot. `<id>` is the round's `public_id` |
 | `GET /admin/seeds/<id>/scores.csv` | Every recorded round on the seed as CSV: a par row, then one row per round with its hole scores, for working out team formats such as best ball in a spreadsheet. Computes nothing and stores nothing |
 | `POST /admin/seeds/<id>/withdraw`, `.../restore` | Refuse or restore downloads without changing the seed's manifest, unfinished IPS, entries or rounds; withdrawal takes an admin-only note |

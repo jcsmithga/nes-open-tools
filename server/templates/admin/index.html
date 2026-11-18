@@ -42,4 +42,43 @@
       </tbody>
     </table>
   </div>
+
+  <section>
+    <h2><a href="/admin/ratings">Ratings</a></h2>
+    <p>Each should be 0, and the latest run should be for today's daily.</p>
+    <div class="overflow-auto">
+      <table class="admin-counts">
+        <tbody>
+          <tr data-health="unrated-seeds"
+              {% if health.unrated_seeds %}data-state="attention"{% endif %}>
+            <th scope="row">Unrated seeds</th>
+            <td class="num">{{ health.unrated_seeds }}</td>
+          </tr>
+          <tr data-health="dailies-without-rules"
+              {% if health.dailies_without_rules %}data-state="attention"{% endif %}>
+            <th scope="row"><a href="/admin/dailies">Dailies without rules</a></th>
+            <td class="num">{{ health.dailies_without_rules }}</td>
+          </tr>
+          <tr data-health="unfilled-cards"
+              {% if health.unfilled_cards %}data-state="attention"{% endif %}>
+            <th scope="row">Cards not filled</th>
+            <td class="num">{{ health.unfilled_cards }}</td>
+          </tr>
+          <tr data-health="latest-run"
+              {% if health.rollover and not health.run_current %}data-state="attention"{% endif %}>
+            <th scope="row">Latest run</th>
+            <td class="num">
+              {% if not health.rollover %}
+                no rollover on this site
+              {% elif health.latest_run_day %}
+                {{ health.latest_run_day }}{% if not health.run_current %} (today is {{ health.today }}){% endif %}
+              {% else %}
+                none
+              {% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
 {% endblock %}

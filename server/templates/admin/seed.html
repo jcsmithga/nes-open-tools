@@ -57,6 +57,18 @@
             <th scope="row">Unfinished IPS</th>
             <td>{{ detail.ips_size }} bytes</td>
           </tr>
+          <tr data-rating="{{ 'rated' if rating else 'unrated' }}">
+            <th scope="row">Ratings</th>
+            <td>
+              {% if rating %}
+                Par {{ rating.par }} · course rating {{ '%.1f' % rating.course_rating }} · slope {{ rating.slope|golf_slope }}
+                <br>
+                <small>by <a href="/admin/ratings/{{ rating.run_id }}">run {{ rating.run_id }}</a> ({{ rating.run_day }}), rated {{ rating.rated_at|timestamp }}</small>
+              {% else %}
+                unrated
+              {% endif %}
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -109,6 +121,11 @@
             <th scope="col" class="num">Par</th>
             <th scope="col">Wind</th>
             <th scope="col" class="num">Speed</th>
+            {% if rating %}
+              <th scope="col" class="num">Rating</th>
+              <th scope="col" class="num">Spread</th>
+              <th scope="col" class="num">SI</th>
+            {% endif %}
           </tr>
         </thead>
         <tbody>
@@ -119,6 +136,15 @@
               <td class="num">{{ hole.par }}</td>
               <td data-wind-direction>{{ hole.wind_direction }}</td>
               <td class="num" data-wind-speed>{{ hole.wind_speed }}</td>
+              {% if rating %}
+                {% set rated = rating.holes[loop.index0] %}
+                <td class="num"
+                    data-hole-rating="{{ rated.rating }}">{{ '%.2f' % rated.rating }}</td>
+                <td class="num"
+                    data-hole-spread="{{ rated.spread }}">{{ '%.2f' % rated.spread }}</td>
+                <td class="num"
+                    data-stroke-index="{{ rated.stroke_index }}">{{ rated.stroke_index }}</td>
+              {% endif %}
             </tr>
           {% endfor %}
         </tbody>

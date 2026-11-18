@@ -8,7 +8,14 @@ import pytest
 
 from golf.ratings import formats
 from golf.ratings.handicap import daily_handicap, match_strokes, strokes_received
-from golf.ratings.index import ScoredRound, capped, compute, differential
+from golf.ratings.index import (
+    ScoredRound,
+    capped,
+    compute,
+    compute_steps,
+    counting,
+    differential,
+)
 from golf.ratings.params import IndexRules
 from golf.ratings.seed import HoleRating, SeedRating, stroke_indexes
 
@@ -135,3 +142,38 @@ def test_the_default_rules():
     rules = IndexRules()
     assert (rules.window, rules.best_of, rules.start_index) == (8, 10, 0.0)
     assert rules.exceptional == (7.0, 10.0)
+
+
+def test_steps_follow_the_history():
+    rules = IndexRules()
+    rounds = rounds_at([20, 12, 35, 8, 15])
+    state, steps = compute_steps(rounds, rules)
+    assert [s.index_after for s in steps] == [i for _, i in state.history]
+    assert [s.index_before for s in steps] == [rules.start_index] + [
+        s.index_after for s in steps[:-1]
+    ]
+    assert [s.gross for s in steps] == [sum(r.strokes) for r in rounds]
+    assert compute(rounds, rules) == state
+
+
+def test_a_step_records_the_hole_cap_and_the_cut():
+    esr = IndexRules(best_of=None, start_weight=0.0, exceptional=(7.0, 10.0))
+    rounds = rounds_at([10] * 8 + [0])
+    _, steps = compute_steps(rounds, esr)
+    assert [s.cut for s in steps] == [0.0] * 8 + [2.0]
+    assert steps[-1].differential == pytest.approx(0.0)
+    blowup = rounds_at([0])
+    strokes = list(blowup[0].strokes)
+    strokes[0] += 6
+    blowup[0] = replace(blowup[0], strokes=tuple(strokes))
+    _, (step,) = compute_steps(blowup, IndexRules())
+    assert (step.gross - sum(PARS), step.adjusted_gross - sum(PARS)) == (6, 2)
+
+
+def test_counting_keeps_the_best_share():
+    rules = IndexRules()
+    assert counting([], rules) == []
+    assert counting([5.0, 1.0, 9.0, 3.0, 4.0], rules) == [0, 1, 3, 4]
+    diffs = [30.0, 30.0] + [6.0] * 8 + [1.0, 40.0]
+    assert counting(diffs, rules) == [2, 3, 4, 5, 6, 7, 8, 10]
+    assert counting(diffs, replace(rules, best_of=None)) == list(range(4, 12))

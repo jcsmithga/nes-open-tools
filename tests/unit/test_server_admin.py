@@ -2,7 +2,9 @@
 
 import csv
 import io
+import json
 import re
+from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,8 +13,10 @@ from golf.randomizer.catalog import Catalog, HoleStore
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.manifest import SCHEMA
 from golf.randomizer.wind import compass
+from golf.ratings.rules import DailyRules
 from server.app import create_app
 from server.config import Config
+from server.ratings import refit
 from server.timings import Sample
 from tests.app_state import app_state
 from tests.unit.server_app.helpers import (
@@ -38,6 +42,7 @@ LISTS = (
     "/admin/voided",
     "/admin/metrics",
     "/admin/activity",
+    "/admin/ratings",
 )
 
 
@@ -563,3 +568,115 @@ def test_the_scores_csv_is_for_admins_only(fake_builder):
         assert client.get("/admin/seeds/0000000000/scores.csv").status_code == 404
         sign_in(client, "alice")
         assert client.get(f"/admin/seeds/{seed_id}/scores.csv").status_code == 404
+
+
+# -- Ratings ----------------------------------------------------------------------------------
+
+
+def rated_seed(client: TestClient) -> tuple[str, int]:
+    """A seed alice and bob played and a run fitted from them, which rated it; signed in
+    as admin. The seed's id and the run's."""
+    seed_id = entered_seed(client, "alice", "bob")
+    for name, strokes in (("alice", 4), ("bob", 5)):
+        client.get(scan_path(client, seed_id, name, strokes=strokes))
+    state = app_state(client)
+    run_id = refit(state.db, state.ratings, date(2026, 11, 18), min_rounds=1)
+    assert run_id is not None
+    sign_in(client, "admin")
+    return seed_id, run_id
+
+
+def health_state(page: str, name: str) -> str | None:
+    found = re.search(rf'<tr data-health="{name}"\s*(?:data-state="(\w+)")?', page)
+    assert found is not None, name
+    return found.group(1)
+
+
+def test_the_admin_home_flags_an_unrated_seed(fake_builder):
+    with admin_client(fake_builder, strings=UNWRITTEN) as client:
+        generate_seed(client)
+        sign_in(client, "admin")
+        page = client.get("/admin").text
+    assert health_state(page, "unrated-seeds") == "attention"
+    assert health_state(page, "dailies-without-rules") is None
+    assert health_state(page, "unfilled-cards") is None
+    # no daily secret: no rollover to fall behind
+    assert health_state(page, "latest-run") is None
+
+
+def test_a_run_rates_the_seed_and_clears_the_flag(fake_builder):
+    with admin_client(fake_builder, strings=UNWRITTEN) as client:
+        seed_id, run_id = rated_seed(client)
+        home = client.get("/admin").text
+        runs = client.get("/admin/ratings").text
+        run = client.get(f"/admin/ratings/{run_id}")
+        seed = client.get(f"/admin/seeds/{seed_id}").text
+        assert client.get(f"/admin/ratings/{run_id + 1}").status_code == 404
+    assert health_state(home, "unrated-seeds") is None
+    assert f'data-run="{run_id}"' in runs
+    assert run.status_code == 200
+    assert {"layout", "terrain", "pin"} <= set(
+        re.findall(r'data-group="(\w+)"', run.text)
+    )
+    assert 'data-rating="rated"' in seed
+    assert f'href="/admin/ratings/{run_id}"' in seed
+    indexes = re.findall(r'data-stroke-index="(\d+)"', seed)
+    assert sorted(map(int, indexes)) == list(range(1, 19))
+
+
+def test_an_unrated_seeds_admin_page_says_so(fake_builder):
+    with admin_client(fake_builder, strings=UNWRITTEN) as client:
+        seed_id = generate_seed(client)
+        sign_in(client, "admin")
+        page = client.get(f"/admin/seeds/{seed_id}").text
+    assert 'data-rating="unrated"' in page
+    assert "data-stroke-index" not in page
+
+
+def test_a_player_without_daily_rounds_has_no_index_on_the_users_page(fake_builder):
+    with admin_client(fake_builder, strings=UNWRITTEN) as client:
+        rated_seed(client)
+        users = client.get("/admin/users").text
+        user_link = re.search(r'href="/admin/users/(\d+)">alice<', users)
+        assert user_link is not None
+        user = client.get(f"/admin/users/{user_link.group(1)}").text
+    # alice, bob and admin; ordinary rounds are not daily rounds
+    assert users.count('data-counted="0"') == 3
+    assert 'id="handicap-index"' in user
+    assert 'data-counted="0"' in user
+    assert "data-round=" not in user
+
+
+def test_a_daily_round_shows_in_the_players_index_table(fake_builder):
+    with admin_client(fake_builder, strings=UNWRITTEN) as client:
+        rated_seed(client)
+        state = app_state(client)
+        # a new seed, rated as it is stored, made the day's daily with rules
+        daily = generate_seed(client)
+        rules = DailyRules.from_parameters(state.ratings.parameters)
+        with state.db.transaction() as conn:
+            conn.execute(
+                """
+                INSERT INTO dailies (day, theme_name, request, opens_at, closes_at,
+                                     created_at, rules)
+                VALUES ('2026-11-18', 'Theme', '{}', '2000-01-01T00:00:00Z',
+                        '2100-01-01T00:00:00Z', '2026-11-18T09:00:00Z', ?)
+                """,
+                (json.dumps(rules.to_json()),),
+            )
+            conn.execute(
+                "INSERT INTO daily_seeds (day, attempt, seed_id) VALUES (?, 1, ?)",
+                ("2026-11-18", daily),
+            )
+        client.get("/auth/login", params={"as": "alice"})
+        assert post_download(client, daily).status_code == 200
+        client.get(scan_path(client, daily, "alice", strokes=5))
+        sign_in(client, "admin")
+        users = client.get("/admin/users").text
+        alice = re.search(r'href="/admin/users/(\d+)">alice<', users)
+        assert alice is not None
+        page = client.get(f"/admin/users/{alice.group(1)}").text
+    assert 'data-counted="1"' in users
+    [row] = re.findall(r"<tr data-round=[^>]*>", page)
+    assert 'data-counts="true"' in row
+    assert 'data-state="mismatch"' not in row

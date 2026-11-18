@@ -192,7 +192,9 @@ in this package.
   holds the latest run rebuilt into its model; a route storing a seed passes it to
   `insert_seed` as `rater`, which rates the seed in the transaction that stores it. A
   seed's ratings are written once and never rewritten. A player's index is computed from
-  their counted rounds when a page asks (`player_index`), never stored here. Pages show
+  their counted rounds when a page asks (`player_index`), never stored here;
+  `counted_rounds_for` reads several players' counted rounds at once, and
+  `counted_rounds` is it for one. Pages show
   slope on golf's scale (`golf_slope` in `server/views.py`); every formula uses the
   model's.
 - `server/submissions.py` is the only place a scan is decoded and verified. It writes
@@ -214,6 +216,11 @@ in this package.
   No page links to them.
 - `server/admin.py` holds the admin pages' reads and view dataclasses, with no web types.
   When it grows, split it into a package by area (seeds, rounds, users, the audit log).
+  The ratings' reads are already apart, in `server/admin_ratings.py`: the health counts on
+  `/admin`, the runs at `/admin/ratings`, a seed's stored ratings, and a player's index on
+  `/admin/users` and their own page. An index there is recomputed with the same
+  `counted_rounds_for` and `compute_steps` that fill a card, under the current rules, beside
+  what each card stored; a row where the two disagree is marked, not resolved.
   Admin actions write through the owning module: `flag_round`, `unflag_round`,
   `void_round` and `restore_round` in `server/rounds.py`, which take the round's
   `public_id`. Each takes the admin's `users.id` and logs itself through

@@ -4,7 +4,7 @@
 > 2026-11-12, updated for the ratings decisions of 2026-11-17 (design.md, Handicaps). It
 > orders the work that takes [design.md](design.md) to production. Tasks
 > 1, 13, 14, 15 and 17 are built (2026-11-16), tasks 3 to 9 (2026-11-17), and tasks 10
-> to 12, 24 and 18 to 23 (2026-11-17); the decisions made while building them are in
+> to 12, 24 and 18 to 23 (2026-11-17), and tasks 36 to 40 (2026-11-18); the decisions made while building them are in
 > [Decisions made in building](#decisions-made-in-building), to be discussed.
 
 Tasks are numbered for reference, not strictly in the order to do them: the
@@ -82,6 +82,19 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 | 30 | Bring the docs up to date: `server/CLAUDE.md`, the data model and routes in `docs/randomizer_devplan.md`, `docs/README.md`, and the spike's README entry once the model has moved | 23, 27 |
 | 31 | Release: migrations on production, rating the existing seeds, release notes, the ADRs accepted on merge | 2, 3, 17, 23, 28, 29, 30 |
 
+### Admin
+
+What the competitive pipeline writes, visible without opening the database. Planned
+with jdharms on 2026-11-18 and built the same day.
+
+| # | Task | Needs |
+|---|------|-------|
+| 36 | **Done.** A player's index round by round on their admin page: the last 20 counted rounds, each with gross and adjusted gross, its seed's course rating and slope, the index before and after and the handicap as the card stored them beside what the current rules give, the differential at scan and now, any exceptional score reduction, whether it is in the best 8 of 10, and the low mark; a row whose card and the current rules disagree is marked. The player's daily cards that do not count are listed with the reason. `compute_steps` in `golf/ratings/index.py` gives each round's step, and `compute` is built on it | 19 |
+| 37 | **Done.** Each player's current index and counted rounds on `/admin/users`, from one batched read of the page's players (`counted_rounds_for`) | 12 |
+| 38 | **Done.** `/admin/ratings`: every run of the last 60 days, with a day that has a daily but no run marked, and a change of parameters from the run before; each run's page shows its own numbers and the effects that moved most since the run before | 11 |
+| 39 | **Done.** Ratings health on `/admin`: unrated seeds, dailies without rules, cards not filled, and whether the latest run is for today's daily | 11, 18, 19 |
+| 40 | **Done.** A seed's ratings on its admin page: par, course rating, slope and the run that rated it, and each hole's rating, spread and stroke index | 12 |
+
 ### Later
 
 | # | Task | Needs |
@@ -103,6 +116,7 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 | E. Records | 25, 26, 27 | Career counts, head-to-head and monthly records, and a player's page |
 | F. Launch | 2, 28, 29, 30, 31 | Flagging, the explainer, docs and the release |
 | G. Later | 16, 32, 33, 34, 35 | The Discord post, formats layered on the daily, and the net card's final layout |
+| H. Admin | 36, 37, 38, 39, 40 | A player's index round by round and on the users list, the ratings runs, the pipeline's health counts and a seed's ratings on the admin pages |
 
 A and B share no tasks and can go on side by side. C needs B. D needs A and C. E needs
 D.
@@ -159,6 +173,13 @@ flowchart TD
         t34[34 Spread by layout]
         t35[35 Net card layout]
     end
+    subgraph H[H. Admin]
+        t36[36 Index by round]
+        t37[37 Users' indexes]
+        t38[38 Ratings runs]
+        t39[39 Ratings health]
+        t40[40 Seed ratings]
+    end
 
     t1 --> t13
     t13 --> t14 & t15 & t17
@@ -183,6 +204,10 @@ flowchart TD
     t31 --> t16 & t32 & t33
     t5 --> t34
     t23 --> t35
+    t19 --> t36
+    t12 --> t37 & t40
+    t11 --> t38
+    t11 & t18 & t19 --> t39
 ```
 
 ## Decisions made in building
