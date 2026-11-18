@@ -52,7 +52,8 @@ the daily's rollover, in the app's own loop. Nothing runs on a timer.
 
 **Seed ratings are stored once.** A seed is rated when it is generated, from the latest
 refit, and its course rating, slope and stroke indexes never change; seeds made before
-ratings existed are rated once at launch. Every round on a seed is scored against them.
+ratings existed are rated once at launch. Every seed is rated, so every round on a seed
+is scored against them.
 
 **Stroke index** ranks a seed's holes by rating less par, ties by spread.
 
@@ -67,12 +68,26 @@ best 8 of the last 10 differentials, a shorter record keeping 80% of its rounds.
 - Every player starts at an index of 0, worth 4 rounds, fading by half a round with each
   of their own until it is gone at 8. There is no provisional period: every player is in
   every result from their first daily.
-- Only daily rounds count toward an index, on days not withdrawn, Milestone A's
-  included: a round on any other seed never does, before launch or after, so the site's
-  current players start from the starting index like anyone who joins.
-- An index changes only when one of the player's daily rounds is scanned: the round is
-  scored with the index they hold, and their new index is computed from their counted
-  rounds, their seeds' stored ratings and the day's index rules, and kept on the card.
+- A round counts toward an index only when it is scanned into a competition the site or
+  an admin runs, decided at scan and never after. A competition players arrange uses
+  their index and never changes it (ADR 0035). Today the daily is the only competition
+  that counts: daily rounds on days not withdrawn, Milestone A's included. A round on any
+  other seed never counts, before launch or after, so the site's current players start
+  from the starting index like anyone who joins.
+- **A round keeps the index it was scored with.** When any round is scanned, daily or
+  not, the index its player holds is stored with it. A counted round also stores its
+  adjusted gross, its differential, any exceptional cut it earned, and the index and low
+  mark after it, under the index rules then in force. None of it is computed again.
+- **The index rules are the site's**, recorded with each counted round, not a
+  competition's.
+- **A player's index** comes from the stored differentials and cuts of their counted
+  rounds that are still recorded, under the current index rules. Nothing upstream of a
+  round's stored differential is computed again.
+- **A void or a withdrawn day** removes the round from every competition it was in, and
+  those are scored again. Its player's index is recomputed from what the remaining
+  rounds stored. The rounds after it keep the index and handicap they were scored with.
+- **Rounds from before handicaps launched**: daily rounds keep the values their cards
+  were filled with at launch. Every other round has no index.
 
 **The daily handicap** is `round(allowance * (index * slope + course rating - par))`,
 rounded half up, its strokes given by stroke index, given back from stroke index 18 by a
@@ -107,7 +122,12 @@ index order.
 - **Re-rating seeds as the model improves.** It changes nothing within a daily, whose
   field shares one rating, and moved indexes without play by up to 1.4 strokes in four
   weeks.
-- **A nightly job for indexes.** With seed ratings stored, only a scan changes an index.
+- **A nightly job for indexes.** With seed ratings stored, only a scan, a void, a
+  restore or a withdrawal changes an index.
+- **An index derived from the player's whole history on every read**, the first design.
+  A void, a withdrawn day or a change to the index rules moved every later index,
+  handicap and result, so a net card, a match or a skins game could change days after a
+  player saw it.
 - **The last 8 rounds.** Fair at the steady state, but a round thrown by 15 strokes buys
   13 to 19 strokes of index over the next 8 rounds, against 4 to 10, and a volatile
   player's blowups raise their index.
@@ -133,9 +153,15 @@ index order.
 
 - **A seed's handicap numbers exist before anyone plays it**, so any seed's page can show
   a player their handicap, and the daily needs nothing computed at open.
-- **An index is a pure function of a player's counted rounds**, so a void, a restore, a
-  withdrawn day and the launch need nothing special, and a player's cards are their
-  index history. A card keeps the index its round was scored with.
+- **What a player was shown stays as shown.** A net card, a match or a standing changes
+  only when its own field changes. A fix to the index code changes future rounds.
+  Rewriting past ones is a deliberate migration.
+- **Every round has an index**, so a seed page shows a player who has played it the
+  index and handicap they played with, and a later competition on any seed can score
+  rounds with it.
+- **Rescaling the index**, as anchoring on both games' holes would, has to convert the
+  stored indexes and differentials along with the seed ratings, or keep them as shown
+  with their scale recorded.
 - **Indexes read optimistic**, as golf's do: a round averages about 2 strokes worse than
   its index predicts. The integrity flag measures from that average.
 - **A new player is smacked around** for their first dailies, while their index rises from
@@ -162,3 +188,6 @@ index order.
   and `tools/spikes/handicap_backtest.py`.
 - Design session with jdharms, 2026-11-17, on the production database copy of that
   morning (285 rounds, 18 players).
+- Amended 2026-11-18, design session with jdharms (session 052e40ef): indexes are
+  stored when each round is scanned rather than derived, which rounds count, and the
+  index rules belong to the site.

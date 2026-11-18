@@ -95,6 +95,17 @@ with jdharms on 2026-11-18 and built the same day.
 | 39 | **Done.** Ratings health on `/admin`: unrated seeds, dailies without rules, cards not filled, whether the latest run is for today's daily, and the rounds the parameters file was estimated on beside the slot-0 rounds received since its latest round, marked once the second matches the first | 11, 18, 19 |
 | 40 | **Done.** A seed's ratings on its admin page: par, course rating, slope and the run that rated it, and each hole's rating, spread and stroke index | 12 |
 
+### Stored indexes
+
+Indexes become values stored when each round is scanned rather than derived on every
+read (ADR 0034, amended; ADR 0035). Planned with jdharms on 2026-11-18.
+
+| # | Task | Needs |
+|---|------|-------|
+| 47 | `round_indexes` and `index_rules` (`data_model.md`, Round indexes). A scan of any slot-0 round stores the index its player holds; a scan onto an open daily also stores the step, under the site's index rules, and fills the card from it. Pull a `step` out of `compute_steps` in `golf/ratings/index.py` for the scan to call. The migration replays every counted round once and writes its row, checks each player's index read from the rows against the replay, and moves `index_before` on `daily_cards` to `index_used`, dropping `index_after` and `low_mark`; the index rules leave the day's `rules` | 19 |
+| 48 | A player's index read from the stored rows (D92), everywhere `player_index` and `counted_rounds` replay today. A void or restore rescores the day and fills no card from a replay; the "left out until rated" path goes. The admin index page (task 36) shows the stored rows, marking a player whose read index differs from their latest `index_after`. Update the docstring of `golf/ratings/index.py` | 47 |
+| 49 | The seed page shows a player who has played it the index and handicap they played with (D95) | 47 |
+
 ### Later
 
 | # | Task | Needs |
@@ -117,6 +128,7 @@ with jdharms on 2026-11-18 and built the same day.
 | F. Launch | 2, 28, 29, 30, 31 | Flagging, the explainer, docs and the release |
 | G. Later | 16, 32, 33, 34, 35 | The Discord post, formats layered on the daily, and the net card's final layout |
 | H. Admin | 36, 37, 38, 39, 40 | A player's index round by round and on the users list, the ratings runs, the pipeline's health counts and a seed's ratings on the admin pages |
+| I. Stored indexes | 47, 48, 49 | Every round keeps the index its player held, a void leaves later rounds' handicaps and results as shown, and a seed page shows a player the handicap they played it with |
 
 A and B share no tasks and can go on side by side. C needs B. D needs A and C. E needs
 D.
@@ -180,6 +192,11 @@ flowchart TD
         t39[39 Ratings health]
         t40[40 Seed ratings]
     end
+    subgraph I[I. Stored indexes]
+        t47[47 Round indexes]
+        t48[48 Index from stored rows]
+        t49[49 Played handicap on seed page]
+    end
 
     t1 --> t13
     t13 --> t14 & t15 & t17
@@ -208,6 +225,8 @@ flowchart TD
     t12 --> t37 & t40
     t11 --> t38
     t11 & t18 & t19 --> t39
+    t19 --> t47
+    t47 --> t48 & t49
 ```
 
 ## Decisions made in building
@@ -323,7 +342,7 @@ Each is how the code stands.
 | D61 | A conservative gamma | Not adopted. At the steady state the stronger player's match share is 58% at gamma 0.30, 55% at the estimate (0.443), 49% at 0.60 and 41% at 0.85; the first two are within the noise, so the estimate stands. A re-estimate that puts gamma past about 0.6 should send the allowance back to the backtest |
 | D62 | When the allowance has drifted | When the middle 90% of the stronger player's share at the steady state, across the backtest's resampled rosters, no longer holds the 55% target (jdharms set the target and the rule: a round allowance, changed only for a new target or a drift, never solved for). Every scheme comparison measures distance from the target, not from 50%. On 2026-11-17 the share is 55%, the range 45% to 63% |
 | D63 | Rating a seed nobody has played | As any seed, from its slots: 34 of the 130 live seeds are unplayed, and their holes' unplayed levels leave a median of +/-0.25 strokes in their course ratings, against nearly 0 for played seeds. A derived or community hole nobody has played is rated from par, distance and wind alone |
-| D64 | When an index changes | When one of the player's daily rounds is scanned (jdharms): the round is scored with the index they hold, and their index after it is computed from their counted rounds, their seeds' stored ratings and the day's index rules, and stored on the card. With seed ratings stored at generation nothing else changes an index, so no job runs in between. With one daily a day the index a round is scored with is the one its player held when the daily opened; a player who scans the older daily in the hour two overlap carries its update into the newer one. A void or restore changes the player's index from that round on; other cards keep the index they were scored with. The hole ratings still need a daily refit, for new seeds (task 11) |
+| D64 | When an index changes | When one of the player's daily rounds is scanned (jdharms): the round is scored with the index they hold, and their index after it is computed from their counted rounds, their seeds' stored ratings and the day's index rules, and stored on the card. With seed ratings stored at generation nothing else changes an index, so no job runs in between. With one daily a day the index a round is scored with is the one its player held when the daily opened; a player who scans the older daily in the hour two overlap carries its update into the newer one. A void or restore changes the player's index from that round on; other cards keep the index they were scored with. The hole ratings still need a daily refit, for new seeds (task 11). Changed by D89 and D90 (tasks 47 and 48) |
 | D65 | The index rules | Best 8 of the last 10, exceptional score reduction, a starting index of 0 worth 4 rounds, the World Handicap System's caps, and a 90% allowance at the steady state (jdharms). A round thrown by 15 strokes buys 4 to 10 strokes of index over the next 8 rounds, against 13 to 19 with the last 8, and a volatile player's blowups no longer raise their index. An index reads optimistic, as golf's does: a round averages 2.2 strokes worse than it predicts |
 | D66 | Exceptional score reduction's reach | The cut applies to every differential in the record, the last 10, so it fades as they age out, as the World Handicap System applies it to the last 20. It is a step at scan, computed from the index the player held: 7.0 to 9.9 strokes better takes 1.0, 10.0 or more takes 2.0 |
 | D67 | Milestone A's dailies | They count toward their players' indexes, as the only rounds before launch that do (jdharms ruled out every round on another seed). They are daily rounds, played on the day's seed in its window, and nobody knew when playing them that they would count, so nothing rewarded throwing one; their seeds are rated at launch with the rest. Without them every regular would start launch at scratch with no rounds at all |
@@ -340,7 +359,7 @@ building.
 | D70 | When a refit runs | Once per rollover day, keyed by the day, so a restart does not fit again, and before the day's seed is generated, so a daily is rated by its own morning's run. A failed fit is logged, the latest run stays in force and the daily is still generated. It runs where the rollover runs, with `GOLF_DAILY_SECRET` set |
 | D71 | Rating a new seed | In the transaction that stores it, under the latest run, which the app holds rebuilt into a model and replaces at each refit. With no run the seed is stored unrated |
 | D72 | The launch backfill | No command: each refit rates every unrated seed, so the first refit after the launch's deploy rates the site, and a seed stored while no run existed is rated by the next |
-| D73 | What a seed page shows | On a rated seed, to every viewer, the course rating, the slope and each hole's stroke index; to a signed-in player too, their daily handicap at the allowance and the strokes it gives on each hole. An unrated seed shows none of it |
+| D73 | What a seed page shows | On a rated seed, to every viewer, the course rating, the slope and each hole's stroke index; to a signed-in player too, their daily handicap at the allowance and the strokes it gives on each hole. An unrated seed shows none of it. Changed by D95 (task 49) |
 | D74 | The slope's scale on a page | Golf's: 113 times the model's slope, rounded to a whole number. The model's scale is stored and used in every formula; the conversion is exact, since golf's course handicap is `index * slope / 113 + course rating - par` |
 | D75 | `/me` | Shows the player's handicap index, the starting index before any counted round |
 | D76 | How a page writes an index or handicap better than scratch | With a plus sign, as golf does: an index of -1.3 shows as +1.3 and a handicap of -2 as +2, since it gives strokes back. The strings receive the written figure (`golf_figure` in `server/views.py`) |
@@ -351,8 +370,8 @@ building.
 |---|----------|----------|
 | D77 | What a day's rules hold | `golf.ratings.rules.DailyRules`, copied from `parameters.json` when the day is made: the allowance, the index rules, Stableford's points for a net par, the formats, the field of 2 a win and skins need, skins carrying over, and the countback's stretches (9, 6, 3, 1). A rerun keeps the day's |
 | D78 | A day made while no ratings run exists | It is stored without rules, since its seed is unrated and no card could be filled. At each rollover, after the refit, `fill_days` gives every day without rules whose seed is now rated the current rules and fills its cards. That also gives the dailies made before handicapped dailies shipped their results, whenever D ships |
-| D79 | Which cards are filled | A card whose round is recorded, on a day not withdrawn, with a rated seed. A card is filled again when a new round takes it over (D15), and when its round is restored. A card filled before its round was voided keeps its values while it is |
-| D80 | The index a card is scored with | Computed from the player's counted rounds received before its round, under the day's index rules, so filling a card late, as `fill_days` does, gives the card a scan would have |
+| D79 | Which cards are filled | A card whose round is recorded, on a day not withdrawn, with a rated seed. A card is filled again when a new round takes it over (D15), and when its round is restored. A card filled before its round was voided keeps its values while it is. Changed by D90 (task 48) |
+| D80 | The index a card is scored with | Computed from the player's counted rounds received before its round, under the day's index rules, so filling a card late, as `fill_days` does, gives the card a scan would have. Changed by D89 (task 47) |
 | D81 | When a day is scored | Whole, from its filled cards whose rounds are recorded, each time one changes: in the transaction that fills a card, voids or restores a round with a card, withdraws or restores the day, or gives a day its rules. A day's results are deleted and written again, since a field is small. A withdrawn day, or one without rules, has none |
 | D82 | How a match is stored | Once, its two players in `users.id` order, with each one's holes won over all 18, the winner (none when halved) and the margin in holes |
 | D83 | A field of one | Placed first with their points, winning neither the day nor any skin (the field of 2 the rules require) |
@@ -370,6 +389,23 @@ production display names.
 | D87 | The order of a player's matches | Best result first: biggest win to heaviest loss by holes won less lost, then the standing's order among equal results (jdharms) |
 | D88 | Who sees results | As scores (`scores_hidden`): while the day is open, a viewer who has played it; once it closes, everyone. Matches are only ever the viewer's own, so a signed-out viewer of a closed day sees the standing and the skins. A round's net card shows to any viewer who may see that round's scores |
 
+### Stored indexes (tasks 47 to 49)
+
+Decided with jdharms on 2026-11-18, before building (ADR 0034, amended, and ADR 0035).
+
+| # | Question | Decision |
+|---|----------|----------|
+| D89 | Stored or derived | Stored (jdharms). A round's index, and a counted round's step, are written at scan and never computed again. Derived, every void, withdrawn day or change to the index rules moved every later index, handicap and result |
+| D90 | A void, a restore or a withdrawn day | Removes the round from every competition it was in, which are scored again (jdharms), and from the rows the player's index is read from. Later rounds keep the index and handicap they were scored with. A round voided because someone else played on the account changes nothing else |
+| D91 | Where a round's index lives | `round_indexes`, keyed by the round's `public_id`, so a void and a restore leave it alone; slot 0 only. A counted round's step is in the same row, all or none of its columns |
+| D92 | A player's index | Read from the stored differentials and cuts of their counted rounds still recorded, on days not withdrawn, under the current index rules: the cuts applied in order, best 8 of the last 10, the caps over the low mark. Nothing upstream of a stored differential is computed again. No table holds the current index, so nothing can drift from the rows |
+| D93 | The index rules | The site's, versioned in `index_rules` and recorded with each counted round. A competition's rules are its allowance, formats and handicap policy, so a day's `rules` no longer carries them |
+| D94 | Rounds before stored indexes | Counted rounds get rows from one replay under the rules then in force, matching their cards. Every other round received before then has no row: no index was shown for it |
+| D95 | What a seed page shows a signed-in player | Before they play, their handicap from their current index, as a preview. Once they have played, the index and handicap their round was scored with: the card's on a daily, otherwise from the round's stored index and the seed's ratings at the daily allowance. A round with no stored index shows the seed's ratings without a handicap |
+| D96 | A round on an unrated seed | Not a case to handle: every seed is rated when it is generated (jdharms). A scan on an unrated seed, which only a fresh database before its first run can produce, is logged and stores no step |
+| D97 | Which competitions count | Only those the site or an admin runs, decided at scan; a game players arrange uses the index and never feeds it, so two players cannot throw rounds between themselves to gain strokes (jdharms). Today only dailies count. A competition scores with the index at scan unless it freezes handicaps at its start, and games will use the index at scan (jdharms). The tables stay the daily's until a second kind of competition is designed (ADR 0035) |
+| D98 | Recomputing history | No tool until a bug in the index code needs one; rewriting stored rows is a deliberate migration |
+
 ### Checked
 
 - **A 3-character magic word on screen.** The menu pads each word to a 6-character slot
@@ -380,3 +416,97 @@ production display names.
   days before their latest one; the soft cap halves a rise past 3.0 and the hard cap
   stops it at 5.0.
 
+
+## Under consideration: anchoring on both games' holes
+
+Discussed with jdharms on 2026-11-18. Not decided: the dailies are to play out first.
+If adopted, it takes effect on 2027-01-01, announced to players beforehand. The tasks
+below are not in the milestones or the graph until it is.
+
+**The proposal.** The reference holes become every original hole of both games: the 54
+NES Open holes and the 90 of Mario Open's five courses, each hole's four pins averaged,
+with no wind. Index 0 is a player expected to shoot par over them, and their mean
+spread is slope 1.0. Today's reference is the NES Open holes alone (design.md, The
+reference).
+
+### What changes
+
+Moving the anchor rewrites the model's scale; it predicts the same scores. Under the
+2026-11-17 parameters, today's index-0 player shoots 4.8 over par on the 144 holes, and
+their mean spread is 1.118 on today's scale, so:
+
+```
+new index = 1.118 * old index + 4.8
+new course rating = old course rating - 4.29 * old slope
+new slope = old slope / 1.118
+```
+
+where 4.29 = 4.8 / 1.118. A course handicap, `index * slope + course rating - par`, is
+the same on either scale, so every daily handicap, every stroke received and every
+result is unchanged. The vanilla courses on the 2026-11-17 fit:
+
+| Course | Course rating now | Slope now | Course rating | Slope (113 scale) |
+|--------|-------------------|-----------|---------------|-------------------|
+| NES Open US | 71.6 | 0.99 | 67.4 | 0.89 (100) |
+| NES Open UK | 70.3 | 0.96 | 66.2 | 0.86 (97) |
+| NES Open Japan | 74.1 | 1.05 | 69.6 | 0.94 (106) |
+| Mario Open Japan | 71.4 | 0.99 | 67.2 | 0.89 (100) |
+| Mario Open UK | 91.7 | 1.48 | 85.4 | 1.32 (149) |
+| Mario Open Australia | 71.9 | 1.00 | 67.6 | 0.89 (101) |
+| Mario Open France | 76.8 | 1.12 | 72.0 | 1.00 (113) |
+| Mario Open Hawaii | 86.8 | 1.37 | 80.9 | 1.23 (139) |
+
+A par 72 seed averages a course rating 4.7 over par at slope 1.12 (127) today, and
+would rate near par at slope near 1.0 (113). Model indexes on the 2026-11-17 fit: the
+strongest regular -11.7 becomes -8.3, a near-scratch regular -0.2 becomes +4.6, and a
++8.9 becomes +14.7. Two regulars stay better than scratch.
+
+These are today's fit rewritten, not a refit. A refit under the new reference lands
+near them but not on them, since the shrinkage penalties do not carry over exactly:
+gamma comes out near 0.40 and the variance components move.
+
+### Reasons to adopt
+
+- **Realistic numbers** (jdharms's main reason). Course ratings, slopes and indexes read
+  as a golfer expects: an ordinary daily rates near par at about 113, a hard one above
+  par with a high slope, and most players carry a positive index, with a plus index
+  reserved for the strongest. Today a mixed seed nearly always rates above par at about
+  127, since the NES Open holes are broadly easier than Mario Open's, and most
+  regulars are better than scratch.
+- **The reference matches what is played.** Every day but Sunday draws from both ROMs
+  (`schedule.md`), and a mixed seed's average course rating today sits within a tenth of
+  the 4.8 the new anchor removes.
+- **The definition stays one sentence**: par over every original hole of both games. An
+  offset on the NES Open holes, such as index 0 shooting 5 under there, would give the
+  same numbers with an arbitrary definition.
+- **Results are untouched.** Handicaps, net scores, Stableford, matches and skins are
+  the same on either scale; only what the numbers read as changes.
+
+### Reasons not to
+
+- **The starting index changes meaning.** 0 on the new scale is -4.3 on today's, so a
+  newcomer would start about 7 strokes better than the median regular. A starting index
+  of +5 keeps today's rule within a fifth of a stroke, but gives up "every player starts
+  at scratch".
+- **Lost checks.** The Mario Open courses' ratings are now a plausibility check sharing
+  no hole with the anchor; they would become part of it. Sunday Classic's check stops
+  reading as "a +10 player averages 10 over par" and becomes a computed expectation.
+- **The anchor rests on holes not every player has.** Sunday is the US-ROM-only day;
+  its vanilla course would rate below par, as the easy one.
+- **The index rules' thresholds tighten.** Exceptional score reduction (7 and 10) and the
+  low-mark caps (3 and 5) are in index strokes, which the stretch makes about 10% smaller
+  against actual play.
+- **A live migration.** Seeds' stored ratings and filled cards exist on the site, and
+  ADR 0034 says a seed's ratings are never redone. Cards would hold indexes on two
+  scales, and every index a player has seen moves.
+
+### Tasks
+
+| # | Task | Needs |
+|---|------|-------|
+| 41 | `reference_slots` takes the vanilla holes of both ROMs, 144 holes, and `golf-ratings fit` reports the NES Open courses' ratings where it now reports Mario Open's as the check | - |
+| 42 | On a database copy, re-estimate the parameters under the new reference, and check the refit against the rewrite above | 41 |
+| 43 | Re-run the backtest with a starting index of +5: fairness should match today's, which checks that the rescale changes no result. Test whether the index rules' thresholds need scaling by 1.118 | 42 |
+| 44 | A migration that converts every stored seed's ratings by the formulas above under the parameters in force: course rating, slope, each hole's rating and spread. Stroke indexes stay as stored, since the new ratings can reorder near-ties and a seed's strokes must not move once played. Every course handicap is unchanged, so the promise that a seed's handicaps never change holds | 42 |
+| 45 | Stored round indexes (task 47) and cards keep their indexes as shown that day; each records its scale, the admin index page reads it, and a differential or low mark stored on the old scale is converted before a player's index is read from it | 44, 47 |
+| 46 | Update design.md (The reference, New players), data_model.md and ADR 0034 while it is proposed, or supersede it once accepted; release notes, and the explainer page (task 29) written for the new scale | 43 |

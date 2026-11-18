@@ -581,7 +581,7 @@ text = "This is an official Daily Seed, so scorecards are hidden until you've su
 
 [seed.rating.ratings]
 note = "a rated seed's course rating and slope, golf's numbers; values course_rating (e.g. 71.3), slope (golf's scale, 113 standard)"
-text = "Rating: {course_rating} / Slope {slope}"
+text = "Rating {course_rating} | Slope {slope}"
 
 [seed.rating.handicap]
 note = "signed-in players only: their handicap on this seed from their index now, at the daily's allowance; values handicap (whole strokes, '+2' better than scratch), index (e.g. 12.4 or +1.3)"

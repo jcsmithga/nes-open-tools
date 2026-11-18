@@ -76,9 +76,15 @@ Ratings are computed in three places, none of them a scheduled job (jdharms,
   a second or two. Each seed is rated from the latest fit when it is generated, and
   keeps that rating.
 - **A player's index** is updated when one of their daily rounds is scanned: the round
-  is scored with the index they hold, and their new index is computed from their
-  counted rounds and their seeds' stored ratings. Nothing else changes an index, so
-  nothing needs to run in between.
+  is scored with the index they hold, and its differential and the index after it are
+  stored with it, never computed again. Every round, daily or not, stores the index its
+  player held when it was scanned. A void or a withdrawn day drops its rounds from the
+  player's index, which is read again from the rounds that remain; later rounds keep the
+  index they were scored with. Nothing else changes an index, so nothing needs to run in
+  between (ADR 0034).
+- **Only competitions the site or an admin runs count** toward an index, decided when a
+  round is scanned. A game players arrange would use their index and never change it,
+  so two players cannot throw rounds between themselves to gain strokes (ADR 0035).
 
 ## The daily
 

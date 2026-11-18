@@ -6,7 +6,10 @@
 > `dailies`, `daily_seeds` and `daily_cards` without handicaps, in `server/dailies.py`),
 > and so are the ratings tables (migration 10, in `server/ratings.py`) and a day's rules
 > and filled cards (migration 11) and its results (migration 12), in
-> `server/dailies.py`. Records are proposed.
+> `server/dailies.py`. Round indexes, stored when each round is scanned, are planned
+> (implementation tasks 47 to 49): until they are built, a card holds its round's index
+> values and every read of an index replays the player's counted rounds. Records are
+> proposed.
 
 ## The rule
 
@@ -20,7 +23,8 @@ moments it is fixed:
 |--------|---------------|--------|
 | A seed's generation | Its course rating, slope and hole ratings, never redone | `seed_ratings`, `seed_hole_ratings` |
 | Open | The day's window, request, seed, the scoring and index rules | `dailies`, `daily_seeds` |
-| Scan | The index the round is scored with, the handicap, the net card, and the player's index after it | `daily_cards`, `daily_card_holes` |
+| Scan, any seed | The index the player holds, and for a counted round its step: adjusted gross, differential, cut, and the index and low mark after it | `round_indexes` |
+| Scan, a daily | The index the card is scored with, the handicap and the net card | `daily_cards`, `daily_card_holes` |
 | Each card, and any later void or restore | The standing, matches and skins | `daily_results`, `daily_matches` |
 
 This follows ADR 0024, where a seed is what the site stored rather than a recipe to
@@ -83,10 +87,10 @@ question about an old day be answered from the database.
 - **Open and closed are read from the window**, not stored: a day is open from
   `opens_at` until `closes_at`, and closed after. Results are scored as cards arrive and
   rescored after close, so nothing needs a closing moment.
-- **`rules`** is a JSON copy of the numbers in force at open: the allowance, the
-  Stableford table, the formats scored, and the index rules a scan on the day applies
-  (the window, the starting index and its weight, the hole cap, exceptional score
-  reduction, the low-mark caps, and the low mark's window and minimum rounds).
+- **`rules`** is a JSON copy of the competition's numbers in force at open: the
+  allowance, the Stableford table and the formats scored. The index rules are the
+  site's, not the day's, and each counted round records the version it was scored under
+  (Round indexes).
 - **The PRNG seed** is a keyed hash of the date under the server secret, cut to the
   manifest's 16 hex characters. The manifest publishes it, so it must not reveal the
   secret or any other day's.
@@ -115,8 +119,11 @@ know who played it.
 
 | Table | Holds |
 |-------|-------|
-| `daily_cards` | day, user (unique together), the round's `public_id`, created_at, and once filled the index the round was scored with (`index_before`), the daily `handicap`, and the player's `index_after` and `low_mark` after it |
+| `daily_cards` | day, user (unique together), the round's `public_id`, created_at, and once filled the index the card was scored with (`index_used`, the round's `index_before`) and the daily `handicap` |
 | `daily_card_holes` | day, user, position: handicap strokes received, net score, Stableford points |
+
+The card holds what the daily made of the round. What the round says about its player
+is in `round_indexes`.
 
 - **The round is referenced by `public_id`**, which a void and restore keep, not by row
   id, which they change.
@@ -128,19 +135,46 @@ know who played it.
 - **A player's counted rounds** are their rounds with a card on a day not withdrawn,
   Milestone A's dailies included, and no others: every player's index starts from the
   starting index. A change to a day's window never changes which rounds counted.
-- **An index is a pure function** of a player's counted rounds, in the order received,
-  their seeds' stored ratings and the index rules. A scan recomputes it from them, which
-  is cheap, rather than updating a stored value, so a void, a restore, a withdrawn day
-  and the launch need nothing special. The index on the card before the round is the
-  one it was scored with: the player's index after their previous counted round, so
-  with one daily a day, the index they held when the daily opened. A player who scans
-  the older daily in the hour two overlap carries its update into the newer one.
-- **A player's cards are their index history**, one row per counted round: the low mark
-  is read from it.
+- **A card is scored with the index its player held at scan**: their index after their
+  previous counted round, so with one daily a day, the index they held when the daily
+  opened. A player who scans the older daily in the hour two overlap carries its update
+  into the newer one.
+- **A card is filled once**, when its round is scanned, from the round's stored index
+  and the seed's stored ratings. A restored round's card is filled again from the same
+  stored values, so it comes out as it was.
 
-The values on a card could be computed again from the rounds, the seeds' ratings and the
-rules. They are stored because they are what the player was shown that day, and so
-records are plain SQL over rows.
+## Round indexes
+
+Every slot-0 round stores the index its player held when it was scanned, on any seed, and
+a counted round stores its step in the player's index too. Neither is computed again
+(ADR 0034).
+
+| Table | Holds |
+|-------|-------|
+| `round_indexes` | the round's `public_id` (primary key), user, the round's `received_at`, `index_before`; for a counted round, all or none of: `adjusted_gross`, `differential` (before any cut), `cut` (the exceptional score reduction it earned, 0 if none), `index_after`, `low_mark` and the index rules version |
+| `index_rules` | the index rules as JSON, keyed by their hash, with when they were first used: the window, the starting index and its weight, the hole cap, exceptional score reduction, the low-mark caps, and the low mark's window and minimum rounds |
+
+- **Keyed by `public_id`**, as cards are, so a void and a restore leave the row alone.
+- **Slot 0 only.** A teammate's round has no known player, so it has no row.
+- **Counting is decided at scan.** A round counts when it is scanned into a competition
+  the site or an admin runs, today a daily (ADR 0035), and its step is written in the
+  same transaction. Nothing makes a round count later.
+- **A player's index** is read from the stored rows of their counted rounds still in
+  `rounds`, on days not withdrawn, in `received_at` order: each stored differential,
+  each stored cut applied to the rounds in the record when it was earned, the best 8 of
+  the last 10 blended with the starting index, and the caps over the low mark, under the
+  current index rules. While nothing has been voided or withdrawn and the rules have not
+  changed, that is the latest row's `index_after`.
+- **A void, a restore or a withdrawn day** changes which rows the read includes, and
+  nothing else: later rounds keep the index they were scored with, and no row is
+  rewritten.
+- **The low mark** is read from the same rows' `index_after` values.
+- **A round's seed is always rated.** Every seed is rated when it is generated, so a
+  round scanned on an unrated seed is an error, which only a fresh database before its
+  first ratings run can produce.
+
+The values in a row are what the player was shown, and they make records plain SQL over
+rows.
 
 ## Results
 
@@ -157,8 +191,8 @@ records are plain SQL over rows.
 - **Closing** is the window ending, which stops new cards. It does not freeze results
   against a later void.
 - **A rescore changes no card's index or handicap.** Every card keeps the index it was
-  scored with. A void or restore changes the player's own index from that round on, which
-  their next scan uses.
+  scored with. A void or restore changes which rounds the player's index is read from,
+  which their next scan uses.
 
 ## Records
 
@@ -175,3 +209,8 @@ their players' indexes once their seeds are rated at launch (task 12); no other 
 does. At the first rollover after that, `fill_days` gives each of them the rules then in
 force and fills its cards, as for any day made while no run existed, so they get results
 too. Every player's first counted round is scored at the starting index.
+
+When `round_indexes` is built (task 47), each counted round gets its row from a replay of
+the player's counted rounds under the rules then in force, matching what its card shows.
+A round on any other seed received before then has no row, and a seed page shows a player
+who played it the seed's ratings without a handicap.
