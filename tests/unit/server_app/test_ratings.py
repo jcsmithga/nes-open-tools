@@ -1,11 +1,14 @@
 """Ratings on the pages: a rated seed's course rating, slope and stroke indexes, a
 signed-in player's handicap and strokes on it, and their index on /me."""
 
+import json
 import re
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 
+from golf.ratings.rules import DailyRules
+from server.dailies import fill_days, roll_over
 from server.ratings import refit
 from tests.app_state import app_state
 from tests.unit.server_app.helpers import (
@@ -84,3 +87,33 @@ def test_me_shows_the_starting_index_before_any_counted_round(site):
     page = site.get("/me").text
     assert attribute(page, "data-index") == "0.0"
     assert attribute(page, "data-rounds") == "0"
+
+
+def test_the_rollover_stores_the_days_rules_on_a_rated_daily(site):
+    first_run(site)
+    state = app_state(site)
+    now = datetime.now(UTC)
+    daily = roll_over(
+        state.db, state.builder, state.schedule, "secret", now, state.ratings
+    )
+    with state.db.transaction() as conn:
+        stored = conn.execute(
+            "SELECT rules FROM dailies WHERE day = ?", (daily.day.isoformat(),)
+        ).fetchone()["rules"]
+    assert DailyRules.from_json(json.loads(stored)) == DailyRules.from_parameters(
+        state.ratings.parameters
+    )
+
+
+def test_a_daily_made_with_no_run_takes_its_rules_once_rated(site):
+    state = app_state(site)
+    now = datetime.now(UTC)
+    daily = roll_over(
+        state.db, state.builder, state.schedule, "secret", now, state.ratings
+    )
+    with state.db.transaction() as conn:
+        assert conn.execute("SELECT rules FROM dailies").fetchone()["rules"] is None
+    first_run(site)  # the refit rates the daily's seed
+    assert fill_days(
+        state.db, DailyRules.from_parameters(state.ratings.parameters)
+    ) == [daily.day.isoformat()]

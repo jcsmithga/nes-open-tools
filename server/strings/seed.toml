@@ -586,3 +586,80 @@ text = "Rating: {course_rating} / Slope {slope}"
 [seed.rating.handicap]
 note = "signed-in players only: their handicap on this seed from their index now, at the daily's allowance; values handicap (whole strokes, '+2' better than scratch), index (e.g. 12.4 or +1.3)"
 text = "Your handicap: {handicap} (from index {index})"
+
+[seed.results.heading]
+note = "h2 of a daily's results on its seed page: the standing, the skins and the viewer's matches"
+text = "Results"
+
+[seed.results.standing]
+note = "h3 over the standing table, beside the viewer's matches"
+text = "Standings"
+
+[seed.results.position]
+note = "results column header; a player's position in the day's standing by Stableford points"
+text = "Pos"
+
+[seed.results.position_shared]
+note = "a position shared by players still tied after countback; value position (e.g. 2, golf writes T2)"
+text = "T{position}"
+
+[seed.results.player]
+note = "results and skins list column header; the player's name (in the standing, linking to their round)"
+text = "Player"
+
+[seed.results.winner]
+note = "marker beside the day's winner (or each of them, when tied after countback)"
+text = "Winner!"
+
+
+
+[seed.results.points]
+note = "results column header; Stableford points, which decide the standing"
+text = "Pts"
+
+[seed.results.skins]
+note = "results column header, in the standing and the skins list; skins won (carried skins included)"
+text = "Skins"
+
+
+
+[seed.results.your_matches]
+note = "h3 over the viewer's own matches against each other player in the field"
+text = "Your Matches"
+
+
+[seed.results.opponent]
+note = "matches column header; the other player, linking to their round"
+text = "Opponent"
+
+[seed.results.holes_won]
+note = "matches column header; holes the viewer won in the match, over all 18"
+text = "Won"
+
+[seed.results.holes_lost]
+note = "matches column header; holes the opponent won in the match, over all 18"
+text = "Lost"
+
+[seed.results.match_result]
+note = "matches column header; the match's result from the viewer's side"
+text = "Result"
+
+[seed.results.match_won]
+note = "the viewer won the match; value margin (holes, golf writes e.g. 3 up)"
+text = "{margin} up"
+
+[seed.results.match_lost]
+note = "the viewer lost the match; value margin (holes)"
+text = "{margin} down"
+
+[seed.results.match_halved]
+note = "the match was tied over 18 holes"
+text = "AS"
+
+[seed.results.skins_heading]
+note = "summary of the collapsed list of who won each hole's skins; a down arrow marks a tied hole whose skin carried to the next"
+text = "Skins Game"
+
+[seed.results.hole]
+note = "skins list column header; hole number 1-18"
+text = "Hole"

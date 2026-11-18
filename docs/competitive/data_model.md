@@ -4,8 +4,9 @@
 > 2026-11-16, updated for the ratings decisions of 2026-11-17. It is the storage for [design.md](design.md): what a daily, its ratings and
 > its results keep, and when each is fixed. Milestone A's tables are built (migration 9:
 > `dailies`, `daily_seeds` and `daily_cards` without handicaps, in `server/dailies.py`),
-> and so are the ratings tables (migration 10, in `server/ratings.py`); the rest are
-> proposed, their column lists the shape and not the final migration.
+> and so are the ratings tables (migration 10, in `server/ratings.py`) and a day's rules
+> and filled cards (migration 11) and its results (migration 12), in
+> `server/dailies.py`. Records are proposed.
 
 ## The rule
 
@@ -20,7 +21,7 @@ moments it is fixed:
 | A seed's generation | Its course rating, slope and hole ratings, never redone | `seed_ratings`, `seed_hole_ratings` |
 | Open | The day's window, request, seed, the scoring and index rules | `dailies`, `daily_seeds` |
 | Scan | The index the round is scored with, the handicap, the net card, and the player's index after it | `daily_cards`, `daily_card_holes` |
-| Close, and any later void or restore | The standing, matches and skins | `daily_results`, `daily_matches` |
+| Each card, and any later void or restore | The standing, matches and skins | `daily_results`, `daily_matches` |
 
 This follows ADR 0024, where a seed is what the site stored rather than a recipe to
 rebuild: a daily is what was stored when it opened, when each round arrived and when it
@@ -70,7 +71,7 @@ question about an old day be answered from the database.
 
 | Table | Holds |
 |-------|-------|
-| `dailies` | `day` (primary key: the daily's own date, `YYYY-MM-DD`), the theme of the schedule entry it came from (a weekday or a dated override) as it was then: `theme_name` and the optional `theme_description`, the request as it was read (ADR 0016), `opens_at` and `closes_at` in UTC, created_at, withdrawn_at. Milestone D adds `rules` and closed_at |
+| `dailies` | `day` (primary key: the daily's own date, `YYYY-MM-DD`), the theme of the schedule entry it came from (a weekday or a dated override) as it was then: `theme_name` and the optional `theme_description`, the request as it was read (ADR 0016), `opens_at` and `closes_at` in UTC, created_at, withdrawn_at, and `rules`, NULL until the day's seed is rated |
 | `daily_seeds` | day, attempt (1, or 2 for a rerun), seed (unique), replaced_at. The day's seed is the one not replaced. A seed's pages know it is a daily, and hide its scores, from this table |
 
 - **The request is copied** because the checked-in weekday requests change, and a past
@@ -80,8 +81,8 @@ question about an old day be answered from the database.
   window's length leaves past days as they ran. Windows overlap by an hour (design.md,
   The window); the Daily Seed is the open one, not withdrawn, with the latest date.
 - **Open and closed are read from the window**, not stored: a day is open from
-  `opens_at` until `closes_at`. Milestone D's close (task 22) adds closed_at, when the
-  day's results are first fixed.
+  `opens_at` until `closes_at`, and closed after. Results are scored as cards arrive and
+  rescored after close, so nothing needs a closing moment.
 - **`rules`** is a JSON copy of the numbers in force at open: the allowance, the
   Stableford table, the formats scored, and the index rules a scan on the day applies
   (the window, the starting index and its weight, the hole cap, exceptional score
@@ -114,8 +115,8 @@ know who played it.
 
 | Table | Holds |
 |-------|-------|
-| `daily_cards` | day, user (unique together), the round's `public_id`, created_at. Milestone D adds the index the round was scored with, the daily handicap, and the player's index and low mark after it |
-| `daily_card_holes` | day, user, position: handicap strokes received, net score, Stableford points. Milestone D |
+| `daily_cards` | day, user (unique together), the round's `public_id`, created_at, and once filled the index the round was scored with (`index_before`), the daily `handicap`, and the player's `index_after` and `low_mark` after it |
+| `daily_card_holes` | day, user, position: handicap strokes received, net score, Stableford points |
 
 - **The round is referenced by `public_id`**, which a void and restore keep, not by row
   id, which they change.
@@ -145,15 +146,16 @@ records are plain SQL over rows.
 
 | Table | Holds |
 |-------|-------|
-| `daily_results` | date, user: Stableford points, position (ties shared), skins won, whether they won the day |
-| `daily_matches` | date, the two users: holes won by each, the result (win, half, loss) and its margin. Every pair of cards |
+| `daily_results` | day, user: Stableford points, position after countback (ties past it shared), skins won (carried skins included), whether they won the day (a field of at least 2) |
+| `daily_matches` | day, the two users in id order: holes won by each over all 18, the winner (none when halved) and the margin in holes. Every pair of cards |
 
-- **Scoring is a pure function** of the day's cards whose rounds are recorded, and `rules`. It runs when a
-  card is written, and in the transaction of any void or restore of a round with a card,
-  before or after close. A void after close rescores the day, so a voided round's winner
+- **Scoring is a pure function** of the day's filled cards whose rounds are recorded,
+  and `rules` (`golf/ratings/formats.py`). It runs when a card is filled, and in the
+  transaction of any void or restore of a round with a card, before or after close, or
+  of the day's withdrawal or restoration. A void after close rescores the day, so a voided round's winner
   loses the win and its opponents lose the losses.
-- **Closing** sets the status and stops new cards. It does not freeze results against a
-  later void.
+- **Closing** is the window ending, which stops new cards. It does not freeze results
+  against a later void.
 - **A rescore changes no card's index or handicap.** Every card keeps the index it was
   scored with. A void or restore changes the player's own index from that round on, which
   their next scan uses.
@@ -167,7 +169,9 @@ rescore from leaving counts stale; a counter table can replace one if it proves 
 
 ## Before ratings exist
 
-Milestone A ships dailies before Milestone C has ratings runs. Those days have no
-`rules`, seed ratings or card handicaps, and no results. They still write cards, which
-record who played each day. Those daily rounds count toward their players' indexes once
-their seeds are rated at launch (task 12); no other round does.
+Milestone A shipped dailies before ratings runs existed. Those days were made with no
+`rules` or seed ratings, and their cards with no handicaps. Their rounds count toward
+their players' indexes once their seeds are rated at launch (task 12); no other round
+does. At the first rollover after that, `fill_days` gives each of them the rules then in
+force and fills its cards, as for any day made while no run existed, so they get results
+too. Every player's first counted round is scored at the starting index.

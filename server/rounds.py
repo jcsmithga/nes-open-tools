@@ -26,7 +26,7 @@ from golf.qr import payload
 from golf.randomizer.manifest import StoredManifest
 
 from . import audit
-from .dailies import card_round
+from .dailies import card_round, rescore_round
 from .db import Database
 from .ids import is_id, new_id
 from .seeds import utc_now
@@ -518,6 +518,8 @@ def void_round(
         )
         conn.execute("DELETE FROM round_holes WHERE round_id = ?", (row["id"],))
         conn.execute("DELETE FROM rounds WHERE id = ?", (row["id"],))
+        # a daily round leaves its day's results
+        rescore_round(conn, public_id)
         audit.record(
             conn, admin_id, audit.VOID, audit.ROUND, public_id, voided_at, note=note
         )
@@ -554,6 +556,8 @@ def restore_round(
             flag_note=row["flag_note"],
         )
         conn.execute("DELETE FROM voided_rounds WHERE public_id = ?", (public_id,))
+        # a daily round rejoins its day's results
+        rescore_round(conn, public_id)
         audit.record(
             conn, admin_id, audit.RESTORE, audit.ROUND, public_id, now or utc_now()
         )

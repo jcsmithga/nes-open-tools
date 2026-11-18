@@ -51,7 +51,7 @@ text = "Par"
 
 [round.holes.strokes]
 note = "round table column header; strokes on the hole, putts included"
-text = "Total Strokes"
+text = "Gross"
 
 [round.holes.putts]
 note = "round table column header; putts on the hole"
@@ -92,3 +92,51 @@ text = "Penalty Strokes: {count}"
 [round.hidden_daily]
 note = "in place of the scorecard: another player's round on a daily that is still open, which the viewer has not played; it shows once they submit their own or the day closes"
 text = "Hidden"
+
+[round.net.heading]
+note = "h2 of a daily round's net card, in the layout that puts it under the gross scorecard"
+text = "Net Card"
+
+[round.net.summary]
+note = "a daily round's handicap line; values handicap (whole strokes, +2 better than scratch), index (the player's index the round was scored with), points (Stableford total)"
+text = "HCP {handicap} | IDX {index} | PTS {points}"
+
+[round.net.position]
+note = "follows round.net.summary once the day has a standing; values position, field (players in the day)"
+text = "| POS {position}/{field}"
+
+[round.net.received]
+note = "net card column or row label; handicap strokes received on the hole, drawn as dots (a minus where one is given back)"
+text = "Strokes"
+
+[round.net.net]
+note = "net card column or row label; strokes less strokes received"
+text = "Net"
+
+[round.net.points]
+note = "net card column or row label; Stableford points"
+text = "Pts"
+
+[round.net.hole]
+note = "net card row label over hole numbers"
+text = "Hole"
+
+[round.net.par]
+note = "net card row label; par"
+text = "Par"
+
+[round.net.stroke_index]
+note = "net card row label, between par and strokes received; each hole's stroke index, 1 the hole that receives a player's first handicap stroke, to 18 (the seed page's hole table calls it seed.holes.stroke_index)"
+text = "HDCP"
+
+[round.net.out]
+note = "net card column header; front nine total"
+text = "Out"
+
+[round.net.in]
+note = "net card column header; back nine total"
+text = "In"
+
+[round.net.total]
+note = "net card column header; round total"
+text = "Total"

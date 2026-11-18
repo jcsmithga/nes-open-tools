@@ -41,11 +41,21 @@ from golf.randomizer.daily import (
     daily_date,
     opens_at,
 )
+from golf.ratings.formats import (
+    FieldCard,
+    day_results,
+    net,
+    skin_holes,
+    stableford,
+)
+from golf.ratings.handicap import daily_handicap, strokes_received
+from golf.ratings.index import compute
+from golf.ratings.rules import DailyRules
 
 from . import audit
 from .builder import BuilderUnavailableError, SeedBuilder
 from .db import Database
-from .ratings import Ratings, refit
+from .ratings import Ratings, counted_rounds, refit, seed_rating_on
 from .seeds import (
     SeedAlreadyWithdrawnError,
     SeedRater,
@@ -259,7 +269,8 @@ def card_round(
         return False
     row = conn.execute(
         """
-        SELECT dailies.day, dailies.opens_at, dailies.closes_at, dailies.withdrawn_at
+        SELECT dailies.day, dailies.opens_at, dailies.closes_at, dailies.withdrawn_at,
+               dailies.rules
         FROM daily_seeds JOIN dailies ON dailies.day = daily_seeds.day
         WHERE daily_seeds.seed_id = ? AND daily_seeds.replaced_at IS NULL
         """,
@@ -286,6 +297,7 @@ def card_round(
             """,
             (row["day"], user_id, public_id, received_at),
         )
+        _fill_with(conn, row["day"], user_id, row["rules"])
         return True
     if held["recorded"] is not None:  # pragma: no cover - one own round per entry
         return False
@@ -296,7 +308,212 @@ def card_round(
         """,
         (public_id, received_at, row["day"], user_id),
     )
+    _fill_with(conn, row["day"], user_id, row["rules"])
     return True
+
+
+def _fill_with(
+    conn: sqlite3.Connection, day: str, user_id: int, rules: str | None
+) -> None:
+    if rules is not None:
+        fill_card(conn, day, user_id, DailyRules.from_json(json.loads(rules)))
+        score_day(conn, day)
+
+
+def _day_rules(conn: sqlite3.Connection, day: str) -> DailyRules | None:
+    row = conn.execute("SELECT rules FROM dailies WHERE day = ?", (day,)).fetchone()
+    if row is None or row["rules"] is None:
+        return None
+    return DailyRules.from_json(json.loads(row["rules"]))
+
+
+_FIELD_SQL = """
+SELECT c.user_id, c.handicap, r.id AS round_id, s.seed_id
+FROM daily_cards c
+JOIN dailies d ON d.day = c.day
+JOIN rounds r ON r.public_id = c.round_public_id
+JOIN daily_seeds s ON s.day = c.day AND s.replaced_at IS NULL
+WHERE c.day = ? AND d.withdrawn_at IS NULL AND c.handicap IS NOT NULL
+ORDER BY c.user_id
+"""
+
+
+def score_day(conn: sqlite3.Connection, day: str) -> None:
+    """Rebuild a day's results from its filled cards whose rounds are recorded: the
+    standing, every pair's match and the skins, under the day's rules. A day withdrawn,
+    or without rules, has none. The caller holds the transaction."""
+    conn.execute("DELETE FROM daily_results WHERE day = ?", (day,))
+    conn.execute("DELETE FROM daily_matches WHERE day = ?", (day,))
+    rules = _day_rules(conn, day)
+    if rules is None:
+        return
+    field = conn.execute(_FIELD_SQL, (day,)).fetchall()
+    if not field:
+        return
+    cards = []
+    for row in field:
+        strokes = tuple(
+            h["strokes"]
+            for h in conn.execute(
+                "SELECT strokes FROM round_holes WHERE round_id = ? ORDER BY position",
+                (row["round_id"],),
+            )
+        )
+        holes = conn.execute(
+            """
+            SELECT net, points FROM daily_card_holes
+            WHERE day = ? AND user_id = ? ORDER BY position
+            """,
+            (day, row["user_id"]),
+        ).fetchall()
+        cards.append(
+            FieldCard(
+                player=row["user_id"],
+                strokes=strokes,
+                handicap=row["handicap"],
+                nets=tuple(h["net"] for h in holes),
+                points=tuple(h["points"] for h in holes),
+            )
+        )
+    stroke_indexes = [
+        r["stroke_index"]
+        for r in conn.execute(
+            """
+            SELECT stroke_index FROM seed_hole_ratings WHERE seed_id = ?
+            ORDER BY position
+            """,
+            (field[0]["seed_id"],),
+        )
+    ]
+    results = day_results(cards, stroke_indexes, rules)
+    conn.executemany(
+        """
+        INSERT INTO daily_results (day, user_id, points, position, skins, won)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (day, user, r.points, r.position, r.skins, int(r.won))
+            for user, r in results.players.items()
+        ],
+    )
+    conn.executemany(
+        """
+        INSERT INTO daily_matches (day, user_a, user_b, holes_a, holes_b, winner_id,
+                                   margin)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (day, m.a, m.b, m.holes_a, m.holes_b, m.winner, m.margin)
+            for m in results.matches
+        ],
+    )
+
+
+def rescore_round(conn: sqlite3.Connection, public_id: str) -> None:
+    """After a round is voided or restored: fill its card again, if it has one, and
+    rescore its day. The caller holds the transaction that voided or restored it."""
+    card = conn.execute(
+        "SELECT day, user_id FROM daily_cards WHERE round_public_id = ?", (public_id,)
+    ).fetchone()
+    if card is None:
+        return
+    rules = _day_rules(conn, card["day"])
+    if rules is None:
+        return
+    fill_card(conn, card["day"], card["user_id"], rules)
+    score_day(conn, card["day"])
+
+
+def fill_card(
+    conn: sqlite3.Connection, day: str, user_id: int, rules: DailyRules
+) -> bool:
+    """Fill a card from its round, as its player is shown it: the index they held
+    before it, from their counted rounds received earlier; the daily handicap and the
+    net card it gives; and their index and low mark counting this round. Returns
+    whether it did: a card whose round is voided, on a withdrawn day, or on a seed not
+    yet rated stays as it is.
+
+    The caller holds the transaction. A card is a function of the player's counted
+    rounds, their seeds' stored ratings and `rules`, so filling it again gives the
+    same card while those are unchanged.
+    """
+    card = conn.execute(
+        "SELECT round_public_id FROM daily_cards WHERE day = ? AND user_id = ?",
+        (day, user_id),
+    ).fetchone()
+    if card is None:
+        return False
+    counted = counted_rounds(conn, user_id)
+    ids = [c.public_id for c in counted]
+    if card["round_public_id"] not in ids:
+        return False
+    at = ids.index(card["round_public_id"])
+    before = compute([c.round for c in counted[:at]], rules.index)
+    after = compute([c.round for c in counted[: at + 1]], rules.index)
+    played = counted[at].round
+    holes = played.rating.holes
+    handicap = daily_handicap(before.index, played.rating, rules.allowance)
+    received = strokes_received(handicap, [h.stroke_index for h in holes])
+    pars = [h.par for h in holes]
+    nets = net(played.strokes, received)
+    points = stableford(played.strokes, pars, received, rules.stableford_par)
+    conn.execute(
+        """
+        UPDATE daily_cards SET index_before = ?, handicap = ?, index_after = ?,
+                               low_mark = ?
+        WHERE day = ? AND user_id = ?
+        """,
+        (before.index, handicap, after.index, after.low_mark, day, user_id),
+    )
+    conn.execute(
+        "DELETE FROM daily_card_holes WHERE day = ? AND user_id = ?", (day, user_id)
+    )
+    conn.executemany(
+        """
+        INSERT INTO daily_card_holes (day, user_id, position, received, net, points)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (day, user_id, position, r, n, p)
+            for position, (r, n, p) in enumerate(
+                zip(received, nets, points, strict=True), start=1
+            )
+        ],
+    )
+    return True
+
+
+def fill_days(db: Database, rules: DailyRules) -> list[str]:
+    """Give each day opened without rules these, once its seed is rated, and fill its
+    cards: the days made before handicapped dailies, or while no ratings run existed.
+    Returns the days filled."""
+    filled = []
+    with db.transaction() as conn:
+        days = conn.execute(
+            """
+            SELECT dailies.day, daily_seeds.seed_id
+            FROM dailies JOIN daily_seeds ON daily_seeds.day = dailies.day
+            WHERE dailies.rules IS NULL AND daily_seeds.replaced_at IS NULL
+            ORDER BY dailies.day
+            """
+        ).fetchall()
+        for row in days:
+            if seed_rating_on(conn, row["seed_id"]) is None:
+                continue
+            conn.execute(
+                "UPDATE dailies SET rules = ? WHERE day = ?",
+                (json.dumps(rules.to_json(), sort_keys=True), row["day"]),
+            )
+            for card in conn.execute(
+                "SELECT user_id FROM daily_cards WHERE day = ? ORDER BY created_at",
+                (row["day"],),
+            ).fetchall():
+                fill_card(conn, row["day"], card["user_id"], rules)
+            score_day(conn, row["day"])
+            filled.append(row["day"])
+    if filled:
+        log.info("gave rules to the dailies %s and filled their cards", filled)
+    return filled
 
 
 @dataclass(frozen=True)
@@ -334,6 +551,222 @@ def card_for(db: Database, day: date, user_id: int) -> CardRound | None:
     return CardRound(row["public_id"], row["total_strokes"], row["par"])
 
 
+# -- Results ---------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class StandingLine:
+    """One player's line in a day's standing."""
+
+    user_id: int
+    name: str
+    round_public_id: str
+    points: int
+    position: int
+    #: whether another player shares the position after countback
+    shared: bool
+    skins: int
+    won: bool
+
+
+@dataclass(frozen=True)
+class MatchLine:
+    """A match, seen from one player's side."""
+
+    opponent_id: int
+    opponent_name: str
+    opponent_round: str
+    holes_for: int
+    holes_against: int
+    margin: int
+
+    @property
+    def result(self) -> str:
+        if self.holes_for == self.holes_against:
+            return "half"
+        return "win" if self.holes_for > self.holes_against else "loss"
+
+
+@dataclass(frozen=True)
+class SkinHole:
+    number: int
+    #: None when nobody won the hole outright
+    winner_id: int | None
+    winner_name: str | None
+    #: skins it was worth to its winner, 1 plus any carried to it
+    value: int
+
+
+@dataclass(frozen=True)
+class DayResults:
+    day: str
+    standing: tuple[StandingLine, ...]
+    #: each player's matches, their best result first
+    matches: dict[int, tuple[MatchLine, ...]]
+    #: each hole's skins; empty when the field is too small to win any
+    skins: tuple[SkinHole, ...]
+
+
+_STANDING_SQL = """
+SELECT res.user_id, coalesce(u.global_name, u.username) AS name, c.round_public_id,
+       res.points, res.position, res.skins, res.won
+FROM daily_results res
+JOIN users u ON u.id = res.user_id
+JOIN daily_cards c ON c.day = res.day AND c.user_id = res.user_id
+WHERE res.day = ?
+ORDER BY res.position, name COLLATE NOCASE
+"""
+
+
+def load_day_results(db: Database, day: str) -> DayResults | None:
+    """A day's results with its players' names, or None when it has none."""
+    with db.transaction() as conn:
+        rows = conn.execute(_STANDING_SQL, (day,)).fetchall()
+        if not rows:
+            return None
+        names = {r["user_id"]: r["name"] for r in rows}
+        rounds = {r["user_id"]: r["round_public_id"] for r in rows}
+        nets: dict[int, list[int]] = {}
+        for h in conn.execute(
+            """
+            SELECT user_id, net FROM daily_card_holes
+            WHERE day = ? ORDER BY user_id, position
+            """,
+            (day,),
+        ):
+            if h["user_id"] in names:
+                nets.setdefault(h["user_id"], []).append(h["net"])
+        matches: dict[int, list[MatchLine]] = {user: [] for user in names}
+        for m in conn.execute("SELECT * FROM daily_matches WHERE day = ?", (day,)):
+            a, b = m["user_a"], m["user_b"]
+            matches[a].append(
+                MatchLine(
+                    b, names[b], rounds[b], m["holes_a"], m["holes_b"], m["margin"]
+                )
+            )
+            matches[b].append(
+                MatchLine(
+                    a, names[a], rounds[a], m["holes_b"], m["holes_a"], m["margin"]
+                )
+            )
+        rules = _day_rules(conn, day)
+    positions = [r["position"] for r in rows]
+    standing = [
+        StandingLine(
+            user_id=r["user_id"],
+            name=r["name"],
+            round_public_id=r["round_public_id"],
+            points=r["points"],
+            position=r["position"],
+            shared=positions.count(r["position"]) > 1,
+            skins=r["skins"],
+            won=bool(r["won"]),
+        )
+        for r in rows
+    ]
+    skins: tuple[SkinHole, ...] = ()
+    if rules is not None and len(rows) >= rules.min_field:
+        skins = tuple(
+            SkinHole(number, winner, None if winner is None else names[winner], value)
+            for number, (winner, value) in enumerate(
+                skin_holes(nets, rules.skins_carryover), start=1
+            )
+        )
+    order = {line.user_id: i for i, line in enumerate(standing)}
+    return DayResults(
+        day=day,
+        standing=tuple(standing),
+        # a player's best results first: biggest win to heaviest loss, then the
+        # standing's order among equal results
+        matches={
+            user: tuple(
+                sorted(
+                    ms,
+                    key=lambda m: (m.holes_against - m.holes_for, order[m.opponent_id]),
+                )
+            )
+            for user, ms in matches.items()
+        },
+        skins=skins,
+    )
+
+
+@dataclass(frozen=True)
+class NetCard:
+    """A daily round's net card, as its player was shown it."""
+
+    day: str
+    index_before: float
+    handicap: int
+    received: tuple[int, ...]
+    nets: tuple[int, ...]
+    points: tuple[int, ...]
+    #: the seed's stroke index for each hole, which placed the strokes received
+    stroke_indexes: tuple[int, ...]
+    #: the day's standing, once it has one: position, whether shared, the field's size
+    position: int | None
+    shared: bool
+    field: int
+
+
+def load_net_card(db: Database, public_id: str) -> NetCard | None:
+    """The filled card of a round, or None for a round without one."""
+    with db.transaction() as conn:
+        card = conn.execute(
+            """
+            SELECT c.day, c.user_id, c.index_before, c.handicap
+            FROM daily_cards c JOIN dailies d ON d.day = c.day
+            WHERE c.round_public_id = ? AND c.handicap IS NOT NULL
+              AND d.withdrawn_at IS NULL
+            """,
+            (public_id,),
+        ).fetchone()
+        if card is None:
+            return None
+        holes = conn.execute(
+            """
+            SELECT received, net, points FROM daily_card_holes
+            WHERE day = ? AND user_id = ? ORDER BY position
+            """,
+            (card["day"], card["user_id"]),
+        ).fetchall()
+        stroke_indexes = tuple(
+            r["stroke_index"]
+            for r in conn.execute(
+                """
+                SELECT h.stroke_index FROM seed_hole_ratings h
+                JOIN entries e ON e.seed_id = h.seed_id
+                JOIN rounds r ON r.entry_id = e.id
+                WHERE r.public_id = ? ORDER BY h.position
+                """,
+                (public_id,),
+            )
+        )
+        placed = conn.execute(
+            "SELECT position FROM daily_results WHERE day = ? AND user_id = ?",
+            (card["day"], card["user_id"]),
+        ).fetchone()
+        positions = [
+            r["position"]
+            for r in conn.execute(
+                "SELECT position FROM daily_results WHERE day = ?", (card["day"],)
+            )
+        ]
+    position = None if placed is None else placed["position"]
+    return NetCard(
+        day=card["day"],
+        index_before=card["index_before"],
+        handicap=card["handicap"],
+        received=tuple(h["received"] for h in holes),
+        nets=tuple(h["net"] for h in holes),
+        points=tuple(h["points"] for h in holes),
+        stroke_indexes=stroke_indexes,
+        position=position,
+        shared=position is not None and positions.count(position) > 1,
+        field=len(positions),
+    )
+
+
 # -- Making a day -----------------------------------------------------------------------------
 
 
@@ -345,9 +778,11 @@ def ensure_daily(
     day: date,
     now: str | None = None,
     rater: SeedRater | None = None,
+    rules: DailyRules | None = None,
 ) -> Daily:
     """The day's daily, generated from the schedule, built and stored if it is not yet,
-    and rated by `rater` when it has a run.
+    rated by `rater` when it has a run, and scored by `rules` when it was. A day stored
+    without rules has its cards filled once `fill_days` gives it some.
 
     Building runs outside the database lock. Raises BuilderUnavailableError when the
     server cannot build, and whatever generation raises.
@@ -374,9 +809,9 @@ def ensure_daily(
                 """
                 INSERT INTO dailies (
                     day, theme_name, theme_description, request,
-                    opens_at, closes_at, created_at
+                    opens_at, closes_at, created_at, rules
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     day.isoformat(),
@@ -386,6 +821,11 @@ def ensure_daily(
                     utc_text(opens_at(day)),
                     utc_text(closes_at(day)),
                     created_at,
+                    # a day takes its rules once its seed is rated, which `fill_days`
+                    # waits for when no ratings run existed to rate it now
+                    None
+                    if rules is None or seed_rating_on(conn, seed_id) is None
+                    else json.dumps(rules.to_json(), sort_keys=True),
                 ),
             )
             conn.execute(
@@ -410,16 +850,22 @@ def roll_over(
     ratings: Ratings | None = None,
 ) -> Daily:
     """Make sure the daily open at `now` exists. With `ratings`, first refit the hole
-    model for the day if it has no run, so the daily is rated by its own day's run; a
-    failed refit is logged, and the latest run stays in force."""
+    model for the day if it has no run, so the daily is rated by its own day's run, and
+    give any day opened without rules the current ones; a failed refit is logged, and
+    the latest run stays in force. The day is stored with the current rules."""
     day = daily_date(now)
     at = utc_text(now)
+    rules = None
     if ratings is not None:
+        rules = DailyRules.from_parameters(ratings.parameters)
         try:
             refit(db, ratings, day, at)
         except Exception:
             log.exception("the ratings refit for %s failed", day)
-    return ensure_daily(db, builder, schedule, secret, day, at, rater=ratings)
+        fill_days(db, rules)
+    return ensure_daily(
+        db, builder, schedule, secret, day, at, rater=ratings, rules=rules
+    )
 
 
 async def roll_over_periodically(
@@ -562,6 +1008,7 @@ def withdraw_daily(
         conn.execute(
             "UPDATE dailies SET withdrawn_at = ? WHERE day = ?", (at, day.isoformat())
         )
+        score_day(conn, day.isoformat())
         audit.record(
             conn, admin_id, audit.WITHDRAW, audit.DAILY, day.isoformat(), at, note=note
         )
@@ -582,6 +1029,7 @@ def restore_daily(
         conn.execute(
             "UPDATE dailies SET withdrawn_at = NULL WHERE day = ?", (day.isoformat(),)
         )
+        score_day(conn, day.isoformat())
         audit.record(conn, admin_id, audit.RESTORE, audit.DAILY, day.isoformat(), at)
 
 

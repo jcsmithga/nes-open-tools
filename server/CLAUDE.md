@@ -163,11 +163,24 @@ in this package.
   tokens never go in a log. Creating, releasing and downloading log themselves through
   `server/audit.py` under the host's `users.id`, who need not be an admin; claims are kept
   on the slot instead.
-- `server/dailies.py` is the only code that writes `dailies`, `daily_seeds` and
-  `daily_cards` (ADR 0033, `docs/competitive/data_model.md`). The library half, the
+- `server/dailies.py` is the only code that writes `dailies`, `daily_seeds`,
+  `daily_cards`, `daily_card_holes`, `daily_results` and `daily_matches` (ADR 0033,
+  `docs/competitive/data_model.md`). The library half, the
   window, schedule, PRNG seed and magic words, is `golf/randomizer/daily.py`. A card is
-  written by `card_round` in the transaction `record_round` records the round in; it is
-  never deleted, and counts while its round is recorded. `scores_hidden` is the one rule
+  written by `card_round` in the transaction `record_round` records the round in, and
+  filled there by `fill_card` when the day has rules: the index the round is scored
+  with, the handicap, the net card and the index after it. It is never deleted, and
+  counts while its round is recorded. A day takes the current rules when it is made if
+  its seed is rated; `fill_days`, at each rollover after the refit, gives any other day
+  them once its seed is. `score_day` rebuilds a day's results (the formats are
+  `golf/ratings/formats.py`) whenever a card is filled or the day is withdrawn or
+  restored, and `server/rounds.py` calls `rescore_round` in the transaction of every
+  void and restore. Pages read a day's results with `load_day_results` (the seed page,
+  through `_daily_results.html`) and a round's filled card with `load_net_card` (the
+  round page, through `_net_card.html`), both only where `scores_hidden` lets the viewer
+  see scores. The round page's `?net=combined` and `NET_LAYOUT` in
+  `server/routes/round_pages.py` are temporary, for players' feedback on the net card's
+  layout (`docs/competitive/implementation_plan.md`, task 35). `scores_hidden` is the one rule
   for hiding an open daily's scores from a viewer who has not played it, on the seed
   page and other players' round pages. A rerun and a day's withdrawal and restoration
   are admin actions here, logged through `server/audit.py`; a rerun withdraws the old
@@ -459,6 +472,7 @@ directly.
   day, cards, the pages, hidden scores and the admin actions on a day
 - `test_ratings.py`: a seed's ratings and a player's handicap on the seed page, and
   their index on `/me`
+- `test_daily_results.py`: a daily's results on its seed page
 - `test_account.py`: `server/routes/account.py`
 - `test_claim.py`: `server/routes/claim_pages.py`
 - `conftest.py`: the fixtures they share (`client`, `unwritten_client`, `fake_builder`)

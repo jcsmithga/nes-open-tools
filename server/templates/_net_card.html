@@ -1,0 +1,100 @@
+{# A daily round's net card on its round page. Two layouts while one is chosen
+   (NET_LAYOUT in server/routes/round_pages.py). #}
+
+{# strokes received as scorecard dots; a stroke given back as a minus #}
+{% macro dots(received) -%}
+  {%- if received > 0 %}{{ "•" * received }}{% elif received < 0 %}{{ "−" * (0 - received) }}{% endif -%}
+{%- endmacro %}
+
+{% macro summary(card) %}
+  <p class="net-summary"
+     data-handicap="{{ card.handicap }}"
+     data-points="{{ card.points | sum }}"
+     {% if card.position %}data-position="{{ card.position }}"{% endif %}>
+    {{ t("round.net.summary", handicap=card.handicap | golf_figure(0), index=card.index_before | golf_figure, points=card.points | sum) }}
+    {% if card.position %}
+      {{ t("round.net.position", position=card.position, field=card.field) }}
+    {% endif %}
+  </p>
+{% endmacro %}
+
+{# separate: a card of its own under the gross nines, holes across as on the seed page #}
+{% macro separate(card, round) %}
+  {% set holes = round.front.holes + round.back.holes %}
+  <article class="net-card" data-layout="separate">
+    <h2>{{ t("round.net.heading") }}</h2>
+    {{ summary(card) }}
+    <div class="overflow-auto">
+      <table class="scorecard striped">
+        <colgroup>
+          <col>
+          <col span="9">
+          <col class="nine-end">
+          <col span="9">
+          <col class="nine-end">
+          <col>
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="row">{{ t("round.net.hole") }}</th>
+            {% for hole in holes %}
+              <th scope="col" class="num">{{ hole.number }}</th>
+              {% if loop.index == 9 %}<th scope="col"
+    class="num nine-total">{{ t("round.net.out") }}</th>{% endif %}
+            {% endfor %}
+            <th scope="col" class="num nine-total">{{ t("round.net.in") }}</th>
+            <th scope="col" class="num nine-total">{{ t("round.net.total") }}</th>
+          </tr>
+          <tr>
+            <th scope="row">{{ t("round.net.par") }}</th>
+            {% for hole in holes %}
+              <th scope="col" class="num">{{ hole.par }}</th>
+              {% if loop.index == 9 %}<th scope="col"
+    class="num nine-total">{{ round.front.par }}</th>{% endif %}
+            {% endfor %}
+            <th scope="col" class="num nine-total">{{ round.back.par }}</th>
+            <th scope="col" class="num nine-total">{{ round.total_par }}</th>
+          </tr>
+          <tr>
+            <th scope="row">{{ t("round.net.stroke_index") }}</th>
+            {% for si in card.stroke_indexes %}
+              <th scope="col" class="num" data-stroke-index="{{ si }}">{{ si }}</th>
+              {% if loop.index == 9 %}<th scope="col" class="nine-total"></th>{% endif %}
+            {% endfor %}
+            <th scope="col" class="nine-total"></th>
+            <th scope="col" class="nine-total"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">{{ t("round.net.received") }}</th>
+            {% for r in card.received %}
+              <td class="num received" data-received="{{ r }}">{{ dots(r) }}</td>
+              {% if loop.index == 9 %}<td class="num nine-total">{{ card.received[:9] | sum }}</td>{% endif %}
+            {% endfor %}
+            <td class="num nine-total">{{ card.received[9:] | sum }}</td>
+            <td class="num nine-total">{{ card.handicap }}</td>
+          </tr>
+          <tr>
+            <th scope="row">{{ t("round.net.net") }}</th>
+            {% for n in card.nets %}
+              <td class="num">{{ n }}</td>
+              {% if loop.index == 9 %}<td class="num nine-total">{{ card.nets[:9] | sum }}</td>{% endif %}
+            {% endfor %}
+            <td class="num nine-total">{{ card.nets[9:] | sum }}</td>
+            <td class="num nine-total">{{ card.nets | sum }}</td>
+          </tr>
+          <tr>
+            <th scope="row">{{ t("round.net.points") }}</th>
+            {% for p in card.points %}
+              <td class="num" data-points="{{ p }}">{{ p }}</td>
+              {% if loop.index == 9 %}<td class="num nine-total">{{ card.points[:9] | sum }}</td>{% endif %}
+            {% endfor %}
+            <td class="num nine-total">{{ card.points[9:] | sum }}</td>
+            <td class="num nine-total points">{{ card.points | sum }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+{% endmacro %}

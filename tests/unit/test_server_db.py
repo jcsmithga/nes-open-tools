@@ -9,7 +9,10 @@ from server.migrations import APPLICATION_ID, MIGRATIONS
 
 SCHEMA_TABLES = {
     "admin_actions",
+    "daily_card_holes",
     "daily_cards",
+    "daily_matches",
+    "daily_results",
     "daily_seeds",
     "dailies",
     "download_settings",

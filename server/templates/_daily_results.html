@@ -1,0 +1,110 @@
+{# A daily's results on its seed page: the standing, the viewer's matches and the skins. #}
+
+{% macro position(line) -%}
+  {%- if line.shared %}{{ t("seed.results.position_shared", position=line.position) }}{% else %}{{ line.position }}{% endif -%}
+{%- endmacro %}
+
+{% macro player_name(line) -%}
+  <a href="/r/{{ line.round_public_id }}">{{ line.name }}</a>
+  {%- if line.won %} <mark data-winner>{{ t("seed.results.winner") }}</mark>{% endif -%}
+{%- endmacro %}
+
+{% macro match_result(match) -%}
+  {%- if match.result == "win" -%}
+    {{ t("seed.results.match_won", margin=match.margin) }}
+  {%- elif match.result == "loss" -%}
+    {{ t("seed.results.match_lost", margin=match.margin) }}
+  {%- else -%}
+    {{ t("seed.results.match_halved") }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro my_matches(results, viewer_id) %}
+  {% set mine = results.matches.get(viewer_id) %}
+  {% if mine %}
+    <h3>{{ t("seed.results.your_matches") }}</h3>
+    <div class="overflow-auto">
+      <table class="matches striped">
+        <thead>
+          <tr>
+            <th scope="col">{{ t("seed.results.opponent") }}</th>
+            <th scope="col" class="num">{{ t("seed.results.holes_won") }}</th>
+            <th scope="col" class="num">{{ t("seed.results.holes_lost") }}</th>
+            <th scope="col">{{ t("seed.results.match_result") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for match in mine %}
+            <tr data-result="{{ match.result }}">
+              <td><a href="/r/{{ match.opponent_round }}">{{ match.opponent_name }}</a></td>
+              <td class="num">{{ match.holes_for }}</td>
+              <td class="num">{{ match.holes_against }}</td>
+              <td>{{ match_result(match) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+{% endmacro %}
+
+{# The standing beside the viewer's matches, and each hole's skins as a collapsible list. #}
+{% macro results_article(results, viewer_id) %}
+  <article class="daily-results">
+    <h2>{{ t("seed.results.heading") }}</h2>
+    <div class="results-columns">
+      <div>
+        <h3>{{ t("seed.results.standing") }}</h3>
+        <div class="overflow-auto">
+          <table class="standing striped">
+            <thead>
+              <tr>
+                <th scope="col" class="num">{{ t("seed.results.position") }}</th>
+                <th scope="col">{{ t("seed.results.player") }}</th>
+                <th scope="col" class="num">{{ t("seed.results.points") }}</th>
+                <th scope="col" class="num">{{ t("seed.results.skins") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for line in results.standing %}
+                <tr data-user="{{ line.user_id }}"
+                    {% if line.user_id == viewer_id %}data-viewer{% endif %}>
+                  <td class="num">{{ position(line) }}</td>
+                  <td>{{ player_name(line) }}</td>
+                  <td class="num points">{{ line.points }}</td>
+                  <td class="num">{{ line.skins or "" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div>{{ my_matches(results, viewer_id) }}</div>
+    </div>
+    {% if results.skins %}
+      <details class="skins-list">
+        <summary>{{ t("seed.results.skins_heading") }}</summary>
+        <div class="overflow-auto">
+          <table class="skins-list striped">
+            <thead>
+              <tr>
+                <th scope="col" class="num">{{ t("seed.results.hole") }}</th>
+                <th scope="col">{{ t("seed.results.player") }}</th>
+                <th scope="col" class="num">{{ t("seed.results.skins") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for hole in results.skins %}
+                <tr {% if hole.winner_id is none %}data-carried{% elif hole.winner_id == viewer_id %}data-viewer{% endif %}>
+                  <td class="num">{{ hole.number }}</td>
+                  <td>{% if hole.winner_id is none %}↓{% else %}{{ hole.winner_name }}{% endif %}</td>
+                  <td class="num">{{ hole.value or "" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    {% endif %}
+  </article>
+{% endmacro %}

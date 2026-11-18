@@ -4,7 +4,7 @@
 > 2026-11-12, updated for the ratings decisions of 2026-11-17 (design.md, Handicaps). It
 > orders the work that takes [design.md](design.md) to production. Tasks
 > 1, 13, 14, 15 and 17 are built (2026-11-16), tasks 3 to 9 (2026-11-17), and tasks 10
-> to 12 and 24 (2026-11-17); the decisions made while building them are in
+> to 12, 24 and 18 to 23 (2026-11-17); the decisions made while building them are in
 > [Decisions made in building](#decisions-made-in-building), to be discussed.
 
 Tasks are numbered for reference, not strictly in the order to do them: the
@@ -53,12 +53,11 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 
 | # | Task | Needs |
 |---|------|-------|
-| 18 | At rollover, store the daily's rules: the allowance, the Stableford table, the formats, and the index rules its scans apply | 13 |
-| 19 | When a scan records a round on an open daily, fill its card: the index the player holds, computed from their counted rounds, the daily handicap, the net score and Stableford points by hole, and the player's index and low mark after the round | 8, 12, 18 |
-| 20 | Compute a daily's results under each format: the Stableford standing, every pair's match, and net skins across the field. Formats are separate functions of the field's net scores, so one can be added later. Recomputed when a round arrives, is voided or is restored, before or after close | 19 |
-| 22 | Close a daily: stop new cards. A round received later is an ordinary round; a later void or restore still rescores the day | 20 |
-| 16 | When a daily closes, post its standing to Discord by webhook: positions, names, Stableford points and skins, with a link to the daily's page. Show the closed daily's standing on its page to every viewer | 22 |
-| 23 | Show results: a player's net card with strokes received, their matches, the standing and the skins, on the round page and the daily's page, only to players who have submitted while it is open (task 16 opens the standing at close) | 15, 20 |
+| 18 | **Done.** At rollover, store the daily's rules: the allowance, the Stableford table, the formats, and the index rules its scans apply | 13 |
+| 19 | **Done.** When a scan records a round on an open daily, fill its card: the index the player holds, computed from their counted rounds, the daily handicap, the net score and Stableford points by hole, and the player's index and low mark after the round | 8, 12, 18 |
+| 20 | **Done.** Compute a daily's results under each format: the Stableford standing with countback, every pair's match over all 18, and net skins across the field with carryover, the win and skins needing a field of 2. Formats are separate functions of the field's net scores, so one can be added later. Recomputed when a round arrives, is voided or is restored, before or after close | 19 |
+| 22 | **Done.** Close a daily: the window's end stops new cards, read from `closes_at` with no column (jdharms). A round received later is an ordinary round; a later void or restore still rescores the day | 20 |
+| 23 | **Done.** Show results: a player's net card with strokes received, their matches, the standing and the skins, on the round page and the daily's seed page (jdharms), only to players who have submitted while it is open, and the closed daily's standing to every viewer | 15, 20, 22 |
 | 24 | **Done.** Show every seed's course rating, slope and stroke indexes on its page, and a signed-in player their handicap and strokes received, before they play, from their current index and the seed's stored ratings | 8, 12 |
 
 ### Records
@@ -81,15 +80,17 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 |---|------|-------|
 | 29 | A document page on the site explaining handicaps and the daily's formats; jdharms writes it | 3, 23 |
 | 30 | Bring the docs up to date: `server/CLAUDE.md`, the data model and routes in `docs/randomizer_devplan.md`, `docs/README.md`, and the spike's README entry once the model has moved | 23, 27 |
-| 31 | Release: migrations on production, rating the existing seeds, release notes, the ADRs accepted on merge | 2, 3, 16, 17, 23, 28, 29, 30 |
+| 31 | Release: migrations on production, rating the existing seeds, release notes, the ADRs accepted on merge | 2, 3, 17, 23, 28, 29, 30 |
 
 ### Later
 
 | # | Task | Needs |
 |---|------|-------|
+| 16 | When a daily closes, post its standing to Discord by webhook: positions, names, Stableford points and skins, with a link to the daily's page | 31 |
 | 32 | Short opt-in events: several dailies as one tournament, handicaps frozen at its start | 31 |
 | 33 | Teams: a daily's field paired for net best ball, or a month between two balanced sides | 31 |
 | 34 | At the next re-estimate, test a spread for each layout beyond what its rating predicts, `spread = 1 + gamma * (rating - 4) + extra(layout)`, with the extras a random effect shrunk toward 0, as the month group is: the water-carry hole that separates players more than its difficulty says. `golf-ratings estimate` reports how much layouts' spreads vary and how far real seeds' slopes move. Adopt it if slopes move 0.05 or more and the backtest is clearly fairer (design.md, Fitting) | 5 |
+| 35 | Choose the net card's layout from players' feedback: separate, the default, or combined (D86). Delete the other, the `?net=` switch and `NET_LAYOUT` in `server/routes/round_pages.py`, and any string key only the other uses | 23 |
 
 ## Milestones
 
@@ -98,10 +99,10 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 | A. Seed of the day | 1, 13, 14, 15, 17 | The site generates a daily, shows it and hides its scores from players who have not played. No handicaps and no Discord post. This answers the players' request and can ship first |
 | B. Ratings proven offline | 4, 5, 6, 7, 8, 9, 3 | Handicaps for every player and every seed can be computed from a database copy, and the numbers are set by backtest |
 | C. Ratings live | 10, 11, 12, 24 | Hole ratings refit daily, every seed rated when it is generated, every player has an index, and sees their handicap for any seed |
-| D. The handicapped daily | 18, 19, 20, 22, 23, 16 | A daily round produces a net card, a standing, a match against everyone else in the field, and skins, and a closed daily's standing is posted to Discord |
+| D. The handicapped daily | 18, 19, 20, 22, 23 | A daily round produces a net card, a standing, a match against everyone else in the field, and skins, and a closed daily's standing is public on its page |
 | E. Records | 25, 26, 27 | Career counts, head-to-head and monthly records, and a player's page |
 | F. Launch | 2, 28, 29, 30, 31 | Flagging, the explainer, docs and the release |
-| G. Events and teams | 32, 33 | Formats layered on the daily |
+| G. Later | 16, 32, 33, 34, 35 | The Discord post, formats layered on the daily, and the net card's final layout |
 
 A and B share no tasks and can go on side by side. C needs B. D needs A and C. E needs
 D.
@@ -137,7 +138,6 @@ flowchart TD
         t19[19 Net score on scan]
         t20[20 Results]
         t22[22 Close a daily]
-        t16[16 Discord standing]
         t23[23 Show results]
     end
     subgraph E[E. Records]
@@ -153,9 +153,11 @@ flowchart TD
         t31[31 Release]
     end
     subgraph G[G. Later]
+        t16[16 Discord standing]
         t32[32 Events]
         t33[33 Teams]
         t34[34 Spread by layout]
+        t35[35 Net card layout]
     end
 
     t1 --> t13
@@ -171,16 +173,16 @@ flowchart TD
     t8 & t12 & t18 --> t19
     t19 --> t20
     t20 --> t22
-    t22 --> t16
-    t15 & t20 --> t23
+    t15 & t20 & t22 --> t23
     t22 --> t25 & t26
     t12 & t25 & t26 --> t27
     t9 & t11 --> t28
     t3 & t23 --> t29
     t23 & t27 --> t30
-    t2 & t3 & t16 & t17 & t23 & t28 & t29 & t30 --> t31
-    t31 --> t32 & t33
+    t2 & t3 & t17 & t23 & t28 & t29 & t30 --> t31
+    t31 --> t16 & t32 & t33
     t5 --> t34
+    t23 --> t35
 ```
 
 ## Decisions made in building
@@ -317,6 +319,31 @@ building.
 | D74 | The slope's scale on a page | Golf's: 113 times the model's slope, rounded to a whole number. The model's scale is stored and used in every formula; the conversion is exact, since golf's course handicap is `index * slope / 113 + course rating - par` |
 | D75 | `/me` | Shows the player's handicap index, the starting index before any counted round |
 | D76 | How a page writes an index or handicap better than scratch | With a plus sign, as golf does: an index of -1.3 shows as +1.3 and a handicap of -2 as +2, since it gives strokes back. The strings receive the written figure (`golf_figure` in `server/views.py`) |
+
+### Rules and cards (tasks 18 and 19)
+
+| # | Question | Decision |
+|---|----------|----------|
+| D77 | What a day's rules hold | `golf.ratings.rules.DailyRules`, copied from `parameters.json` when the day is made: the allowance, the index rules, Stableford's points for a net par, the formats, the field of 2 a win and skins need, skins carrying over, and the countback's stretches (9, 6, 3, 1). A rerun keeps the day's |
+| D78 | A day made while no ratings run exists | It is stored without rules, since its seed is unrated and no card could be filled. At each rollover, after the refit, `fill_days` gives every day without rules whose seed is now rated the current rules and fills its cards. That also gives the dailies made before handicapped dailies shipped their results, whenever D ships |
+| D79 | Which cards are filled | A card whose round is recorded, on a day not withdrawn, with a rated seed. A card is filled again when a new round takes it over (D15), and when its round is restored. A card filled before its round was voided keeps its values while it is |
+| D80 | The index a card is scored with | Computed from the player's counted rounds received before its round, under the day's index rules, so filling a card late, as `fill_days` does, gives the card a scan would have |
+| D81 | When a day is scored | Whole, from its filled cards whose rounds are recorded, each time one changes: in the transaction that fills a card, voids or restores a round with a card, withdraws or restores the day, or gives a day its rules. A day's results are deleted and written again, since a field is small. A withdrawn day, or one without rules, has none |
+| D82 | How a match is stored | Once, its two players in `users.id` order, with each one's holes won over all 18, the winner (none when halved) and the margin in holes |
+| D83 | A field of one | Placed first with their points, winning neither the day nor any skin (the field of 2 the rules require) |
+
+### Results on the pages (task 23)
+
+Decided with jdharms on 2026-11-17, from screenshots of each layout on mock rounds with
+production display names.
+
+| # | Question | Decision |
+|---|----------|----------|
+| D84 | Where a day's results show | On the day's seed page, under its daily banner (jdharms); `/daily/<date>` still redirects there. The round page shows a daily round's net card |
+| D85 | The results' layout | The standing (position, player, points, skins) beside the viewer's matches (opponent, holes won and lost, the result), and each hole's skins as a list down the page, collapsed until opened, a tied hole marked with a down arrow to the hole its skin carried to (jdharms, chosen from four layouts; a horizontal strip ran to three phone widths with real names). Each table scrolls inside its own column on a phone |
+| D86 | The net card's layout | Two ship for players' feedback (jdharms): separate, the default, a card under the gross nines with holes across and rows for par, stroke index, strokes received as dots (a minus for one given back), net and points; and combined, at `?net=combined`, three more columns of the nines. Task 35 removes the one not chosen |
+| D87 | The order of a player's matches | Best result first: biggest win to heaviest loss by holes won less lost, then the standing's order among equal results (jdharms) |
+| D88 | Who sees results | As scores (`scores_hidden`): while the day is open, a viewer who has played it; once it closes, everyone. Matches are only ever the viewer's own, so a signed-out viewer of a closed day sees the standing and the skins. A round's net card shows to any viewer who may see that round's scores |
 
 ### Checked
 

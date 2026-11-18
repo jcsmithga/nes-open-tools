@@ -62,8 +62,8 @@ rounds and the QR loop, so results need no scraping and no second system. A play
 finds the site finds the competition, with no chain of Discord servers to follow.
 
 A Discord bot or a separate site on top of an API is how other randomizers do it, mostly
-because their results cannot reach the randomizer. Ours can. Discord's part here is an
-announcement when a daily closes, carrying its standing. A daily is always open, so its
+because their results cannot reach the randomizer. Ours can. Discord's part here, after
+launch, is an announcement when a daily closes, carrying its standing. A daily is always open, so its
 opening is not news; its result is.
 
 Ratings are computed in three places, none of them a scheduled job (jdharms,
@@ -153,8 +153,13 @@ closing at 10:00 UTC the next day.
   from any viewer who has not submitted.
 - **The host page** lists a daily among the recent seeds like any other, so a host can
   run it at an in-person event; rounds recorded in the window are daily rounds.
-- **Round pages are unchanged.** A daily round is an ordinary round there, subject to
-  Spoilers below. `/me` shows the player's handicap index.
+- **A daily round's page** shows its net card under the gross scorecard: the index and
+  handicap it was scored with, the strokes received on each hole by stroke index, the net
+  scores and the Stableford points, subject to Spoilers below. `/me` shows the player's
+  handicap index.
+- **A daily's seed page** shows its results under its banner: the standing beside the
+  viewer's own matches, best result first, and each hole's skins in a collapsed list,
+  subject to Spoilers below.
 
 Until handicaps exist (Milestone A), a daily shows its recorded rounds as any seed does,
 to players who have submitted: no standing, no winner and no records. A winner by gross
@@ -522,13 +527,19 @@ nothing of them. Each daily produces three results for each player.
 - **Standing**, by net Stableford points: 2 for a net par, 1 more for each stroke under,
   1 fewer for each stroke over, never below 0. A blowup costs one hole's points, and
   Stableford narrows the spread of erratic players from about 8 strokes to about 6. The
-  standing decides the day's winner.
-- **Matches**, net match play against every other player in the field, hole by hole.
-- **Skins**, net, across the whole field: a hole is won by the one player with the lowest
-  net score on it, and by nobody when that score is shared. Skins are for fun. They are
-  a game of variance, not a fair contest: on the backtest the strongest player wins 0.3
-  of a fair share with handicaps, and everyone else wins 0.15 to 0.3 of theirs without.
-  Skins won are a career count and decide nothing else.
+  standing decides the day's winner, in a field of at least 2. Ties at every position
+  are broken by countback: the most points over the last 9 holes, then the last 6, the
+  last 3 and the 18th; players still tied share the position (jdharms, 2026-11-17).
+- **Matches**, net match play against every other player in the field, hole by hole, over
+  all 18 holes even once a match is decided.
+- **Skins**, net, across the whole field, in a field of at least 2: a hole is won by the
+  one player with the lowest net score on it. When that score is shared, the skin carries
+  over, and the next hole won takes every skin carried to it (jdharms, 2026-11-17: more
+  drama). Skins still carried after the 18th are won by nobody, for now: a day stores
+  its rules when it opens, so a change applies only to days opened after it. Skins are for fun. They are a game of variance, not a fair contest: on the
+  backtest, without carryover, the strongest player wins 0.3 of a fair share with
+  handicaps, and everyone else wins 0.15 to 0.3 of theirs without; carryover adds
+  variance. Skins won are a career count and decide nothing else.
 
 Turned down: gross play of any kind as the main competition, by constraint 1.
 
@@ -619,8 +630,8 @@ not submitted a round on it. That covers the seed page, other players' round pag
 link preview cards, which never carry a score on any seed.
 
 Once a daily closes, nobody can join its field, and its standing is public: positions,
-names, Stableford points and skins, posted to Discord and shown on the daily's page to
-anyone. Its scorecards are collapsed for a viewer who has not played it, as on any seed,
+names, Stableford points and skins, shown on the daily's page to anyone, and after
+launch posted to Discord. Its scorecards are collapsed for a viewer who has not played it, as on any seed,
 since a player may still play the seed as an ordinary round.
 
 ## Integrity
@@ -665,6 +676,7 @@ later net result.
 | Calendar months or a rolling 30 days for records | Calendar months, per jdharms; to be tested |
 | The numbers | Set on the 2026-11-17 backtest (Setting the numbers); run again on a fresh database before launch, then left alone |
 | Whether a player's page is public | Undecided |
+| Net cards for ordinary rounds, shown and stored | Feasible from what is stored (jdharms, 2026-11-17: revisit later). Every seed's ratings are fixed when it is generated, and the index a player held when a round was scanned can be recomputed from their daily rounds before it, so past rounds could be filled in as a scan would have shown them. It would need a table keyed by round, the parameters in force at each scan stored with it, and no card for a player 2 round. Ordinary rounds would still not count toward an index unless ADR 0034 changes |
 
 ## Evidence
 

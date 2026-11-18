@@ -14,6 +14,7 @@ from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate
 from golf.randomizer.manifest import Settings
 from golf.ratings.params import Parameters
+from golf.ratings.rules import DailyRules
 from server.db import Database
 from server.ratings import (
     Ratings,
@@ -164,13 +165,19 @@ def test_a_seed_is_rated_once(db, ratings, manifests):
 # -- A player's index ----------------------------------------------------------------------
 
 
-def make_daily(db: Database, day: str, seed: str, withdrawn: bool = False) -> None:
+def make_daily(
+    db: Database,
+    day: str,
+    seed: str,
+    withdrawn: bool = False,
+    rules: DailyRules | None = None,
+) -> None:
     with db.transaction() as conn:
         conn.execute(
             """
             INSERT INTO dailies (day, theme_name, request, opens_at, closes_at,
-                                 created_at, withdrawn_at)
-            VALUES (?, 'Theme', '{}', ?, ?, ?, ?)
+                                 created_at, withdrawn_at, rules)
+            VALUES (?, 'Theme', '{}', ?, ?, ?, ?, ?)
             """,
             (
                 day,
@@ -178,6 +185,7 @@ def make_daily(db: Database, day: str, seed: str, withdrawn: bool = False) -> No
                 f"{day}T23:59:59Z",
                 f"{day}T09:00:00Z",
                 f"{day}T10:00:00Z" if withdrawn else None,
+                None if rules is None else json.dumps(rules.to_json()),
             ),
         )
         conn.execute(

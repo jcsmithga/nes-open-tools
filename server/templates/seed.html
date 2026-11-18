@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_daily_results.html" as daily_results %}
 {% import "_scorecard.html" as scorecard %}
 {% import "_download_settings.html" as controls %}
 {% import "_wind.html" as wind %}
@@ -63,6 +64,8 @@
       </p>
     </article>
   {% endif %}
+
+  {% if results %}{{ daily_results.results_article(results, viewer_id) }}{% endif %}
 
   {% if rating %}
     <article class="seed-rating"

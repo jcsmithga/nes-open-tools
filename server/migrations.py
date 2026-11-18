@@ -361,4 +361,57 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (seed_id, position)
     ) WITHOUT ROWID;
     """,
+    # 11: handicapped dailies (docs/competitive/data_model.md). A day copies the rules it
+    # is scored by when it opens; a day opened before this has none until the rollover
+    # fills it. A card keeps what its player was shown: the index the round was scored
+    # with, the daily handicap, and the player's index and low mark after it, all NULL on
+    # a card not yet filled; its holes are the net card.
+    """
+    ALTER TABLE dailies ADD COLUMN rules TEXT
+        CHECK (rules IS NULL OR (json_valid(rules) AND json_type(rules) = 'object'));
+
+    ALTER TABLE daily_cards ADD COLUMN index_before REAL;
+    ALTER TABLE daily_cards ADD COLUMN handicap INTEGER;
+    ALTER TABLE daily_cards ADD COLUMN index_after REAL;
+    ALTER TABLE daily_cards ADD COLUMN low_mark REAL;
+
+    CREATE TABLE daily_card_holes (
+        day TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 18),
+        received INTEGER NOT NULL,
+        net INTEGER NOT NULL,
+        points INTEGER NOT NULL CHECK (points >= 0),
+        PRIMARY KEY (day, user_id, position),
+        FOREIGN KEY (day, user_id) REFERENCES daily_cards (day, user_id)
+    ) WITHOUT ROWID;
+    """,
+    # 12: a daily's results (docs/competitive/data_model.md, Results): rebuilt from its
+    # filled cards whose rounds are recorded whenever a card is filled or such a round is
+    # voided or restored. A match is stored once, its players in id order; a halved one
+    # has no winner.
+    """
+    CREATE TABLE daily_results (
+        day TEXT NOT NULL REFERENCES dailies (day),
+        user_id INTEGER NOT NULL REFERENCES users (id),
+        points INTEGER NOT NULL CHECK (points >= 0),
+        position INTEGER NOT NULL CHECK (position >= 1),
+        skins INTEGER NOT NULL CHECK (skins >= 0),
+        won INTEGER NOT NULL CHECK (won IN (0, 1)),
+        PRIMARY KEY (day, user_id)
+    ) WITHOUT ROWID;
+
+    CREATE TABLE daily_matches (
+        day TEXT NOT NULL REFERENCES dailies (day),
+        user_a INTEGER NOT NULL REFERENCES users (id),
+        user_b INTEGER NOT NULL REFERENCES users (id),
+        holes_a INTEGER NOT NULL CHECK (holes_a BETWEEN 0 AND 18),
+        holes_b INTEGER NOT NULL CHECK (holes_b BETWEEN 0 AND 18),
+        winner_id INTEGER REFERENCES users (id),
+        margin INTEGER NOT NULL CHECK (margin BETWEEN 0 AND 18),
+        CHECK (user_a < user_b),
+        CHECK (winner_id IS NULL OR winner_id IN (user_a, user_b)),
+        PRIMARY KEY (day, user_a, user_b)
+    ) WITHOUT ROWID;
+    """,
 ]

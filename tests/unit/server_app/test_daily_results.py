@@ -1,0 +1,197 @@
+"""A daily's results on its seed page: the standing, the viewer's matches and each hole's
+skins, to a player who has played it while it is open and to everyone once it closes."""
+
+import re
+from datetime import UTC, date, datetime
+
+import pytest
+
+from golf.qr.payload import HoleRecord
+from golf.randomizer.catalog import Catalog
+from golf.randomizer.curation import CurationSnapshot
+from golf.randomizer.generate import generate
+from golf.randomizer.manifest import Settings
+from golf.ratings.rules import DailyRules
+from server.ratings import refit
+from server.submissions import submit_scan
+from tests.app_state import app_state
+from tests.stored_seeds import store_seed
+from tests.unit.server_app.helpers import dev_client
+from tests.unit.test_server_ratings import make_daily, play_all
+from tests.unit.test_server_submissions import Player
+
+DAY = "2026-11-18"
+OPEN = datetime(2026, 11, 18, 20, 0, tzinfo=UTC)
+CLOSED = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+
+
+class Clock:
+    def __init__(self, now: datetime):
+        self.now = now
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+@pytest.fixture(scope="module")
+def manifests():
+    catalog, curation = Catalog.load(), CurationSnapshot.load()
+    return [
+        generate(catalog, curation, Settings(prng_seed=f"results{i}")) for i in range(3)
+    ]
+
+
+@pytest.fixture
+def clock():
+    return Clock(OPEN)
+
+
+@pytest.fixture
+def site(fake_builder, clock):
+    with dev_client(fake_builder, clock=clock) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def daily(site, manifests):
+    """A rated day's seed, with the day's rules."""
+    state = app_state(site)
+    played = [store_seed(state.db, m) for m in manifests[:2]]
+    play_all(state.db, played)
+    assert refit(state.db, state.ratings, date(2026, 11, 17), min_rounds=5)
+    seed = store_seed(state.db, manifests[2], rater=state.ratings)
+    rules = DailyRules.from_parameters(state.ratings.parameters)
+    make_daily(state.db, DAY, seed, rules=rules)
+    return seed
+
+
+def play(site, seed: str, name: str, strokes: int, hour: int) -> str:
+    """`name` scans a round of `strokes` on every hole but the 18th, one more there;
+    returns the round's public id."""
+    holes = (HoleRecord(strokes, 2),) * 17 + (HoleRecord(strokes + 1, 2),)
+    player = Player(app_state(site).db, seed, name)
+    scanned = submit_scan(
+        app_state(site).db, player.scan(holes=holes), now=f"{DAY}T{hour}:00:00Z"
+    )
+    return scanned.round.public_id
+
+
+def results(site, seed: str) -> str | None:
+    page = site.get(f"/h/{seed}").text
+    found = re.search(r'<article class="daily-results">(.*?)</article>', page, re.S)
+    return None if found is None else found.group(1)
+
+
+def standing_users(article: str) -> list[str]:
+    standing = article[: article.index("</table>")]
+    return re.findall(r'data-user="(\d+)"', standing)
+
+
+def test_a_player_who_has_played_sees_the_standing_their_matches_and_skins(site, daily):
+    play(site, daily, "dee", 4, 12)
+    play(site, daily, "eve", 5, 13)
+    site.get("/auth/login", params={"as": "dee"})
+    article = results(site, daily)
+    assert article is not None
+    assert len(standing_users(article)) == 2
+    assert "data-winner" in article and "data-viewer" in article
+    assert re.findall(r'data-result="(\w+)"', article) == ["win"]
+    # dee's 4s beat eve's 5s on every hole: every skin is dee's, none carried
+    assert 'class="skins-list' in article
+    assert "data-carried" not in article
+
+
+def test_a_player_who_has_not_played_an_open_day_sees_no_results(site, daily):
+    play(site, daily, "dee", 4, 12)
+    play(site, daily, "eve", 5, 13)
+    site.get("/auth/login", params={"as": "fay"})
+    assert results(site, daily) is None
+
+
+def test_once_closed_anyone_sees_the_standing_but_no_matches(site, daily, clock):
+    play(site, daily, "dee", 4, 12)
+    play(site, daily, "eve", 5, 13)
+    clock.now = CLOSED
+    article = results(site, daily)
+    assert article is not None
+    assert len(standing_users(article)) == 2
+    assert "data-result" not in article
+    assert "data-viewer" not in article
+
+
+def test_tied_holes_carry_their_skins(site, daily):
+    play(site, daily, "dee", 4, 12)
+    play(site, daily, "eve", 4, 13)
+    site.get("/auth/login", params={"as": "dee"})
+    article = results(site, daily)
+    assert article is not None
+    skins = article[article.index('class="skins-list') :]
+    # both play at the starting index, so every hole ties and every skin carries
+    assert skins.count("data-carried") == 18
+    assert re.findall(r'data-result="(\w+)"', article) == ["half"]
+
+
+def test_a_field_of_one_has_a_standing_but_no_skins(site, daily):
+    play(site, daily, "dee", 4, 12)
+    site.get("/auth/login", params={"as": "dee"})
+    article = results(site, daily)
+    assert article is not None
+    assert len(standing_users(article)) == 1
+    assert "data-winner" not in article
+    assert "skins-list" not in article
+
+
+# -- The net card on a round page -----------------------------------------------------------
+
+
+def attribute_values(page: str, name: str) -> list[str]:
+    return re.findall(rf'{name}="(-?\d+)"', page)
+
+
+def test_a_daily_rounds_page_shows_its_net_card_separately_by_default(site, daily):
+    round_id = play(site, daily, "dee", 5, 12)
+    site.get("/auth/login", params={"as": "dee"})
+    page = site.get(f"/r/{round_id}").text
+    assert 'class="net-card"' in page
+    handicap = int(attribute_values(page, "data-handicap")[0])
+    received = [int(r) for r in attribute_values(page, "data-received")]
+    assert len(received) == 18 and sum(received) == handicap
+    # strokes land on the lowest stroke indexes
+    indexes = [int(i) for i in attribute_values(page, "data-stroke-index")]
+    assert sorted(indexes) == list(range(1, 19))
+    assert all(
+        (r > 0) == (si <= handicap) for r, si in zip(received, indexes, strict=True)
+    )
+    assert "with-net" not in page
+
+
+def test_combined_puts_the_net_card_in_the_nine_tables(site, daily):
+    round_id = play(site, daily, "dee", 5, 12)
+    site.get("/auth/login", params={"as": "dee"})
+    page = site.get(f"/r/{round_id}", params={"net": "combined"}).text
+    assert page.count("with-net") == 2
+    assert 'class="net-card"' not in page
+    received = attribute_values(page, "data-received")
+    handicap = int(attribute_values(page, "data-handicap")[0])
+    assert len(received) == 18 and sum(map(int, received)) == handicap
+    assert len(attribute_values(page, "data-points")) >= 18
+
+
+def test_an_ordinary_round_has_no_net_card(site, daily, manifests):
+    state = app_state(site)
+    seed = store_seed(state.db, manifests[0])
+    round_id = play(site, seed, "dee", 5, 12)
+    site.get("/auth/login", params={"as": "dee"})
+    for layout in ("separate", "combined"):
+        page = site.get(f"/r/{round_id}", params={"net": layout}).text
+        assert "data-received" not in page
+
+
+def test_an_open_dailys_net_card_is_hidden_from_a_player_who_has_not_played(
+    site, daily
+):
+    round_id = play(site, daily, "dee", 5, 12)
+    site.get("/auth/login", params={"as": "fay"})
+    page = site.get(f"/r/{round_id}").text
+    assert 'data-state="scores-hidden"' in page
+    assert "data-received" not in page

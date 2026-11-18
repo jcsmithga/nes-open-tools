@@ -218,7 +218,8 @@ def rate_unrated(conn: sqlite3.Connection, ratings: Ratings, now: str) -> int:
 # -- Reading -----------------------------------------------------------------------------------
 
 
-def _seed_rating(conn: sqlite3.Connection, seed_id: str) -> SeedRating | None:
+def seed_rating_on(conn: sqlite3.Connection, seed_id: str) -> SeedRating | None:
+    """A seed's stored ratings, in the caller's transaction; None while it is unrated."""
     rows = conn.execute(
         """
         SELECT h.par, r.rating, r.spread, r.stroke_index
@@ -236,11 +237,11 @@ def _seed_rating(conn: sqlite3.Connection, seed_id: str) -> SeedRating | None:
 def seed_rating(db: Database, seed_id: str) -> SeedRating | None:
     """A seed's stored ratings, or None while it is unrated."""
     with db.transaction() as conn:
-        return _seed_rating(conn, seed_id)
+        return seed_rating_on(conn, seed_id)
 
 
 _COUNTED_SQL = """
-SELECT r.id, r.received_at, e.seed_id
+SELECT r.id, r.public_id, r.received_at, e.seed_id
 FROM daily_cards c
 JOIN dailies d ON d.day = c.day
 JOIN rounds r ON r.public_id = c.round_public_id
@@ -250,16 +251,22 @@ ORDER BY r.received_at, r.id
 """
 
 
-def counted_rounds(conn: sqlite3.Connection, user_id: int) -> list[ScoredRound]:
-    """A player's counted rounds: their cards on days not withdrawn whose rounds are
-    still recorded, each with its seed's stored ratings. A round on a seed not yet
-    rated is left out until it is."""
+@dataclass(frozen=True)
+class CountedRound:
+    public_id: str
+    round: ScoredRound
+
+
+def counted_rounds(conn: sqlite3.Connection, user_id: int) -> list[CountedRound]:
+    """A player's counted rounds in the order received: their cards on days not
+    withdrawn whose rounds are still recorded, each with its seed's stored ratings. A
+    round on a seed not yet rated is left out until it is."""
     out = []
     ratings: dict[str, SeedRating | None] = {}
     for row in conn.execute(_COUNTED_SQL, (user_id,)).fetchall():
         seed = row["seed_id"]
         if seed not in ratings:
-            ratings[seed] = _seed_rating(conn, seed)
+            ratings[seed] = seed_rating_on(conn, seed)
         rating = ratings[seed]
         if rating is None:
             continue
@@ -270,12 +277,13 @@ def counted_rounds(conn: sqlite3.Connection, user_id: int) -> list[ScoredRound]:
                 (row["id"],),
             )
         )
-        out.append(ScoredRound(played_at(row["received_at"]), rating, strokes))
+        scored = ScoredRound(played_at(row["received_at"]), rating, strokes)
+        out.append(CountedRound(row["public_id"], scored))
     return out
 
 
 def player_index(db: Database, user_id: int, parameters: Parameters) -> IndexState:
     """The player's handicap index now; the starting index before any counted round."""
     with db.transaction() as conn:
-        rounds = counted_rounds(conn, user_id)
-    return compute(rounds, parameters.index)
+        counted = counted_rounds(conn, user_id)
+    return compute([c.round for c in counted], parameters.index)

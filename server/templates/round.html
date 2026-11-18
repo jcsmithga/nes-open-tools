@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "_scorecard.html" as scorecard %}
+{% import "_net_card.html" as net %}
 {% block title %}{{ t_plain("round.page_title", words=round.magic_words|join(" ")) }}{% endblock %}
 {# who played which seed, and never the score: a card shows to a whole channel, some of whom
    have yet to play it #}
@@ -11,9 +12,11 @@
 {% block content %}
   {# one nine as a table of its own; the back nine's also carries the round's totals. A
      round from a ROM that records fairways (protocol version 2) has a fairway column. #}
-  {% macro nine_table(nine, total_label, totals=none) %}
+  {% macro nine_table(nine, total_label, totals=none, first=0) %}
     {% set fairways = round.stats_recorded %}
-    <table class="nine striped{% if fairways %} with-fairways{% endif %}">
+    {# combined: a daily round's net card as three more columns of the nines #}
+    {% set net_columns = net_card and net_layout == "combined" %}
+    <table class="nine striped{% if fairways %} with-fairways{% endif %}{% if net_columns %} with-net{% endif %}">
       <colgroup>
         <col class="hole">
         <col class="par">
@@ -21,6 +24,11 @@
         <col class="putts">
         {% if fairways %}
           <col class="fairway">
+        {% endif %}
+        {% if net_columns %}
+          <col class="received">
+          <col class="net">
+          <col class="points">
         {% endif %}
       </colgroup>
       <thead>
@@ -31,6 +39,11 @@
           <th scope="col" class="num">{{ t("round.holes.putts") }}</th>
           {% if fairways %}
             <th scope="col" class="fairway">{{ t("round.holes.fairway") }}</th>
+          {% endif %}
+          {% if net_columns %}
+            <th scope="col" class="num received">{{ t("round.net.received") }}</th>
+            <th scope="col" class="num">{{ t("round.net.net") }}</th>
+            <th scope="col" class="num">{{ t("round.net.points") }}</th>
           {% endif %}
         </tr>
       </thead>
@@ -50,6 +63,14 @@
                 {%- endif -%}
               </td>
             {% endif %}
+            {% if net_columns %}
+              {% set i = first + loop.index0 %}
+              <td class="num received"
+                  data-received="{{ net_card.received[i] }}">{{ net.dots(net_card.received[i]) }}</td>
+              <td class="num">{{ net_card.nets[i] }}</td>
+              <td class="num"
+                  data-points="{{ net_card.points[i] }}">{{ net_card.points[i] }}</td>
+            {% endif %}
           </tr>
         {% endfor %}
       </tbody>
@@ -66,6 +87,11 @@
               {{- t("round.holes.fairways_count", hit=nine.fairways_hit, possible=nine.fairways_possible) -}}
             </td>
           {% endif %}
+          {% if net_columns %}
+            <td class="num">{{ net_card.received[first:first + 9] | sum }}</td>
+            <td class="num">{{ net_card.nets[first:first + 9] | sum }}</td>
+            <td class="num points">{{ net_card.points[first:first + 9] | sum }}</td>
+          {% endif %}
         </tr>
         {% if totals %}
           <tr>
@@ -79,6 +105,11 @@
                   data-fairways-possible="{{ totals.fairways_possible }}">
                 {{- t("round.holes.fairways_count", hit=totals.fairways_hit, possible=totals.fairways_possible) -}}
               </td>
+            {% endif %}
+            {% if net_columns %}
+              <td class="num">{{ net_card.handicap }}</td>
+              <td class="num">{{ net_card.nets | sum }}</td>
+              <td class="num points">{{ net_card.points | sum }}</td>
             {% endif %}
           </tr>
         {% endif %}
@@ -100,9 +131,10 @@
     {# another player's round on an open daily the viewer has not played #}
     <p class="round-hidden" data-state="scores-hidden">{{ t("round.hidden_daily") }}</p>
   {% else %}
+    {% if net_card and net_layout == "combined" %}{{ net.summary(net_card) }}{% endif %}
     <div class="nines">
       {{ nine_table(round.front, t("round.holes.front_total")) }}
-      {{ nine_table(round.back, t("round.holes.back_total"), round) }}
+      {{ nine_table(round.back, t("round.holes.back_total"), round, 9) }}
     </div>
     {% if round.stats_recorded %}
       <p class="penalty-strokes"
@@ -110,6 +142,7 @@
         {{- t("round.penalty_strokes", count=round.penalty_strokes) -}}
       </p>
     {% endif %}
+    {% if net_card and net_layout == "separate" %}{{ net.separate(net_card, round) }}{% endif %}
   {% endif %}
   {% if round.recorded %}
     {# arrived from the scan that recorded this round: confirm it once, then leave the address

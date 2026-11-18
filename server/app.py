@@ -55,7 +55,7 @@ from .static_files import (
 from .strings import Strings
 from .timings import EXCEPTION, Sample, TimingSink, flush_periodically
 from .version import site_version as read_site_version
-from .views import calendar_date, calendar_month, countdown, timestamp
+from .views import calendar_date, calendar_month, countdown, golf_figure, timestamp
 
 HERE = Path(__file__).resolve().parent
 TEMPLATES_DIR = HERE / "templates"
@@ -334,6 +334,7 @@ def create_app(
     templates.env.filters["calendar_date"] = calendar_date
     templates.env.filters["countdown"] = countdown
     templates.env.filters["calendar_month"] = calendar_month
+    templates.env.filters["golf_figure"] = golf_figure
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
     # Not checked at startup: golf-site refuses to run without the renders, and tests
     # build apps on a fresh clone that has none.

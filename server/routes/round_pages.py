@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from ..auth import current_user
-from ..dailies import scores_hidden
+from ..dailies import load_net_card, scores_hidden
 from ..db import Database
 from ..rounds import VoidedRound, find_round
 from ..seeds import load_seed
@@ -18,6 +18,11 @@ from .common import not_found
 #: the query parameter `/s/` adds for the scan that recorded the round, which the round page
 #: turns into its confirmation heading and a script then strips from the address bar
 RECORDED = "recorded"
+
+
+#: which layout a daily round's net card takes while one is chosen: "separate" or
+#: "combined"
+NET_LAYOUT = "separate"
 
 
 def round_router(templates: Jinja2Templates) -> APIRouter:
@@ -89,6 +94,10 @@ def round_router(templates: Jinja2Templates) -> APIRouter:
                 "page": None,
                 "round": round_view(row, found, player.display_name, recorded),
                 "scores_hidden": hidden,
+                "net_card": None if hidden else load_net_card(db, found.public_id),
+                # TEMPORARY: ?net=combined shows the other layout, to compare the two
+                # in a browser until one is chosen
+                "net_layout": request.query_params.get("net", NET_LAYOUT),
             },
         )
 

@@ -642,6 +642,45 @@ table.nine .fairway {
   text-align: center;
 }
 
+/* A daily round's net card as three more columns: strokes received, net and points. The
+   table widens to hold them, still two nines side by side on a desktop. */
+table.nine.with-net {
+  width: 29rem;
+}
+
+table.nine.with-net col.hole,
+table.nine.with-net col.putts {
+  width: 11%;
+}
+
+table.nine.with-net col.par {
+  width: 10%;
+}
+
+table.nine.with-net col.strokes {
+  width: 20%;
+}
+
+table.nine.with-net.with-fairways col.strokes {
+  width: 16%;
+}
+
+table.nine.with-net col.fairway {
+  width: 10%;
+}
+
+table.nine.with-net col.received,
+table.nine.with-net col.net,
+table.nine.with-net col.points {
+  width: 16%;
+}
+
+table.nine.with-net.with-fairways col.received,
+table.nine.with-net.with-fairways col.net,
+table.nine.with-net.with-fairways col.points {
+  width: 14%;
+}
+
 /* Strokes against par: over par red, under par green, level par left as it is. Also sets
    --score-color, a custom property (unlike currentColor, unaffected by the digit's own
    color below) that the scorecard decorators borrow their ring color from. The admin round
@@ -918,4 +957,77 @@ ul.daily-seed-facts {
 ul.daily-seed-facts > li {
   list-style: none;
   margin: 0;
+}
+
+/* A daily's results on its seed page. The viewer's own line stands out from the field's,
+   and the points that decide the standing are bold. */
+article.daily-results tr[data-viewer] > * {
+  font-weight: 600;
+}
+
+article.daily-results tr[data-viewer] > :first-child {
+  box-shadow: inset 3px 0 var(--pico-primary);
+}
+
+article.daily-results .points {
+  font-weight: 600;
+}
+
+/* Two columns, the standing beside the viewer's matches, side by side on a wide screen;
+   each scrolls sideways inside its column rather than widening it. */
+article.daily-results .results-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  column-gap: calc(var(--pico-spacing) * 2);
+}
+
+article.daily-results .results-columns > * {
+  min-width: 0;
+}
+
+/* A match's result reads at a glance: green for a win, red for a loss. */
+table.matches tr[data-result="win"] > :last-child {
+  color: var(--pico-ins-color);
+}
+
+table.matches tr[data-result="loss"] > :last-child {
+  color: var(--pico-del-color);
+}
+
+/* Strokes received, as dots on a scorecard. */
+table td.received {
+  letter-spacing: 0.1em;
+}
+
+/* The skins as a list down the page: a tied hole's row is muted, its arrow pointing at
+   the hole its skin carried to. */
+article.daily-results table.skins-list tr[data-carried] > * {
+  color: var(--pico-muted-color);
+}
+
+article.daily-results table.skins-list tr[data-viewer] > * {
+  font-weight: 600;
+}
+
+/* The skins list's summary is as wide as its text, so Pico's chevron sits beside the
+   words it opens rather than at the card's far edge. */
+article.daily-results details.skins-list > summary {
+  display: inline-flex;
+  align-items: center;
+}
+
+article.daily-results details.skins-list > summary::after {
+  float: none;
+}
+
+/* sized to its names on a wide screen, rather than spread across the page */
+article.daily-results table.skins-list {
+  width: auto;
+  max-width: 100%;
+}
+
+/* tight cells, as on the scorecards, so all three columns fit a phone */
+article.daily-results table.skins-list th,
+article.daily-results table.skins-list td {
+  padding-inline: calc(var(--pico-spacing) * 0.5);
 }
