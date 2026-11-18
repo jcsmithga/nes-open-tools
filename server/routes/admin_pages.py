@@ -163,6 +163,7 @@ def admin_router(templates: Jinja2Templates) -> APIRouter:
             db_of(request),
             request.app.state.clock(),
             request.app.state.config.dailies_enabled,
+            parameters_of(request),
         )
         return render(
             request, "index.html", {"counts": counts(db_of(request)), "health": health}

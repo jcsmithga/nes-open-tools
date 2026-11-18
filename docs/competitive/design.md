@@ -322,7 +322,8 @@ averaged, with no wind.
 - **The model's own numbers are estimated offline**: how much players, layouts, terrains
   and pins each vary, which sets how far a thin rating is pulled toward its group, and
   gamma and the mirrored term. They are checked in as a parameters file, and re-estimated
-  by hand as the data grows, about quarterly. The estimate takes all the CPU time it
+  by hand as the data grows, about quarterly: `/admin` marks when the rounds received
+  since the estimate match the rounds it used. The estimate takes all the CPU time it
   needs. The daily refit on the web server (Architecture) reads the file and only solves
   for the ratings, which takes seconds, and its run records the file's hash.
 - **The estimate runs to convergence**, every parameter estimated together, by

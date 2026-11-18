@@ -2,6 +2,7 @@
 effects, a seed's stored ratings, and a player's index round by round beside their
 cards."""
 
+from dataclasses import replace
 from datetime import date, datetime
 
 import pytest
@@ -89,7 +90,7 @@ def user_id(db: Database, name: str) -> int:
 
 
 def test_a_fresh_site_is_healthy_but_has_no_run(db):
-    health = ratings_health(db, NOW, rollover=True)
+    health = ratings_health(db, NOW, rollover=True, parameters=PARAMETERS)
     assert (
         health.unrated_seeds,
         health.dailies_without_rules,
@@ -101,13 +102,15 @@ def test_a_fresh_site_is_healthy_but_has_no_run(db):
 
 def test_health_counts_what_the_rollover_left_behind(db, ratings, manifests):
     stored = [store_seed(db, m) for m in manifests[:3]]
-    assert ratings_health(db, NOW, rollover=True).unrated_seeds == 3
+    assert (
+        ratings_health(db, NOW, rollover=True, parameters=PARAMETERS).unrated_seeds == 3
+    )
     play_all(db, stored[:2])
     refit(db, ratings, date(2026, 11, 20), "2026-11-20T09:00:00Z", min_rounds=5)
     # a day stored without rules: its card is not filled either
     make_daily(db, "2026-11-20", stored[2])
     submit_scan(db, Player(db, stored[2], "ann").scan(), now="2026-11-20T12:00:00Z")
-    health = ratings_health(db, NOW, rollover=True)
+    health = ratings_health(db, NOW, rollover=True, parameters=PARAMETERS)
     assert health.unrated_seeds == 0
     assert health.dailies_without_rules == 1
     assert health.unfilled_cards == 1
@@ -115,9 +118,48 @@ def test_health_counts_what_the_rollover_left_behind(db, ratings, manifests):
     assert health.run_current
 
 
+def test_health_counts_own_rounds_since_the_estimate(db, manifests):
+    seed = store_seed(db, manifests[0])
+    for name, when in (
+        ("ann", "2026-11-18T12:00:00Z"),
+        ("bob", "2026-11-19T12:00:00Z"),
+        ("cat", "2026-11-19T13:00:00Z"),
+    ):
+        submit_scan(db, Player(db, seed, name).scan(), now=when)
+    estimated = replace(
+        PARAMETERS,
+        provenance={
+            "rounds": 3,
+            "latest_round": "2026-11-18T12:00:00Z",
+            "estimated": "2026-11-18",
+        },
+    )
+    health = ratings_health(db, NOW, rollover=True, parameters=estimated)
+    assert (health.estimated_rounds, health.estimated_on, health.rounds_since) == (
+        3,
+        "2026-11-18",
+        2,
+    )
+    assert not health.estimate_doubled
+    doubled = replace(estimated, provenance=estimated.provenance | {"rounds": 2})
+    assert ratings_health(db, NOW, rollover=True, parameters=doubled).estimate_doubled
+
+
+def test_parameters_without_provenance_never_ask_for_an_estimate(db):
+    bare = replace(PARAMETERS, provenance={})
+    health = ratings_health(db, NOW, rollover=True, parameters=bare)
+    assert health.rounds_since is None
+    assert not health.estimate_doubled
+
+
 def test_a_withdrawn_day_without_rules_needs_nothing(db, seeds):
     make_daily(db, "2026-11-19", seeds[2], withdrawn=True)
-    assert ratings_health(db, NOW, rollover=True).dailies_without_rules == 0
+    assert (
+        ratings_health(
+            db, NOW, rollover=True, parameters=PARAMETERS
+        ).dailies_without_rules
+        == 0
+    )
 
 
 # -- Runs -----------------------------------------------------------------------------------

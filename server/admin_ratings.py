@@ -54,13 +54,33 @@ class RatingsHealth:
     today: str
     #: whether this site runs the rollover that refits
     rollover: bool
+    #: what the parameters file was estimated on (its `provenance`): the rounds, the
+    #: date, and the slot-0 rounds received since its latest round. None when the file
+    #: does not say
+    estimated_rounds: int | None = None
+    estimated_on: str | None = None
+    rounds_since: int | None = None
 
     @property
     def run_current(self) -> bool:
         return self.latest_run_day == self.today
 
+    @property
+    def estimate_doubled(self) -> bool:
+        """Whether the rounds since the estimate match the rounds it used: the data has
+        doubled, the cue to re-estimate (docs/competitive/design.md, Fitting)."""
+        return (
+            self.estimated_rounds is not None
+            and self.rounds_since is not None
+            and self.rounds_since >= self.estimated_rounds
+        )
 
-def ratings_health(db: Database, now: datetime, rollover: bool) -> RatingsHealth:
+
+def ratings_health(
+    db: Database, now: datetime, rollover: bool, parameters: Parameters
+) -> RatingsHealth:
+    provenance = parameters.provenance
+    latest_round = provenance.get("latest_round")
     with db.transaction() as conn:
         row = conn.execute(
             """
@@ -75,6 +95,15 @@ def ratings_health(db: Database, now: datetime, rollover: bool) -> RatingsHealth
                    (SELECT max(day) FROM ratings_runs) AS latest_run_day
             """
         ).fetchone()
+        # the rounds a fit uses: every player's own round (slot 0), as `sitedb.read`
+        rounds_since = (
+            None
+            if latest_round is None
+            else conn.execute(
+                "SELECT count(*) FROM rounds WHERE slot = 0 AND received_at > ?",
+                (latest_round,),
+            ).fetchone()[0]
+        )
     return RatingsHealth(
         unrated_seeds=row["unrated_seeds"],
         dailies_without_rules=row["dailies_without_rules"],
@@ -82,6 +111,9 @@ def ratings_health(db: Database, now: datetime, rollover: bool) -> RatingsHealth
         latest_run_day=row["latest_run_day"],
         today=daily_date(now).isoformat(),
         rollover=rollover,
+        estimated_rounds=provenance.get("rounds"),
+        estimated_on=provenance.get("estimated"),
+        rounds_since=rounds_since,
     )
 
 

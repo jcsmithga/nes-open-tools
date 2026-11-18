@@ -602,6 +602,8 @@ def test_the_admin_home_flags_an_unrated_seed(fake_builder):
     assert health_state(page, "unfilled-cards") is None
     # no daily secret: no rollover to fall behind
     assert health_state(page, "latest-run") is None
+    # the checked-in estimate's rounds are far more than this site's
+    assert health_state(page, "parameters") is None
 
 
 def test_a_run_rates_the_seed_and_clears_the_flag(fake_builder):

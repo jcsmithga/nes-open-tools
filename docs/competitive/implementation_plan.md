@@ -92,7 +92,7 @@ with jdharms on 2026-11-18 and built the same day.
 | 36 | **Done.** A player's index round by round on their admin page: the last 20 counted rounds, each with gross and adjusted gross, its seed's course rating and slope, the index before and after and the handicap as the card stored them beside what the current rules give, the differential at scan and now, any exceptional score reduction, whether it is in the best 8 of 10, and the low mark; a row whose card and the current rules disagree is marked. The player's daily cards that do not count are listed with the reason. `compute_steps` in `golf/ratings/index.py` gives each round's step, and `compute` is built on it | 19 |
 | 37 | **Done.** Each player's current index and counted rounds on `/admin/users`, from one batched read of the page's players (`counted_rounds_for`) | 12 |
 | 38 | **Done.** `/admin/ratings`: every run of the last 60 days, with a day that has a daily but no run marked, and a change of parameters from the run before; each run's page shows its own numbers and the effects that moved most since the run before | 11 |
-| 39 | **Done.** Ratings health on `/admin`: unrated seeds, dailies without rules, cards not filled, and whether the latest run is for today's daily | 11, 18, 19 |
+| 39 | **Done.** Ratings health on `/admin`: unrated seeds, dailies without rules, cards not filled, whether the latest run is for today's daily, and the rounds the parameters file was estimated on beside the slot-0 rounds received since its latest round, marked once the second matches the first | 11, 18, 19 |
 | 40 | **Done.** A seed's ratings on its admin page: par, course rating, slope and the run that rated it, and each hole's rating, spread and stroke index | 12 |
 
 ### Later

@@ -45,7 +45,7 @@
 
   <section>
     <h2><a href="/admin/ratings">Ratings</a></h2>
-    <p>Each should be 0, and the latest run should be for today's daily.</p>
+    <p>Each should be 0, and the latest run should be for today's daily. The parameters are re-estimated once the rounds since match the rounds they were estimated on.</p>
     <div class="overflow-auto">
       <table class="admin-counts">
         <tbody>
@@ -74,6 +74,18 @@
                 {{ health.latest_run_day }}{% if not health.run_current %} (today is {{ health.today }}){% endif %}
               {% else %}
                 none
+              {% endif %}
+            </td>
+          </tr>
+          <tr data-health="parameters"
+              {% if health.estimate_doubled %}data-state="attention"{% endif %}>
+            <th scope="row">Parameters</th>
+            <td class="num">
+              {% if health.estimated_rounds is none or health.rounds_since is none %}
+                provenance unknown
+              {% else %}
+                estimated on {{ health.estimated_rounds }} rounds{% if health.estimated_on %} ({{ health.estimated_on }}){% endif %},
+                {{ health.rounds_since }} since{% if health.estimate_doubled %}: time to re-estimate{% endif %}
               {% endif %}
             </td>
           </tr>
