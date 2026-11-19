@@ -46,7 +46,7 @@ examples:
   golf-site-screenshot --populate -o shots
   golf-site-screenshot @daily @round --populate --viewer unplayed -o shots
   golf-site-screenshot @daily --populate --viewer signed-out --closed -o shots
-  golf-site-screenshot "@round?net=combined" --populate -o shots
+  golf-site-screenshot "@round?net=separate" --populate -o shots
 """
 
 #: what --populate names, each a page of the placeholder data
@@ -257,7 +257,7 @@ def capture(
 
 def named_page(path: str, named: dict[str, str]) -> tuple[str, str]:
     """A page to capture as (file name, path): a token names a page of the placeholder
-    data, keeping any query after it (`@round?net=combined`)."""
+    data, keeping any query after it (`@round?net=separate`)."""
     token, mark, query = path.partition("?")
     if token not in named:
         return slug(path), path

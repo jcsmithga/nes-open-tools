@@ -184,7 +184,7 @@ in this package.
   (`match.html`), all only where `scores_hidden` lets the viewer see scores. Every start
   rescores the days that should have matches and have none (`rescore_unmatched_days`),
   since migration 14 empties `daily_matches` and a migration cannot score. The round
-  page's `?net=combined` and `NET_LAYOUT` in `server/routes/round_pages.py` are temporary, for players' feedback on the net card's
+  page's `?net=separate` and `NET_LAYOUT` in `server/routes/round_pages.py` are temporary, for players' feedback on the net card's
   layout (`docs/competitive/implementation_plan.md`, task 35). `scores_hidden` is the one rule
   for hiding an open daily's scores from a viewer who has not played it, on the seed
   page and other players' round pages. A rerun and a day's withdrawal and restoration
@@ -480,7 +480,7 @@ a net card, needs some to show. `--populate` fills the database before capturing
 named `@seed` in the paths, today's daily with a field of twelve rated players and
 production-like display names (`@daily`), the viewer's round on it (`@round`) and their
 match against a rival in the field (`@match`). A
-token keeps a query after it, as `"@round?net=combined"`. It
+token keeps a query after it, as `"@round?net=separate"`. It
 fixes the app's clock inside the day's window and runs no rollover, so the placeholder
 day is the one stored. `--viewer` picks who looks: a player in the field (`played`, the
 default), a signed-in player outside it (`unplayed`), or nobody (`signed-out`).

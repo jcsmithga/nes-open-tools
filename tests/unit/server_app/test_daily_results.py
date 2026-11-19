@@ -157,10 +157,10 @@ def attribute_values(page: str, name: str) -> list[str]:
     return re.findall(rf'{name}="(-?\d+)"', page)
 
 
-def test_a_daily_rounds_page_shows_its_net_card_separately_by_default(site, daily):
+def test_separate_shows_the_net_card_under_the_nines(site, daily):
     round_id = play(site, daily, "dee", 5, 12)
     site.get("/auth/login", params={"as": "dee"})
-    page = site.get(f"/r/{round_id}").text
+    page = site.get(f"/r/{round_id}", params={"net": "separate"}).text
     assert 'class="net-card"' in page
     handicap = int(attribute_values(page, "data-handicap")[0])
     received = [int(r) for r in attribute_values(page, "data-received")]
@@ -185,10 +185,10 @@ def net_cells(html: str) -> list[str]:
     ]
 
 
-def test_combined_shows_each_net_after_its_gross(site, daily):
+def test_a_daily_rounds_page_shows_each_net_after_its_gross_by_default(site, daily):
     round_id = play(site, daily, "dee", 5, 12)
     site.get("/auth/login", params={"as": "dee"})
-    page = site.get(f"/r/{round_id}", params={"net": "combined"}).text
+    page = site.get(f"/r/{round_id}").text
     assert page.count("with-net") == 2
     assert 'class="net-card"' not in page
     handicap = int(attribute_values(page, "data-handicap")[0])
@@ -223,7 +223,7 @@ def test_combined_shows_each_net_after_its_gross(site, daily):
 def test_a_nines_net_total_follows_its_gross(site, daily):
     round_id = play(site, daily, "dee", 5, 12)
     site.get("/auth/login", params={"as": "dee"})
-    page = site.get(f"/r/{round_id}", params={"net": "combined"}).text
+    page = site.get(f"/r/{round_id}").text
     received = [int(r) for r in attribute_values(page, "data-received")]
     nets = [int(n) for n in attribute_values(page, "data-net")]
     for number, table in enumerate(nine_tables(page)):

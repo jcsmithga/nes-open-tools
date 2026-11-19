@@ -22,7 +22,7 @@ RECORDED = "recorded"
 
 #: which layout a daily round's net card takes while one is chosen: "separate" or
 #: "combined"
-NET_LAYOUT = "separate"
+NET_LAYOUT = "combined"
 
 
 def round_router(templates: Jinja2Templates) -> APIRouter:
@@ -97,7 +97,7 @@ def round_router(templates: Jinja2Templates) -> APIRouter:
                 "round": round_view(row, found, player.display_name, recorded),
                 "scores_hidden": hidden,
                 "net_card": None if hidden else load_net_card(db, found.public_id),
-                # TEMPORARY: ?net=combined shows the other layout, to compare the two
+                # TEMPORARY: ?net=separate shows the other layout, to compare the two
                 # in a browser until one is chosen
                 "net_layout": request.query_params.get("net", NET_LAYOUT),
             },

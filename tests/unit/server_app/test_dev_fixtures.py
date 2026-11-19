@@ -56,7 +56,7 @@ def test_the_viewers_round_has_a_net_card(open_site):
     test_client, populated = open_site
     test_client.get("/auth/login", params={"as": dev_fixtures.VIEWER})
     page = test_client.get(f"/r/{populated.round}").text
-    assert 'class="net-card"' in page
+    assert "data-received" in page
 
 
 def test_an_outsider_sees_no_results_while_the_day_is_open(open_site):
