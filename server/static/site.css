@@ -526,6 +526,15 @@ details.download-settings > summary {
   line-height: var(--pico-line-height);
 }
 
+/* Pico's chevron follows the summary's last word rather than floating to the card's far
+   edge, so the line reads as the control that opens the settings. */
+details.download-settings > summary::after {
+  float: none;
+  display: inline-block;
+  vertical-align: middle;
+  margin-inline-start: calc(var(--pico-spacing) * 0.5);
+}
+
 /* Seed page download form. download.js sets data-state: checking, missing, ready,
    building, done, error or unavailable. */
 article.download form > :last-child {
@@ -994,6 +1003,12 @@ table.matches tr[data-result="loss"] > :last-child {
   color: var(--pico-del-color);
 }
 
+/* "12 down" stays on one line, so every row keeps one height. */
+table.matches th:last-child,
+table.matches td:last-child {
+  white-space: nowrap;
+}
+
 /* Strokes received, as dots on a scorecard. */
 table td.received {
   letter-spacing: 0.1em;
@@ -1058,4 +1073,26 @@ table.admin-index td {
 
 table.admin-index tr[data-state="mismatch"] td:first-child {
   box-shadow: inset 3px 0 0 var(--pico-del-color);
+}
+
+/* The day, then the course's numbers, in one card: the rule between them sits in the
+   card's own padding. */
+article.seed-summary > div > p:last-child {
+  margin-bottom: 0;
+}
+
+/* A community hole's author shows under its id on a phone, where the source column is
+   hidden; a ROM hole's id already names its course and hole. */
+table.holes .hole-author {
+  display: none;
+}
+
+@media (max-width: 575px) {
+  table.holes .hole-source {
+    display: none;
+  }
+
+  table.holes .hole-author {
+    display: block;
+  }
 }

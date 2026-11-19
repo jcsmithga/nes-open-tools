@@ -447,3 +447,23 @@ def test_an_abi_one_seed_offers_bgm_but_no_swing_putt_or_spin(
         response = post_download(test_client, seed_id, extra={"spin": "back1"})
         assert response.status_code == 400
         assert response.json() == {"error": "invalid", "values": {"field": "spin"}}
+
+
+def test_the_hole_table_marks_its_source_column_and_a_community_holes_author(client):
+    seed_id = generate_seed(client)
+    with app_state(client).db.transaction() as conn:
+        conn.execute(
+            "UPDATE seed_holes SET source_rom = NULL, source_course = NULL,"
+            " source_hole = NULL, author = 'someone' WHERE seed_id = ? AND position = 1",
+            (seed_id,),
+        )
+    page = client.get(f"/h/{seed_id}").text
+    table = page[
+        page.index('<table class="holes') : page.index(
+            "</table>", page.index('<table class="holes')
+        )
+    ]
+    # a header, 18 holes and the totals each have a source cell a phone hides
+    assert table.count('class="hole-source"') == 20
+    # only the community hole repeats its author where a phone shows it
+    assert table.count('class="hole-author"') == 1
