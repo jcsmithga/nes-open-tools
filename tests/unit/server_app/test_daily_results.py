@@ -196,14 +196,21 @@ def test_combined_shows_each_net_after_its_gross(site, daily):
         for cell in net_cells(table[: table.index("<tfoot>")])
     ]
     assert holes == [str(n) if r else "" for r, n in zip(received, nets, strict=True)]
-    # the net right after the gross, fairways (when recorded) before putts, points last
+    # the scores together, then the stats: fairways (when recorded) before putts
     for table in nine_tables(page):
         cols = re.findall(r'<col class="(\w+)">', table)
         assert "received" not in cols
-        assert cols[cols.index("strokes") + 1] == "net"
-        assert cols[-2:] == ["putts", "points"]
+        start = cols.index("strokes")
+        assert cols[start : start + 3] == ["strokes", "net", "points"]
+        assert cols[-1] == "putts"
         if "fairway" in cols:
-            assert cols.index("fairway") < cols.index("putts")
+            assert cols.index("points") < cols.index("fairway") < cols.index("putts")
+    # a hole that scored nothing is muted
+    points = re.findall(
+        r'<td class="num points( no-points)?"\s+data-points="(\d+)"', page
+    )
+    assert len(points) == 18
+    assert all((muted != "") == (value == "0") for muted, value in points)
 
 
 def test_a_nines_net_total_follows_its_gross(site, daily):

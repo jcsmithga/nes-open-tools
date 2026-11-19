@@ -588,7 +588,10 @@ article.download code[data-filename] {
 }
 
 /* Scan page: one table per nine, side by side while both fit and stacked when they don't.
-   Fixed layout and set column widths make the two tables line up either way. */
+   As on a paper scorecard, every column is the same width and every cell is centered: the
+   fixed layout with no column widths shares the table out evenly, which also lines the two
+   tables up either way, and the side padding is trimmed so a header such as "Gross" fits
+   its share. */
 .nines {
   display: flex;
   flex-wrap: wrap;
@@ -598,7 +601,7 @@ article.download code[data-filename] {
 
 table.nine {
   table-layout: fixed;
-  width: 26rem;
+  width: 27rem;
   max-width: 100%;
 }
 
@@ -606,112 +609,29 @@ table.nine {
 table.nine th,
 table.nine td {
   overflow-wrap: normal;
-}
-
-/* padding adjustment for phones */
-@media (max-width: 575px) {
-  table.nine th,
-  table.nine td {
-    padding-inline: calc(var(--pico-spacing) * 0.4);
-  }
-}
-
-table.nine col.hole,
-table.nine col.putts {
-  width: 24%;
-}
-
-table.nine col.par {
-  width: 18%;
-}
-
-table.nine col.strokes {
-  width: 34%;
-}
-
-/* A round that records fairways has a fifth column; the widths make room for it. */
-table.nine.with-fairways col.hole,
-table.nine.with-fairways col.putts {
-  width: 18%;
-}
-
-table.nine.with-fairways col.par {
-  width: 14%;
-}
-
-table.nine.with-fairways col.strokes {
-  width: 28%;
-}
-
-table.nine.with-fairways col.fairway {
-  width: 22%;
-}
-
-table.nine .fairway {
+  padding-inline: 0.25rem;
   text-align: center;
 }
 
-/* A daily round's net card in the nines: a net column after the gross, and points after
-   putts. The table widens to hold them, still two nines side by side on a desktop. */
-table.nine.with-net {
-  width: 27rem;
+/* The hole number labels its row, so a rule sets it off from the numbers. */
+table.nine tr > :first-child {
+  border-right: 1px solid var(--pico-muted-border-color);
 }
 
-/* centered, as the gross before it is */
-table.nine.with-net .net {
-  text-align: center;
+/* A daily round's net card in the nines: the scores together (gross, net, points), then
+   the stats. Points decide the standing, so their column is tinted: a layer over the
+   cell's own background, so the stripes still show through. A rule after it closes off
+   the scores from the stats that follow. A hole that scored nothing is muted. */
+table.nine.with-net .points {
+  background-image: linear-gradient(var(--points-tint), var(--points-tint));
+  border-right: 1px solid var(--pico-muted-border-color);
+  font-weight: 600;
+  --points-tint: color-mix(in srgb, var(--pico-primary) 7%, transparent);
 }
 
-table.nine.with-net col.hole {
-  width: 16%;
-}
-
-table.nine.with-net col.par {
-  width: 11%;
-}
-
-table.nine.with-net col.strokes {
-  width: 20%;
-}
-
-table.nine.with-net col.net {
-  width: 15%;
-}
-
-table.nine.with-net col.putts {
-  width: 19%;
-}
-
-table.nine.with-net col.points {
-  width: 19%;
-}
-
-table.nine.with-net.with-fairways col.hole {
-  width: 15%;
-}
-
-table.nine.with-net.with-fairways col.par {
-  width: 10%;
-}
-
-table.nine.with-net.with-fairways col.strokes {
-  width: 19%;
-}
-
-table.nine.with-net.with-fairways col.net {
-  width: 12%;
-}
-
-table.nine.with-net.with-fairways col.fairway {
-  width: 13%;
-}
-
-table.nine.with-net.with-fairways col.putts {
-  width: 17%;
-}
-
-table.nine.with-net.with-fairways col.points {
-  width: 14%;
+table.nine.with-net td.no-points {
+  color: var(--pico-muted-color);
+  font-weight: normal;
 }
 
 /* Strokes against par: over par red, under par green, level par left as it is. Also sets

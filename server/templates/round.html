@@ -14,8 +14,9 @@
      round from a ROM that records fairways (protocol version 2) has a fairway column. #}
   {% macro nine_table(nine, total_label, totals=none, first=0) %}
     {% set fairways = round.stats_recorded %}
-    {# combined: a daily round's net card in the nines, a net column after the gross,
-       blank where strokes received left the hole as it was, and points at the end #}
+    {# combined: a daily round's net card in the nines, the scores together - gross, net
+       (blank where strokes received left the hole as it was) and points - and then the
+       stats #}
     {% set net_columns = net_card and net_layout == "combined" %}
     {% if net_columns %}
       {% set received = net_card.received[first:first + 9] %}
@@ -28,14 +29,12 @@
         <col class="strokes">
         {% if net_columns %}
           <col class="net">
+          <col class="points">
         {% endif %}
         {% if fairways %}
           <col class="fairway">
         {% endif %}
         <col class="putts">
-        {% if net_columns %}
-          <col class="points">
-        {% endif %}
       </colgroup>
       <thead>
         <tr>
@@ -44,14 +43,12 @@
           <th scope="col" class="num strokes">{{ t("round.holes.strokes") }}</th>
           {% if net_columns %}
             <th scope="col" class="num net">{{ t("round.net.net") }}</th>
+            <th scope="col" class="num points">{{ t("round.net.points") }}</th>
           {% endif %}
           {% if fairways %}
             <th scope="col" class="fairway">{{ t("round.holes.fairway") }}</th>
           {% endif %}
           <th scope="col" class="num">{{ t("round.holes.putts") }}</th>
-          {% if net_columns %}
-            <th scope="col" class="num">{{ t("round.net.points") }}</th>
-          {% endif %}
         </tr>
       </thead>
       <tbody>
@@ -67,6 +64,9 @@
                   data-net="{{ nine_nets[loop.index0] }}">
                 {%- if r != 0 %}{{ nine_nets[loop.index0] }}{% endif -%}
               </td>
+              {% set points = net_card.points[first + loop.index0] %}
+              <td class="num points{% if points == 0 %} no-points{% endif %}"
+                  data-points="{{ points }}">{{ points }}</td>
             {% endif %}
             {% if fairways %}
               <td class="fairway" data-fairway="{{ hole.fairway }}">
@@ -78,11 +78,6 @@
               </td>
             {% endif %}
             <td class="num">{{ hole.putts }}</td>
-            {% if net_columns %}
-              {% set i = first + loop.index0 %}
-              <td class="num"
-                  data-points="{{ net_card.points[i] }}">{{ net_card.points[i] }}</td>
-            {% endif %}
           </tr>
         {% endfor %}
       </tbody>
@@ -95,6 +90,7 @@
             <td class="num net">
               {%- if received | select | first %}{{ nine_nets | sum }}{% endif -%}
             </td>
+            <td class="num points">{{ net_card.points[first:first + 9] | sum }}</td>
           {% endif %}
           {% if fairways %}
             <td class="fairway"
@@ -104,9 +100,6 @@
             </td>
           {% endif %}
           <td class="num">{{ nine.putts }}</td>
-          {% if net_columns %}
-            <td class="num points">{{ net_card.points[first:first + 9] | sum }}</td>
-          {% endif %}
         </tr>
         {% if totals %}
           <tr>
@@ -117,6 +110,7 @@
               <td class="num net">
                 {%- if net_card.received | select | first %}{{ net_card.nets | sum }}{% endif -%}
               </td>
+              <td class="num points">{{ net_card.points | sum }}</td>
             {% endif %}
             {% if fairways %}
               <td class="fairway"
@@ -126,9 +120,6 @@
               </td>
             {% endif %}
             <td class="num">{{ totals.total_putts }}</td>
-            {% if net_columns %}
-              <td class="num points">{{ net_card.points | sum }}</td>
-            {% endif %}
           </tr>
         {% endif %}
       </tfoot>
