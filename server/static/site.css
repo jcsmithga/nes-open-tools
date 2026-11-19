@@ -651,41 +651,65 @@ table.nine .fairway {
   text-align: center;
 }
 
-/* A daily round's net card as three more columns: strokes received, net and points. The
-   table widens to hold them, still two nines side by side on a desktop. */
+/* A daily round's net card in the nines: a net column after the gross, and points after
+   putts. The table widens to hold them, still two nines side by side on a desktop. */
 table.nine.with-net {
-  width: 29rem;
+  width: 27rem;
 }
 
-table.nine.with-net col.hole,
-table.nine.with-net col.putts {
-  width: 11%;
+/* centered, as the gross before it is */
+table.nine.with-net .net {
+  text-align: center;
+}
+
+table.nine.with-net col.hole {
+  width: 16%;
 }
 
 table.nine.with-net col.par {
-  width: 10%;
+  width: 11%;
 }
 
 table.nine.with-net col.strokes {
   width: 20%;
 }
 
-table.nine.with-net.with-fairways col.strokes {
-  width: 16%;
+table.nine.with-net col.net {
+  width: 15%;
 }
 
-table.nine.with-net col.fairway {
+table.nine.with-net col.putts {
+  width: 19%;
+}
+
+table.nine.with-net col.points {
+  width: 19%;
+}
+
+table.nine.with-net.with-fairways col.hole {
+  width: 15%;
+}
+
+table.nine.with-net.with-fairways col.par {
   width: 10%;
 }
 
-table.nine.with-net col.received,
-table.nine.with-net col.net,
-table.nine.with-net col.points {
-  width: 16%;
+table.nine.with-net.with-fairways col.strokes {
+  width: 19%;
 }
 
-table.nine.with-net.with-fairways col.received,
-table.nine.with-net.with-fairways col.net,
+table.nine.with-net.with-fairways col.net {
+  width: 12%;
+}
+
+table.nine.with-net.with-fairways col.fairway {
+  width: 13%;
+}
+
+table.nine.with-net.with-fairways col.putts {
+  width: 17%;
+}
+
 table.nine.with-net.with-fairways col.points {
   width: 14%;
 }

@@ -167,16 +167,57 @@ def test_a_daily_rounds_page_shows_its_net_card_separately_by_default(site, dail
     assert "with-net" not in page
 
 
-def test_combined_puts_the_net_card_in_the_nine_tables(site, daily):
+def nine_tables(page: str) -> list[str]:
+    return re.findall(r'<table class="nine[^"]*">(.*?)</table>', page, re.S)
+
+
+def net_cells(html: str) -> list[str]:
+    return [
+        c.strip()
+        for c in re.findall(r'<td class="num net"[^>]*>(.*?)</td>', html, re.S)
+    ]
+
+
+def test_combined_shows_each_net_after_its_gross(site, daily):
     round_id = play(site, daily, "dee", 5, 12)
     site.get("/auth/login", params={"as": "dee"})
     page = site.get(f"/r/{round_id}", params={"net": "combined"}).text
     assert page.count("with-net") == 2
     assert 'class="net-card"' not in page
-    received = attribute_values(page, "data-received")
     handicap = int(attribute_values(page, "data-handicap")[0])
-    assert len(received) == 18 and sum(map(int, received)) == handicap
+    received = [int(r) for r in attribute_values(page, "data-received")]
+    nets = [int(n) for n in attribute_values(page, "data-net")]
+    assert len(received) == 18 and sum(received) == handicap
     assert len(attribute_values(page, "data-points")) >= 18
+    # a hole shows its net only where strokes received changed it
+    holes = [
+        cell
+        for table in nine_tables(page)
+        for cell in net_cells(table[: table.index("<tfoot>")])
+    ]
+    assert holes == [str(n) if r else "" for r, n in zip(received, nets, strict=True)]
+    # the net right after the gross, fairways (when recorded) before putts, points last
+    for table in nine_tables(page):
+        cols = re.findall(r'<col class="(\w+)">', table)
+        assert "received" not in cols
+        assert cols[cols.index("strokes") + 1] == "net"
+        assert cols[-2:] == ["putts", "points"]
+        if "fairway" in cols:
+            assert cols.index("fairway") < cols.index("putts")
+
+
+def test_a_nines_net_total_follows_its_gross(site, daily):
+    round_id = play(site, daily, "dee", 5, 12)
+    site.get("/auth/login", params={"as": "dee"})
+    page = site.get(f"/r/{round_id}", params={"net": "combined"}).text
+    received = [int(r) for r in attribute_values(page, "data-received")]
+    nets = [int(n) for n in attribute_values(page, "data-net")]
+    for number, table in enumerate(nine_tables(page)):
+        nine = slice(9 * number, 9 * number + 9)
+        expected = [str(sum(nets[nine])) if any(received[nine]) else ""]
+        if number == 1:
+            expected.append(str(sum(nets)) if any(received) else "")
+        assert net_cells(table[table.index("<tfoot>") :]) == expected
 
 
 def test_an_ordinary_round_has_no_net_card(site, daily, manifests):

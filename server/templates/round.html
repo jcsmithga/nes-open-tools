@@ -14,20 +14,26 @@
      round from a ROM that records fairways (protocol version 2) has a fairway column. #}
   {% macro nine_table(nine, total_label, totals=none, first=0) %}
     {% set fairways = round.stats_recorded %}
-    {# combined: a daily round's net card as three more columns of the nines #}
+    {# combined: a daily round's net card in the nines, a net column after the gross,
+       blank where strokes received left the hole as it was, and points at the end #}
     {% set net_columns = net_card and net_layout == "combined" %}
+    {% if net_columns %}
+      {% set received = net_card.received[first:first + 9] %}
+      {% set nine_nets = net_card.nets[first:first + 9] %}
+    {% endif %}
     <table class="nine striped{% if fairways %} with-fairways{% endif %}{% if net_columns %} with-net{% endif %}">
       <colgroup>
         <col class="hole">
         <col class="par">
         <col class="strokes">
-        <col class="putts">
+        {% if net_columns %}
+          <col class="net">
+        {% endif %}
         {% if fairways %}
           <col class="fairway">
         {% endif %}
+        <col class="putts">
         {% if net_columns %}
-          <col class="received">
-          <col class="net">
           <col class="points">
         {% endif %}
       </colgroup>
@@ -36,13 +42,14 @@
           <th scope="col" class="num">{{ t("round.holes.number") }}</th>
           <th scope="col" class="num">{{ t("round.holes.par") }}</th>
           <th scope="col" class="num strokes">{{ t("round.holes.strokes") }}</th>
-          <th scope="col" class="num">{{ t("round.holes.putts") }}</th>
+          {% if net_columns %}
+            <th scope="col" class="num net">{{ t("round.net.net") }}</th>
+          {% endif %}
           {% if fairways %}
             <th scope="col" class="fairway">{{ t("round.holes.fairway") }}</th>
           {% endif %}
+          <th scope="col" class="num">{{ t("round.holes.putts") }}</th>
           {% if net_columns %}
-            <th scope="col" class="num received">{{ t("round.net.received") }}</th>
-            <th scope="col" class="num">{{ t("round.net.net") }}</th>
             <th scope="col" class="num">{{ t("round.net.points") }}</th>
           {% endif %}
         </tr>
@@ -53,7 +60,14 @@
             <td class="num">{{ hole.number }}</td>
             <td class="num">{{ hole.par }}</td>
             <td class="num strokes{{ scorecard.to_par(hole.strokes, hole.par) }}">{{ scorecard.score_mark(hole.strokes, hole.par) }}</td>
-            <td class="num">{{ hole.putts }}</td>
+            {% if net_columns %}
+              {% set r = received[loop.index0] %}
+              <td class="num net"
+                  data-received="{{ r }}"
+                  data-net="{{ nine_nets[loop.index0] }}">
+                {%- if r != 0 %}{{ nine_nets[loop.index0] }}{% endif -%}
+              </td>
+            {% endif %}
             {% if fairways %}
               <td class="fairway" data-fairway="{{ hole.fairway }}">
                 {%- if hole.fairway == "hit" -%}
@@ -63,11 +77,9 @@
                 {%- endif -%}
               </td>
             {% endif %}
+            <td class="num">{{ hole.putts }}</td>
             {% if net_columns %}
               {% set i = first + loop.index0 %}
-              <td class="num received"
-                  data-received="{{ net_card.received[i] }}">{{ net.dots(net_card.received[i]) }}</td>
-              <td class="num">{{ net_card.nets[i] }}</td>
               <td class="num"
                   data-points="{{ net_card.points[i] }}">{{ net_card.points[i] }}</td>
             {% endif %}
@@ -79,7 +91,11 @@
           <th scope="row" class="num">{{ total_label }}</th>
           <td class="num">{{ nine.par }}</td>
           <td class="num strokes{{ scorecard.to_par(nine.strokes, nine.par) }}">{{ nine.strokes }}</td>
-          <td class="num">{{ nine.putts }}</td>
+          {% if net_columns %}
+            <td class="num net">
+              {%- if received | select | first %}{{ nine_nets | sum }}{% endif -%}
+            </td>
+          {% endif %}
           {% if fairways %}
             <td class="fairway"
                 data-fairways-hit="{{ nine.fairways_hit }}"
@@ -87,9 +103,8 @@
               {{- t("round.holes.fairways_count", hit=nine.fairways_hit, possible=nine.fairways_possible) -}}
             </td>
           {% endif %}
+          <td class="num">{{ nine.putts }}</td>
           {% if net_columns %}
-            <td class="num">{{ net_card.received[first:first + 9] | sum }}</td>
-            <td class="num">{{ net_card.nets[first:first + 9] | sum }}</td>
             <td class="num points">{{ net_card.points[first:first + 9] | sum }}</td>
           {% endif %}
         </tr>
@@ -98,7 +113,11 @@
             <th scope="row" class="num">{{ t("round.holes.total") }}</th>
             <td class="num">{{ totals.total_par }}</td>
             <td class="num strokes{{ scorecard.to_par(totals.total_strokes, totals.total_par) }}">{{ totals.total_strokes }}</td>
-            <td class="num">{{ totals.total_putts }}</td>
+            {% if net_columns %}
+              <td class="num net">
+                {%- if net_card.received | select | first %}{{ net_card.nets | sum }}{% endif -%}
+              </td>
+            {% endif %}
             {% if fairways %}
               <td class="fairway"
                   data-fairways-hit="{{ totals.fairways_hit }}"
@@ -106,9 +125,8 @@
                 {{- t("round.holes.fairways_count", hit=totals.fairways_hit, possible=totals.fairways_possible) -}}
               </td>
             {% endif %}
+            <td class="num">{{ totals.total_putts }}</td>
             {% if net_columns %}
-              <td class="num">{{ net_card.handicap }}</td>
-              <td class="num">{{ net_card.nets | sum }}</td>
               <td class="num points">{{ net_card.points | sum }}</td>
             {% endif %}
           </tr>

@@ -45,6 +45,7 @@ examples:
   golf-site-screenshot --populate -o shots
   golf-site-screenshot @daily @round --populate --viewer unplayed -o shots
   golf-site-screenshot @daily --populate --viewer signed-out --closed -o shots
+  golf-site-screenshot "@round?net=combined" --populate -o shots
 """
 
 #: what --populate names, each a page of the placeholder data
@@ -253,6 +254,15 @@ def capture(
     return written, problems
 
 
+def named_page(path: str, named: dict[str, str]) -> tuple[str, str]:
+    """A page to capture as (file name, path): a token names a page of the placeholder
+    data, keeping any query after it (`@round?net=combined`)."""
+    token, mark, query = path.partition("?")
+    if token not in named:
+        return slug(path), path
+    return slug(path[1:]), named[token] + mark + query
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Render randomizer site pages to PNG in headless Chromium.",
@@ -335,7 +345,7 @@ def main() -> int:
     if args.pages is None or not args.pages:
         args.pages = ["@seed", "@daily"] if args.populate else ["/", "/rom"]
     tokens = [path for path in args.pages if path.startswith("@")]
-    unknown = [token for token in tokens if token not in TOKENS]
+    unknown = [token for token in tokens if token.partition("?")[0] not in TOKENS]
     if unknown:
         parser.error(f"unknown page {', '.join(unknown)}; expected {', '.join(TOKENS)}")
     if tokens and not args.populate:
@@ -397,10 +407,7 @@ def main() -> int:
                 }
                 for token, path in named.items():
                     print(f"{token}: {path}")
-            pages = [
-                (path[1:], named[path]) if path in named else (slug(path), path)
-                for path in args.pages
-            ]
+            pages = [named_page(path, named) for path in args.pages]
             written, problems = capture(base, pages, args)
     except PlaywrightError as problem:
         print(f"error: {problem}", file=sys.stderr)

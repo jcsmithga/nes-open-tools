@@ -470,7 +470,8 @@ A page that shows other players' data, such as a seed page's rounds, a daily's r
 a net card, needs some to show. `--populate` fills the database before capturing with
 `server/dev_fixtures.py`'s placeholder data: a rated seed three players have played,
 named `@seed` in the paths, today's daily with a field of twelve rated players and
-production-like display names (`@daily`), and the viewer's round on it (`@round`). It
+production-like display names (`@daily`), and the viewer's round on it (`@round`). A
+token keeps a query after it, as `"@round?net=combined"`. It
 fixes the app's clock inside the day's window and runs no rollover, so the placeholder
 day is the one stored. `--viewer` picks who looks: a player in the field (`played`, the
 default), a signed-in player outside it (`unplayed`), or nobody (`signed-out`).
