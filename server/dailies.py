@@ -43,15 +43,17 @@ from golf.randomizer.daily import (
 )
 from golf.ratings.formats import (
     FieldCard,
+    MatchPlay,
     day_results,
+    match_play,
     net,
     skin_holes,
     stableford,
 )
-from golf.ratings.handicap import daily_handicap, strokes_received
+from golf.ratings.handicap import daily_handicap, match_strokes, strokes_received
 from golf.ratings.index import IndexState
 from golf.ratings.params import IndexRules
-from golf.ratings.rules import DailyRules
+from golf.ratings.rules import MATCHES, DailyRules
 
 from . import audit
 from .builder import BuilderUnavailableError, SeedBuilder
@@ -436,14 +438,39 @@ def score_day(conn: sqlite3.Connection, day: str) -> None:
     conn.executemany(
         """
         INSERT INTO daily_matches (day, user_a, user_b, holes_a, holes_b, winner_id,
-                                   margin)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+                                   margin, to_play)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            (day, m.a, m.b, m.holes_a, m.holes_b, m.winner, m.margin)
+            (day, m.a, m.b, m.holes_a, m.holes_b, m.winner, m.margin, m.to_play)
             for m in results.matches
         ],
     )
+
+
+def rescore_unmatched_days(db: Database) -> int:
+    """Rebuild the results (`score_day`) of every day that should have matches and has
+    none: a field of at least 2 under rules that play them. Migration 14 empties
+    `daily_matches`, and a migration is SQL that cannot score, so every start runs
+    this; it finds nothing once the rows are back. Returns the number of days."""
+    with db.transaction() as conn:
+        days = [
+            r["day"]
+            for r in conn.execute(
+                """
+                SELECT res.day FROM daily_results res
+                WHERE NOT EXISTS (SELECT 1 FROM daily_matches m WHERE m.day = res.day)
+                GROUP BY res.day HAVING count(*) >= 2 ORDER BY res.day
+                """
+            )
+        ]
+        stale = []
+        for day in days:
+            rules = _day_rules(conn, day)
+            if rules is not None and MATCHES in rules.formats:
+                score_day(conn, day)
+                stale.append(day)
+    return len(stale)
 
 
 def rescore_round(conn: sqlite3.Connection, public_id: str) -> None:
@@ -623,15 +650,32 @@ class MatchLine:
     opponent_id: int
     opponent_name: str
     opponent_round: str
-    holes_for: int
-    holes_against: int
-    margin: int
+    #: the player's own round, which the match card's address names first
+    own_round: str
+    #: the player's lead when the match was decided, negative when behind
+    lead: int
+    #: holes left when it was decided: 6 in 7 and 6, 0 for a match to the 18th
+    to_play: int
 
     @property
     def result(self) -> str:
-        if self.holes_for == self.holes_against:
+        if self.lead == 0:
             return "half"
-        return "win" if self.holes_for > self.holes_against else "loss"
+        return "win" if self.lead > 0 else "loss"
+
+    @property
+    def margin(self) -> int:
+        return abs(self.lead)
+
+    @property
+    def order(self) -> tuple[int, ...]:
+        """Best result first: the earliest and widest win to the earliest and widest
+        loss, a halved match between."""
+        if self.lead > 0:
+            return (0, -self.to_play, -self.lead)
+        if self.lead < 0:
+            return (2, self.to_play, -self.lead)
+        return (1,)
 
 
 @dataclass(frozen=True)
@@ -691,15 +735,12 @@ def load_day_results(db: Database, day: str) -> DayResults | None:
         matches: dict[int, list[MatchLine]] = {user: [] for user in names}
         for m in conn.execute("SELECT * FROM daily_matches WHERE day = ?", (day,)):
             a, b = m["user_a"], m["user_b"]
+            lead = m["margin"] if m["winner_id"] == a else -m["margin"]
             matches[a].append(
-                MatchLine(
-                    b, names[b], rounds[b], m["holes_a"], m["holes_b"], m["margin"]
-                )
+                MatchLine(b, names[b], rounds[b], rounds[a], lead, m["to_play"])
             )
             matches[b].append(
-                MatchLine(
-                    a, names[a], rounds[a], m["holes_b"], m["holes_a"], m["margin"]
-                )
+                MatchLine(a, names[a], rounds[a], rounds[b], -lead, m["to_play"])
             )
         rules = _day_rules(conn, day)
     positions = [r["position"] for r in rows]
@@ -728,15 +769,10 @@ def load_day_results(db: Database, day: str) -> DayResults | None:
     return DayResults(
         day=day,
         standing=tuple(standing),
-        # a player's best results first: biggest win to heaviest loss, then the
-        # standing's order among equal results
+        # a player's best results first (`MatchLine.order`), then the standing's order
+        # among equal results
         matches={
-            user: tuple(
-                sorted(
-                    ms,
-                    key=lambda m: (m.holes_against - m.holes_for, order[m.opponent_id]),
-                )
-            )
+            user: tuple(sorted(ms, key=lambda m: (m.order, order[m.opponent_id])))
             for user, ms in matches.items()
         },
         skins=skins,
@@ -817,6 +853,118 @@ def load_net_card(db: Database, public_id: str) -> NetCard | None:
         position=position,
         shared=position is not None and positions.count(position) > 1,
         field=len(positions),
+    )
+
+
+@dataclass(frozen=True)
+class MatchSide:
+    """One player in a match card."""
+
+    user_id: int
+    name: str
+    round_public_id: str
+    #: the daily handicap the player's card was scored with
+    handicap: int
+    strokes: tuple[int, ...]
+    #: strokes received in the match: the difference of the two handicaps, given to
+    #: the weaker player by stroke index, and none to the other
+    received: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class MatchCard:
+    """A daily match hole by hole, from the first player's side (`MatchPlay`)."""
+
+    day: str
+    seed_id: str
+    a: MatchSide
+    b: MatchSide
+    pars: tuple[int, ...]
+    stroke_indexes: tuple[int, ...]
+    play: MatchPlay
+
+
+_MATCH_SIDE_SQL = """
+SELECT c.day, c.user_id, c.handicap, coalesce(u.global_name, u.username) AS name,
+       r.id AS round_id, s.seed_id
+FROM daily_cards c
+JOIN dailies d ON d.day = c.day
+JOIN users u ON u.id = c.user_id
+JOIN rounds r ON r.public_id = c.round_public_id
+JOIN daily_seeds s ON s.day = c.day AND s.replaced_at IS NULL
+WHERE c.round_public_id = ? AND d.withdrawn_at IS NULL AND c.handicap IS NOT NULL
+"""
+
+
+def load_match_card(db: Database, round_a: str, round_b: str) -> MatchCard | None:
+    """The match between two rounds' players, from the first's side, or None unless
+    both are cards on the same day's results with a match between them."""
+    with db.transaction() as conn:
+        rows = [
+            conn.execute(_MATCH_SIDE_SQL, (r,)).fetchone() for r in (round_a, round_b)
+        ]
+        first, second = rows
+        if (
+            first is None
+            or second is None
+            or first["day"] != second["day"]
+            or first["user_id"] == second["user_id"]
+        ):
+            return None
+        low, high = sorted((first["user_id"], second["user_id"]))
+        scored = conn.execute(
+            "SELECT 1 FROM daily_matches WHERE day = ? AND user_a = ? AND user_b = ?",
+            (first["day"], low, high),
+        ).fetchone()
+        if scored is None:
+            return None
+        strokes = [
+            tuple(
+                h["strokes"]
+                for h in conn.execute(
+                    "SELECT strokes FROM round_holes WHERE round_id = ?"
+                    " ORDER BY position",
+                    (row["round_id"],),
+                )
+            )
+            for row in rows
+        ]
+        holes = conn.execute(
+            """
+            SELECT h.par, r.stroke_index
+            FROM seed_holes h
+            JOIN seed_hole_ratings r ON r.seed_id = h.seed_id AND r.position = h.position
+            WHERE h.seed_id = ? ORDER BY h.position
+            """,
+            (first["seed_id"],),
+        ).fetchall()
+    pars = tuple(h["par"] for h in holes)
+    stroke_indexes = tuple(h["stroke_index"] for h in holes)
+    given = match_strokes(first["handicap"], second["handicap"], stroke_indexes)
+    sides = [
+        MatchSide(
+            user_id=row["user_id"],
+            name=row["name"],
+            round_public_id=public_id,
+            handicap=row["handicap"],
+            strokes=played,
+            received=tuple(received),
+        )
+        for row, public_id, played, received in zip(
+            rows, (round_a, round_b), strokes, given, strict=True
+        )
+    ]
+    return MatchCard(
+        day=first["day"],
+        seed_id=first["seed_id"],
+        a=sides[0],
+        b=sides[1],
+        pars=pars,
+        stroke_indexes=stroke_indexes,
+        play=match_play(
+            net(sides[0].strokes, sides[0].received),
+            net(sides[1].strokes, sides[1].received),
+        ),
     )
 
 

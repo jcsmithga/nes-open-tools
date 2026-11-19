@@ -637,32 +637,12 @@ text = "Your Matches (Net Match Play)"
 
 
 [seed.results.opponent]
-note = "matches column header; the other player, linking to their round"
+note = "matches column header; the other player (after 'vs'), linking to their round"
 text = "Opponent"
 
-[seed.results.holes_won]
-note = "matches column header; holes the viewer won in the match, over all 18"
-text = "Won"
-
-[seed.results.holes_lost]
-note = "matches column header; holes the opponent won in the match, over all 18"
-text = "Lost"
-
 [seed.results.match_result]
-note = "matches column header; the match's result from the viewer's side"
+note = "matches column header; the match's result from the viewer's side, in golf notation (W 7&6, L 2 down, Halved), linking to the match's card"
 text = "Result"
-
-[seed.results.match_won]
-note = "the viewer won the match; value margin (holes, golf writes e.g. 3 up)"
-text = "{margin} up"
-
-[seed.results.match_lost]
-note = "the viewer lost the match; value margin (holes)"
-text = "{margin} down"
-
-[seed.results.match_halved]
-note = "the match was tied over 18 holes"
-text = "AS"
 
 [seed.results.skins_heading]
 note = "summary of the collapsed list of who won each hole's skins; a down arrow marks a tied hole whose skin carried to the next"

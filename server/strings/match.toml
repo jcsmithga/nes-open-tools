@@ -1,0 +1,28 @@
+# Match card strings (match.html): a daily match between two players, hole by hole, in
+# the traditional match play scorecard, from the first player's side. The result
+# notation (W 7&6, AS, 1 up) is golf notation written in the template, not here.
+# Format: see common.toml, and server/CLAUDE.md "Player-facing text".
+
+[match.page_title]
+note = "plain: browser tab title of a daily match's card; values a, b (the two players' display names, the page's player first)"
+text = "Match Play: {a} vs {b} - NES Open Randomizer"
+
+[match.heading]
+note = "h1 of a daily match's card: one player's net match against another, hole by hole"
+text = "Match Play"
+
+[match.seed]
+note = "label before the link to the daily's seed page, which shows the seed's magic words"
+text = "Seed Permalink:"
+
+[match.received]
+note = "plain: accessible name of the dots in the corner of a player's score, the strokes they receive on that hole in the match (the difference of the two daily handicaps, by stroke index); value count"
+text = "receives {count} stroke"
+
+[match.status]
+note = "match card row label; the match's state after each hole from the page's player's side (AS, 1 up, 2 dn), blank after it was decided; the last column holds the result (W 7&6)"
+text = "Match Score"
+
+[match.hidden]
+note = "in place of the match card: an open daily the viewer has not played; it shows once they submit their own round or the day closes"
+text = "This is an open daily, play the course or wait until it closes to view this page."

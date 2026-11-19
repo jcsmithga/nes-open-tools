@@ -2,6 +2,7 @@
 ratings and the day's rules, and filled later for a day opened without rules."""
 
 import json
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -14,7 +15,14 @@ from golf.randomizer.manifest import Settings
 from golf.ratings.formats import stableford
 from golf.ratings.handicap import daily_handicap
 from golf.ratings.rules import DailyRules
-from server.dailies import fill_days, load_day_results, restore_daily, withdraw_daily
+from server.dailies import (
+    MatchLine,
+    fill_days,
+    load_day_results,
+    rescore_unmatched_days,
+    restore_daily,
+    withdraw_daily,
+)
 from server.db import Database
 from server.ratings import Ratings, refit, seed_rating
 from server.round_indexes import stored_index
@@ -202,7 +210,14 @@ def test_two_players_make_a_standing_a_match_and_skins(db, seeds):
     assert scored["players"][dee.user.id][1:] == (1, 18, True)
     assert scored["players"][eve.user.id][1:] == (2, 0, False)
     (match,) = scored["matches"]
-    assert (match["winner_id"], match["margin"]) == (dee.user.id, 18)
+    # dee wins every hole, so the match is decided 10 up with 8 to play; the holes won
+    # still count all 18
+    assert (match["winner_id"], match["margin"], match["to_play"]) == (
+        dee.user.id,
+        10,
+        8,
+    )
+    assert (match["holes_a"], match["holes_b"]) in ((18, 0), (0, 18))
 
 
 def test_a_void_takes_a_round_out_of_the_results_and_a_restore_puts_it_back(db, seeds):
@@ -226,6 +241,34 @@ def test_a_withdrawn_day_has_no_results_until_restored(db, seeds):
     assert results(db) == {"players": {}, "matches": []}
     restore_daily(db, date(2026, 11, 18), admin_id=eve.user.id)
     assert results(db) == before
+
+
+def test_a_day_without_its_matches_is_rescored(db, seeds):
+    make_daily(db, "2026-11-18", seeds[2], rules=RULES)
+    two_rounds(db, seeds[2])
+    before = results(db)
+    assert rescore_unmatched_days(db) == 0
+    with db.transaction() as conn:
+        conn.execute("DELETE FROM daily_matches")
+    assert results(db)["matches"] == []
+    assert rescore_unmatched_days(db) == 1
+    assert results(db) == before
+    assert rescore_unmatched_days(db) == 0
+
+
+def test_a_field_of_one_is_not_rescored(db, seeds):
+    make_daily(db, "2026-11-18", seeds[2], rules=RULES)
+    dee = Player(db, seeds[2], "dee")
+    submit_scan(db, dee.scan(holes=FIVES), now="2026-11-18T12:00:00Z")
+    assert rescore_unmatched_days(db) == 0
+
+
+def test_a_day_whose_rules_play_no_matches_is_not_rescored(db, seeds):
+    rules = replace(RULES, formats=("standing", "skins"))
+    make_daily(db, "2026-11-18", seeds[2], rules=rules)
+    two_rounds(db, seeds[2])
+    assert results(db)["matches"] == []
+    assert rescore_unmatched_days(db) == 0
 
 
 def test_filling_a_day_scores_it(db, seeds):
@@ -260,3 +303,25 @@ def test_a_players_matches_list_their_best_result_first(db, seeds):
         (field["cal"], "loss"),
     ]
     assert [line.user_id for line in day.standing][0] == field["cal"]
+
+
+def line(lead: int, to_play: int) -> MatchLine:
+    return MatchLine(1, "opp", "r1", "r0", lead, to_play)
+
+
+def test_match_results_order_from_the_earliest_win_to_the_earliest_loss():
+    # wins: 7&6, 7&5, 6&5 (decided on the same hole as 7&5, by less), 2 up, 1 up; then
+    # halved; then losses, narrowest first: 1 down, 2 down, 3&2, 7&6
+    best_first = [
+        line(7, 6),
+        line(7, 5),
+        line(6, 5),
+        line(2, 0),
+        line(1, 0),
+        line(0, 0),
+        line(-1, 0),
+        line(-2, 0),
+        line(-3, 2),
+        line(-7, 6),
+    ]
+    assert sorted(reversed(best_first), key=lambda m: m.order) == best_first

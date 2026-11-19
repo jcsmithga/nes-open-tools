@@ -116,6 +116,24 @@ def test_startup_refuses_seeds_stored_before_their_holes_were(tmp_path, fake_bui
         pass
 
 
+def test_startup_rescores_days_left_without_their_matches(
+    fake_builder, caplog, monkeypatch
+):
+    # which days that finds is `rescore_unmatched_days`'s test, in
+    # tests/unit/test_server_daily_cards.py; this is that every start runs it
+    seen: list[Database] = []
+
+    def rescore(db: Database) -> int:
+        seen.append(db)
+        return 2
+
+    monkeypatch.setattr("server.app.rescore_unmatched_days", rescore)
+    app = create_app(Config(database=":memory:"), builder=fake_builder)
+    with caplog.at_level("INFO", logger="server.app"), TestClient(app) as test_client:
+        assert seen == [app_state(test_client).db]
+    assert "rescored 2 days without their matches" in caplog.text
+
+
 def test_startup_makes_a_builder_from_the_config_when_given_none(tmp_path):
     with TestClient(
         create_app(Config(database=":memory:", rom_dir=tmp_path))

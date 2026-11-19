@@ -4,7 +4,7 @@
 > 2026-11-12, updated for the ratings decisions of 2026-11-17 (design.md, Handicaps). It
 > orders the work that takes [design.md](design.md) to production. Tasks
 > 1, 13, 14, 15 and 17 are built (2026-11-16), tasks 3 to 9 (2026-11-17), and tasks 10
-> to 12, 24 and 18 to 23 (2026-11-17), and tasks 36 to 40 and 47 to 49 (2026-11-18); the decisions made while building them are in
+> to 12, 24 and 18 to 23 (2026-11-17), and tasks 36 to 40 and 47 to 49 (2026-11-18), with match play results on 2026-11-19; the decisions made while building them are in
 > [Decisions made in building](#decisions-made-in-building), to be discussed.
 
 Tasks are numbered for reference, not strictly in the order to do them: the
@@ -384,9 +384,9 @@ production display names.
 | # | Question | Decision |
 |---|----------|----------|
 | D84 | Where a day's results show | On the day's seed page, under its daily banner (jdharms); `/daily/<date>` still redirects there. The round page shows a daily round's net card |
-| D85 | The results' layout | The standing (position, player, points, skins) beside the viewer's matches (opponent, holes won and lost, the result), and each hole's skins as a list down the page, collapsed until opened, a tied hole marked with a down arrow to the hole its skin carried to (jdharms, chosen from four layouts; a horizontal strip ran to three phone widths with real names). Each table scrolls inside its own column on a phone |
+| D85 | The results' layout | The standing (position, player, points, skins) beside the viewer's matches (the result in match play's notation, linking to the match's card, then "vs" the opponent; D102), and each hole's skins as a list down the page, collapsed until opened, a tied hole marked with a down arrow to the hole its skin carried to (jdharms, chosen from four layouts; a horizontal strip ran to three phone widths with real names). Each table scrolls inside its own column on a phone |
 | D86 | The net card's layout | Two ship for players' feedback (jdharms): separate, the default, a card under the gross nines with holes across and rows for par, stroke index, strokes received as dots (a minus for one given back), net and points; and combined, at `?net=combined`, the net card in the nines: the scores together, then the stats - gross, net (blank on a hole where strokes received left it as it was, and on an Out, In or Total row where they left every hole so), points in a tinted column ruled off from the stats after it (fairways and greens in regulation on a wide screen, and putts), a hole that scored nothing muted - and no strokes received column. Task 35 removes the one not chosen |
-| D87 | The order of a player's matches | Best result first: biggest win to heaviest loss by holes won less lost, then the standing's order among equal results (jdharms) |
+| D87 | The order of a player's matches | Best result first, then the standing's order among equal results (jdharms): wins decided earliest first, and by the wider margin when decided on the same hole (7&6, 7&5, 6&5, 2 up, 1 up), then halved matches, then losses from the narrowest (1 down) to the earliest decided (Claude, in building D102) |
 | D88 | Who sees results | As scores (`scores_hidden`): while the day is open, a viewer who has played it; once it closes, everyone. Matches are only ever the viewer's own, so a signed-out viewer of a closed day sees the standing and the skins. A round's net card shows to any viewer who may see that round's scores |
 
 ### Stored indexes (tasks 47 to 49)
@@ -408,6 +408,20 @@ Decided with jdharms on 2026-11-18, before building (ADR 0034, amended, and ADR 
 | D99 | Where the backfill runs | At app startup, while `round_indexes` is empty, as the existing startup checks do: a migration is SQL and cannot run the replay. It checks each card's `index_used` and handicap against the replay, which also covers the dropped `index_after`, since a card's index after is the next card's index before. Claude, in building |
 | D100 | Rounds scanned before any ratings run | Store the starting index, or whatever index the player holds: an index exists before any seed is rated. Claude, in building |
 | D101 | The admin index page | Each counted round as stored at scan, with "now" columns from reading the stored rows under the current rules; a row whose stored index after and the read disagree is marked. Claude, in building |
+
+### Match play results (2026-11-19)
+
+From players' feedback: a match's result as golf states it, and its card hole by hole.
+Planned with jdharms on 2026-11-19 and built the same day.
+
+| # | Question | Decision |
+|---|----------|----------|
+| D102 | How a match's result reads | As match play states it, from the viewer's side: `W 7&6` (7 up with 6 to play), `W 2 up` or `L 1 down` for a match that reached the 18th, `Halved`. A match is decided once a player leads by more holes than are left; the winner is always the player who won more of all 18, so only the margin differs from counting every hole. `daily_matches` keeps the holes won over all 18 beside the margin and holes left when decided (migration 14) |
+| D103 | Where the notation lives | In the templates, not the strings catalog: it is golf notation, closer to code than prose (jdharms). Headings and labels around it are still catalog keys |
+| D104 | Rebuilding the stored matches | Migration 14 empties `daily_matches`, and a migration is SQL that cannot run the scoring, so every start rescores each day with a field of 2 or more under rules that play matches and no matches stored (`rescore_unmatched_days`). A check of the state rather than of the version crossed, so a start that dies between the migration and the rescore is repaired by the next. Claude, in building |
+| D105 | A match's card | `/r/<round>/vs/<other round>`, from the first round's player's side, which the viewer's results link to: holes across as on the net card, rows for par, stroke index, each player's gross, with the strokes received in the match (the handicap difference, by stroke index) as dots in the corner of the receiving player's scores, as on a paper card, positioned so no row or column grows, and the match's state after each hole, with the result at the end. Each hole's winner is tinted, and the holes after the match was decided are muted. It is a 404 unless both rounds are cards on the same day's results. Claude, in building |
+| D106 | Who sees a match's card | Anyone who may see the day's scores (`scores_hidden`), not only its two players: it shows nothing their two round pages do not. Claude, in building, on jdharms's agreement |
+| D107 | Scores on the match card | Plain gross numbers colored against par, with no score marks: the marks widen each column past a desktop's width, and the card is read for who won each hole. The state after each hole is set small for the same reason, and every hole, Out and In column is one width, whatever it holds (jdharms). Claude, in building |
 
 ### Checked
 

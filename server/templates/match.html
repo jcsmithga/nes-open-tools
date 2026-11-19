@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% import "_scorecard.html" as scorecard %}
+{% import "_net_card.html" as net %}
+{% import "_daily_results.html" as results %}
+{% block title %}{{ t_plain("match.page_title", a=match.a.name, b=match.b.name) }}{% endblock %}
+{% block content %}
+  {% set play = match.play %}
+  {% set decided = play.decided_after %}
+  {# the match's state after a hole, from the page's player's side; golf notation #}
+  {% macro status(lead) -%}
+    {%- if lead == 0 %}AS{% elif lead > 0 %}{{ lead }} up{% else %}{{ 0 - lead }} dn{% endif -%}
+  {%- endmacro %}
+  {# a hole's cell class: who won it, and whether it was played after the match was decided #}
+  {% macro hole_class(i, side) -%}
+    {%- if i >= decided %} after-decided{% elif play.holes[i] == side %} hole-won{% endif -%}
+  {%- endmacro %}
+  {# plain gross scores, colored against par, as on the net card: the tint of each
+     hole's winner is what the card is read for, and score marks would push it off a
+     desktop's width. The strokes a player receives in the match sit as dots in the
+     corner of their score, as on a paper card, out of the layout so no row or column
+     grows. #}
+  {% macro player_rows(player, side) %}
+    <tr data-user="{{ player.user_id }}">
+      <th scope="row">
+        <a href="/r/{{ player.round_public_id }}">{{ player.name }}</a>
+      </th>
+      {% for strokes in player.strokes %}
+        {% set par = match.pars[loop.index0] %}
+        {% set r = player.received[loop.index0] %}
+        <td class="num strokes{{ scorecard.to_par(strokes, par) }}{{ hole_class(loop.index0, side) }}"
+            data-received="{{ r }}"
+            {% if loop.index0 < decided and play.holes[loop.index0] == side %}data-won{% endif %}>
+          {{ strokes }}
+          {%- if r > 0 -%}
+            <span class="match-dots"
+                  role="img"
+                  aria-label="{{ t_plain('match.received', count=r) }}">{{ net.dots(r) }}</span>
+          {%- endif %}
+        </td>
+        {% if loop.index == 9 %}<td class="num nine-total">{{ player.strokes[:9] | sum }}</td>{% endif %}
+      {% endfor %}
+      <td class="num nine-total">{{ player.strokes[9:] | sum }}</td>
+      <td class="num nine-total">{{ player.strokes | sum }}</td>
+    </tr>
+  {% endmacro %}
+
+  <hgroup>
+    <h1>{{ t("match.heading") }}</h1>
+    <p class="match-players">
+      <a href="/r/{{ match.a.round_public_id }}">{{ match.a.name }}</a>
+      vs
+      <a href="/r/{{ match.b.round_public_id }}">{{ match.b.name }}</a>
+    </p>
+  </hgroup>
+
+  <p>{{ t("match.seed") }} <a href="/h/{{ match.seed_id }}"
+    class="magic-words">{{ magic_words|join(" ") }}</a></p>
+
+  {% if scores_hidden %}
+    <p class="round-hidden" data-state="scores-hidden">{{ t("match.hidden") }}</p>
+  {% else %}
+    <article class="match-card"
+             data-lead="{{ play.lead }}"
+             data-to-play="{{ play.to_play }}">
+      <div class="overflow-auto">
+        <table class="scorecard match striped">
+          <colgroup>
+            <col>
+            <col span="9">
+            <col class="nine-end">
+            <col span="9">
+            <col class="nine-end">
+            <col>
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="row">{{ t("round.net.hole") }}</th>
+              {% for par in match.pars %}
+                <th scope="col" class="num">{{ loop.index }}</th>
+                {% if loop.index == 9 %}<th scope="col"
+    class="num nine-total">{{ t("round.net.out") }}</th>{% endif %}
+              {% endfor %}
+              <th scope="col" class="num nine-total">{{ t("round.net.in") }}</th>
+              <th scope="col" class="num nine-total">{{ t("round.net.total") }}</th>
+            </tr>
+            <tr>
+              <th scope="row">{{ t("round.net.par") }}</th>
+              {% for par in match.pars %}
+                <th scope="col" class="num">{{ par }}</th>
+                {% if loop.index == 9 %}<th scope="col"
+    class="num nine-total">{{ match.pars[:9] | sum }}</th>{% endif %}
+              {% endfor %}
+              <th scope="col" class="num nine-total">{{ match.pars[9:] | sum }}</th>
+              <th scope="col" class="num nine-total">{{ match.pars | sum }}</th>
+            </tr>
+            <tr>
+              <th scope="row">{{ t("round.net.stroke_index") }}</th>
+              {% for si in match.stroke_indexes %}
+                <th scope="col" class="num">{{ si }}</th>
+                {% if loop.index == 9 %}<th scope="col" class="nine-total"></th>{% endif %}
+              {% endfor %}
+              <th scope="col" class="nine-total"></th>
+              <th scope="col" class="nine-total"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {{ player_rows(match.a, 1) }}
+            {{ player_rows(match.b, -1) }}
+            <tr class="match-status">
+              <th scope="row">{{ t("match.status") }}</th>
+              {% for lead in play.leads %}
+                {% if loop.index0 < decided %}
+                  <td class="num" data-lead="{{ lead }}">{{ status(lead) }}</td>
+                {% else %}
+                  <td class="num after-decided"></td>
+                {% endif %}
+                {% if loop.index == 9 %}<td class="nine-total"></td>{% endif %}
+              {% endfor %}
+              <td class="nine-total"></td>
+              <td class="num nine-total match-result"
+                  data-result="{{ 'win' if play.lead > 0 else 'loss' if play.lead < 0 else 'half' }}">
+                {{- results.match_score(play.lead, play.to_play) -}}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+  {% endif %}
+{% endblock %}

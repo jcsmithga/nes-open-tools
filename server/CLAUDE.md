@@ -28,7 +28,8 @@ in this package.
   - `server/routes/seed_pages.py` (`seed_router`): `/generate`, `/mystery` (a seed from
     an uploaded request file, ADR 0016; not found unless `Config.mystery_seeds`) and `/h/<id>`, with its manifest, its IPS
     download and its yardage book
-  - `server/routes/round_pages.py` (`round_router`): `/s/<scan>` and `/r/<id>`
+  - `server/routes/round_pages.py` (`round_router`): `/s/<scan>`, `/r/<id>` and a daily
+    match's card, `/r/<id>/vs/<other id>`
   - `server/routes/daily_pages.py` (`daily_router`): `/daily`, `/daily/<YYYY-MM-DD>` and
     `/daily/calendar`, the daily seed's addresses
   - `server/routes/account.py` (`account_router`): `/me` and `/auth/`
@@ -178,10 +179,12 @@ in this package.
   `golf/ratings/formats.py`) whenever a card is filled or the day is withdrawn or
   restored, and `server/rounds.py` calls `rescore_round` in the transaction of every
   void and restore. Pages read a day's results with `load_day_results` (the seed page,
-  through `_daily_results.html`) and a round's filled card with `load_net_card` (the
-  round page, through `_net_card.html`), both only where `scores_hidden` lets the viewer
-  see scores. The round page's `?net=combined` and `NET_LAYOUT` in
-  `server/routes/round_pages.py` are temporary, for players' feedback on the net card's
+  through `_daily_results.html`), a round's filled card with `load_net_card` (the round
+  page, through `_net_card.html`) and a match's card with `load_match_card`
+  (`match.html`), all only where `scores_hidden` lets the viewer see scores. Every start
+  rescores the days that should have matches and have none (`rescore_unmatched_days`),
+  since migration 14 empties `daily_matches` and a migration cannot score. The round
+  page's `?net=combined` and `NET_LAYOUT` in `server/routes/round_pages.py` are temporary, for players' feedback on the net card's
   layout (`docs/competitive/implementation_plan.md`, task 35). `scores_hidden` is the one rule
   for hiding an open daily's scores from a viewer who has not played it, on the seed
   page and other players' round pages. A rerun and a day's withdrawal and restoration
@@ -387,13 +390,18 @@ in this package.
 A human composes every English word a player sees, and Claude
 writes none of it, not even as a draft to be rewritten.
 
-The admin and host pages are the one exception: only admins and hosts see them, so their
+The admin and host pages are one exception: only admins and hosts see them, so their
 English is written in `server/templates/admin/` and `server/templates/host/` directly, and
 they call no `t()`. A string an admin action puts on a public page, such as the flagged
 marker, is still a catalog key. The hosting page embeds `download.js`'s catalog strings
 (`DOWNLOAD_SCRIPT_STRINGS`) for the script's status messages, as the seed page does.
 
-The checked-in Markdown pages under `server/content/pages/` are the other exception: their
+Golf notation is not prose: a match's result (`W 7&6`, `L 2 down`, `Halved`) and its
+state after a hole (`AS`, `1 up`, `2 dn`) are written in the templates
+(`_daily_results.html`, `match.html`), as data is. The headings and labels around them
+are catalog keys.
+
+The checked-in Markdown pages under `server/content/pages/` are also an exception: their
 frontmatter titles and bodies are human-authored editorial content, not interface strings.
 Claude may build the machinery around them but does not compose or edit that content. Shared
 interface text surrounding them, including the navigation dropdown label, remains in the
@@ -406,7 +414,7 @@ strings catalog.
 - The catalog is the TOML files under `server/strings/`: `common.toml` for the elements on
   every page (`base.html`), and one file per template named for it - `home.toml`,
   `rom.toml`, `generate.toml`, `mystery.toml`, `seed.toml`, `me.toml`, `not_found.toml`, `server_error.toml`, `sign_in_failed.toml`,
-  `round.toml`, `scan_rejected.toml`, `round_voided.toml`, `yardage_book.toml`, `claim.toml`, `wind.toml` for the profile
+  `round.toml`, `match.toml`, `scan_rejected.toml`, `round_voided.toml`, `yardage_book.toml`, `claim.toml`, `wind.toml` for the profile
   names `_wind.html`'s macros give both the generate form and the seed page, and
   `daily.toml` for the calendar of dailies. A daily's theme is not a string: its name
   and optional description are data in `golf/randomizer/data/daily_schedule.json`,
@@ -470,7 +478,8 @@ A page that shows other players' data, such as a seed page's rounds, a daily's r
 a net card, needs some to show. `--populate` fills the database before capturing with
 `server/dev_fixtures.py`'s placeholder data: a rated seed three players have played,
 named `@seed` in the paths, today's daily with a field of twelve rated players and
-production-like display names (`@daily`), and the viewer's round on it (`@round`). A
+production-like display names (`@daily`), the viewer's round on it (`@round`) and their
+match against a rival in the field (`@match`). A
 token keeps a query after it, as `"@round?net=combined"`. It
 fixes the app's clock inside the day's window and runs no rollover, so the placeholder
 day is the one stored. `--viewer` picks who looks: a player in the field (`played`, the
@@ -509,7 +518,8 @@ directly.
   day, cards, the pages, hidden scores and the admin actions on a day
 - `test_ratings.py`: a seed's ratings and a player's handicap on the seed page, and
   their index on `/me`
-- `test_daily_results.py`: a daily's results on its seed page
+- `test_daily_results.py`: a daily's results on its seed page, a round's net card and a
+  match's card
 - `test_dev_fixtures.py`: `server/dev_fixtures.py`, the placeholder data
   `golf-site-screenshot --populate` captures
 - `test_account.py`: `server/routes/account.py`

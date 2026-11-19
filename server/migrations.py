@@ -454,4 +454,27 @@ MIGRATIONS: list[str] = [
 
     UPDATE dailies SET rules = json_remove(rules, '$.index') WHERE rules IS NOT NULL;
     """,
+    # 14: a match's result as match play states it (docs/competitive/data_model.md,
+    # Results): the margin is the lead when the match was decided and to_play the holes
+    # left then, so a win by 7 and 6 has margin 7 and to_play 6. The rows are rebuilt
+    # at startup (`rescore_unmatched_days` in server/dailies.py).
+    """
+    DROP TABLE daily_matches;
+
+    CREATE TABLE daily_matches (
+        day TEXT NOT NULL REFERENCES dailies (day),
+        user_a INTEGER NOT NULL REFERENCES users (id),
+        user_b INTEGER NOT NULL REFERENCES users (id),
+        holes_a INTEGER NOT NULL CHECK (holes_a BETWEEN 0 AND 18),
+        holes_b INTEGER NOT NULL CHECK (holes_b BETWEEN 0 AND 18),
+        winner_id INTEGER REFERENCES users (id),
+        margin INTEGER NOT NULL CHECK (margin BETWEEN 0 AND 18),
+        to_play INTEGER NOT NULL CHECK (to_play BETWEEN 0 AND 17),
+        CHECK (user_a < user_b),
+        CHECK (winner_id IS NULL OR winner_id IN (user_a, user_b)),
+        CHECK ((winner_id IS NULL) = (margin = 0)),
+        CHECK (to_play = 0 OR margin > to_play),
+        PRIMARY KEY (day, user_a, user_b)
+    ) WITHOUT ROWID;
+    """,
 ]

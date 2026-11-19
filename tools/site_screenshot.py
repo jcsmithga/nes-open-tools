@@ -15,7 +15,8 @@ header. With --expand, each capture that has collapsed sections in the page body
 as the seed page's) is repeated with them all opened. With --populate, the database is
 filled first with placeholder data (`server/dev_fixtures.py`): a rated ordinary seed with
 a few rounds and today's daily with a field of twelve, which paths name as @seed, @daily
-and @round (the viewer's daily round); --viewer picks who looks and --closed shuts the
+@round (the viewer's daily round) and @match (the viewer's match against a rival in the
+field); --viewer picks who looks and --closed shuts the
 day. That builds four seeds, so it needs the vanilla US ROM too. Browser console
 errors and page errors are printed and make the command exit 1.
 
@@ -49,7 +50,7 @@ examples:
 """
 
 #: what --populate names, each a page of the placeholder data
-TOKENS = ("@seed", "@daily", "@round")
+TOKENS = ("@seed", "@daily", "@round", "@match")
 VIEWERS = ("played", "unplayed", "signed-out")
 
 
@@ -272,7 +273,7 @@ def main() -> int:
     parser.add_argument(
         "pages",
         nargs="*",
-        help="paths to capture, and with --populate @seed, @daily and @round "
+        help="paths to capture, and with --populate @seed, @daily, @round and @match "
         "(default: / /rom, or @seed @daily with --populate)",
     )
     parser.add_argument(
@@ -323,8 +324,9 @@ def main() -> int:
         "--populate",
         action="store_true",
         help="fill the database first with placeholder data: a rated seed with a few rounds "
-        "(@seed) and today's daily with a field of twelve (@daily, and the viewer's round "
-        "@round); builds four seeds, so needs the vanilla US ROM",
+        "(@seed) and today's daily with a field of twelve (@daily, the viewer's round "
+        "@round and their match against a rival @match); builds four seeds, so needs the "
+        "vanilla US ROM",
     )
     parser.add_argument(
         "--viewer",
@@ -404,6 +406,7 @@ def main() -> int:
                     "@seed": f"/h/{populated.seed}",
                     "@daily": f"/h/{populated.daily}",
                     "@round": f"/r/{populated.round}",
+                    "@match": f"/r/{populated.round}/vs/{populated.rival_round}",
                 }
                 for token, path in named.items():
                     print(f"{token}: {path}")

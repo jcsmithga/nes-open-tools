@@ -9,16 +9,20 @@
   {%- if line.won %} <mark data-winner>{{ t("seed.results.winner") }}</mark>{% endif -%}
 {%- endmacro %}
 
-{% macro match_result(match) -%}
-  {%- if match.result == "win" -%}
-    {{ t("seed.results.match_won", margin=match.margin) }}
-  {%- elif match.result == "loss" -%}
-    {{ t("seed.results.match_lost", margin=match.margin) }}
+{# a match's result in golf's notation, from one player's side: W or L, then the margin
+   and the holes left when it was decided (7&6), or the margin up or down when it went
+   to the last hole; Halved when level there. Notation, not prose, so it is written here
+   rather than in the strings catalog. #}
+{% macro match_score(lead, to_play) -%}
+  {%- if lead == 0 -%}
+    Halved
   {%- else -%}
-    {{ t("seed.results.match_halved") }}
+    {{ "W" if lead > 0 else "L" }} {{ lead | abs }}
+    {%- if to_play > 0 %}&amp;{{ to_play }}{% elif lead > 0 %} up{% else %} down{% endif -%}
   {%- endif -%}
 {%- endmacro %}
 
+{# the viewer's matches, best result first; a result opens the match's card #}
 {% macro my_matches(results, viewer_id) %}
   {% set mine = results.matches.get(viewer_id) %}
   {% if mine %}
@@ -27,19 +31,21 @@
       <table class="matches striped">
         <thead>
           <tr>
-            <th scope="col">{{ t("seed.results.opponent") }}</th>
-            <th scope="col" class="num">{{ t("seed.results.holes_won") }}</th>
-            <th scope="col" class="num">{{ t("seed.results.holes_lost") }}</th>
             <th scope="col">{{ t("seed.results.match_result") }}</th>
+            <th scope="col">{{ t("seed.results.opponent") }}</th>
           </tr>
         </thead>
         <tbody>
           {% for match in mine %}
-            <tr data-result="{{ match.result }}">
-              <td><a href="/r/{{ match.opponent_round }}">{{ match.opponent_name }}</a></td>
-              <td class="num">{{ match.holes_for }}</td>
-              <td class="num">{{ match.holes_against }}</td>
-              <td>{{ match_result(match) }}</td>
+            <tr data-result="{{ match.result }}"
+                data-lead="{{ match.lead }}"
+                data-to-play="{{ match.to_play }}">
+              <td class="match-score">
+                <a href="/r/{{ match.own_round }}/vs/{{ match.opponent_round }}">{{ match_score(match.lead, match.to_play) }}</a>
+              </td>
+              <td>
+                vs <a href="/r/{{ match.opponent_round }}">{{ match.opponent_name }}</a>
+              </td>
             </tr>
           {% endfor %}
         </tbody>

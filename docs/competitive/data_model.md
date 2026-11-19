@@ -179,7 +179,7 @@ rows.
 | Table | Holds |
 |-------|-------|
 | `daily_results` | day, user: Stableford points, position after countback (ties past it shared), skins won (carried skins included), whether they won the day (a field of at least 2) |
-| `daily_matches` | day, the two users in id order: holes won by each over all 18, the winner (none when halved) and the margin in holes. Every pair of cards |
+| `daily_matches` | day, the two users in id order: holes won by each over all 18, the winner (none when halved), and the margin and the holes left when the match was decided (7 and 6 for a win by 7 and 6; the margin at the 18th and 0 for a match that went there). Every pair of cards |
 
 - **Scoring is a pure function** of the day's filled cards whose rounds are recorded,
   and `rules` (`golf/ratings/formats.py`). It runs when a card is filled, and in the

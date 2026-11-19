@@ -1,5 +1,5 @@
 """The daily's formats: the standing with countback, skins with carryover, matches over
-all 18, and a field too small to win."""
+all 18 and decided as match play states them, and a field too small to win."""
 
 from dataclasses import replace
 
@@ -7,6 +7,7 @@ from golf.ratings.formats import (
     FieldCard,
     countback_key,
     day_results,
+    match_play,
     skins,
     standing,
 )
@@ -98,6 +99,7 @@ def test_a_field_of_two_has_a_winner_skins_and_a_match():
     assert results.players["ann"].skins == 18  # 17 carried onto the 18th
     (only,) = results.matches
     assert (only.holes_a, only.holes_b, only.winner, only.margin) == (1, 0, "ann", 1)
+    assert only.to_play == 0
 
 
 def test_tied_for_first_after_countback_both_win():
@@ -113,6 +115,52 @@ def test_a_match_gives_the_weaker_player_the_difference_by_stroke_index():
     bo = card("bo", [5] * 18, handicap=3)
     (only,) = day_results([ann, bo], STROKE_INDEXES, RULES).matches
     assert (only.holes_a, only.holes_b) == (16, 0)
+    # bo halves the first two holes, then ann wins 3 to 11: 9 up with 7 to play
+    assert (only.winner, only.margin, only.to_play) == ("ann", 9, 7)
+
+
+# -- Match play -----------------------------------------------------------------------
+
+
+def play(results: str) -> tuple[int, int, int]:
+    """A match from the first player's side, written a hole a character: w won, l lost,
+    h halved. Returns its lead when decided, the holes left then, and when it was
+    decided."""
+    nets = {"w": (3, 4), "l": (4, 3), "h": (4, 4)}
+    played = match_play([nets[r][0] for r in results], [nets[r][1] for r in results])
+    return played.lead, played.to_play, played.decided_after
+
+
+def test_a_match_is_decided_when_the_lead_is_more_than_the_holes_left():
+    # 7 up after 12, 6 left
+    assert play("wwwwwww" + "hhhhh" + "llllll") == (7, 6, 12)
+    # the earliest a match can end: 10 and 8
+    assert play("w" * 18) == (10, 8, 10)
+
+
+def test_holes_after_the_match_is_decided_count_for_nothing():
+    # 3 up with 2 left: 3 and 2, though the loser takes the last two
+    assert play("www" + "h" * 13 + "ll") == (3, 2, 16)
+    assert play("lll" + "h" * 13 + "ww") == (-3, 2, 16)
+
+
+def test_dormie_goes_to_the_last_hole():
+    # 1 up with 1 left is dormie: winning the 18th makes it 2 up, not 2 and 0
+    assert play("w" + "h" * 16 + "w") == (2, 0, 18)
+    assert play("w" + "h" * 16 + "h") == (1, 0, 18)
+    # halved when the trailing player takes the last hole
+    assert play("w" + "h" * 16 + "l") == (0, 0, 18)
+
+
+def test_a_match_level_after_every_hole_is_halved():
+    assert play("h" * 18) == (0, 0, 18)
+    assert play("wl" * 9) == (0, 0, 18)
+
+
+def test_a_match_states_its_lead_after_each_hole():
+    played = match_play([3, 4, 5, 4], [4, 4, 4, 3])
+    assert played.holes == (1, 0, -1, -1)
+    assert played.leads == (1, 1, 0, -1)
 
 
 def test_a_format_left_out_of_the_rules_is_not_scored():

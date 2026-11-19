@@ -35,6 +35,53 @@ def match(net_a: Sequence[int], net_b: Sequence[int]) -> tuple[int, int]:
     return won_a, won_b
 
 
+@dataclass(frozen=True)
+class MatchPlay:
+    """A match hole by hole, from the first player's side: each hole's result (1 won,
+    -1 lost, 0 halved) and the match's state after it. The match is decided once one
+    player leads by more holes than are left; the holes after that are played, and
+    shown, but count for nothing."""
+
+    holes: tuple[int, ...]
+
+    @property
+    def leads(self) -> tuple[int, ...]:
+        """The first player's lead after each hole, negative when behind."""
+        out, lead = [], 0
+        for result in self.holes:
+            lead += result
+            out.append(lead)
+        return tuple(out)
+
+    @property
+    def decided_after(self) -> int:
+        """The number of holes played when the match was decided: when one player led
+        by more than the holes left, or else the last hole."""
+        total = len(self.holes)
+        for played, lead in enumerate(self.leads, start=1):
+            if abs(lead) > total - played:
+                return played
+        return total
+
+    @property
+    def lead(self) -> int:
+        """The first player's lead when the match was decided; 0 when halved."""
+        return self.leads[self.decided_after - 1] if self.holes else 0
+
+    @property
+    def to_play(self) -> int:
+        """Holes left when the match was decided: 6 in a win by 7 and 6, and 0 for a
+        match that went the distance."""
+        return len(self.holes) - self.decided_after
+
+
+def match_play(net_a: Sequence[int], net_b: Sequence[int]) -> MatchPlay:
+    """A match between two players' net scores, hole by hole (`MatchPlay`)."""
+    return MatchPlay(
+        tuple((a < b) - (b < a) for a, b in zip(net_a, net_b, strict=True))
+    )
+
+
 def net(strokes: Sequence[int], received: Sequence[int]) -> list[int]:
     return [s - r for s, r in zip(strokes, received, strict=True)]
 
@@ -112,20 +159,27 @@ class PlayerResult:
 
 @dataclass(frozen=True)
 class MatchResult:
+    """A match as played to its end: holes won by each over all 18, and the margin and
+    holes left when it was decided (`MatchPlay`). Once decided, a match's winner leads
+    by more than the holes left, so it is also the player who won more of all 18."""
+
     a: Hashable
     b: Hashable
     holes_a: int
     holes_b: int
+    #: the first player's lead when the match was decided, negative when behind
+    lead: int
+    to_play: int
 
     @property
     def winner(self) -> Hashable | None:
-        if self.holes_a == self.holes_b:
+        if self.lead == 0:
             return None
-        return self.a if self.holes_a > self.holes_b else self.b
+        return self.a if self.lead > 0 else self.b
 
     @property
     def margin(self) -> int:
-        return abs(self.holes_a - self.holes_b)
+        return abs(self.lead)
 
 
 @dataclass(frozen=True)
@@ -139,7 +193,8 @@ def day_results(
 ) -> DayResults:
     """A daily's results under each of its formats. The day is won, and skins are won,
     only in a field of at least `rules.min_field`. A match plays all 18 holes, the weaker
-    player receiving the difference of the two daily handicaps by stroke index."""
+    player receiving the difference of the two daily handicaps by stroke index, and is
+    decided once a player leads by more holes than are left."""
     big_enough = len(cards) >= rules.min_field
     positions = (
         standing({c.player: c.points for c in cards}, rules.countback)
@@ -164,6 +219,12 @@ def day_results(
     if MATCHES in rules.formats:
         for a, b in combinations(cards, 2):
             given_a, given_b = match_strokes(a.handicap, b.handicap, stroke_indexes)
-            holes_a, holes_b = match(net(a.strokes, given_a), net(b.strokes, given_b))
-            matches.append(MatchResult(a.player, b.player, holes_a, holes_b))
+            net_a, net_b = net(a.strokes, given_a), net(b.strokes, given_b)
+            holes_a, holes_b = match(net_a, net_b)
+            played = match_play(net_a, net_b)
+            matches.append(
+                MatchResult(
+                    a.player, b.player, holes_a, holes_b, played.lead, played.to_play
+                )
+            )
     return DayResults(players, matches)

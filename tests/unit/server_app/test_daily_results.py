@@ -12,6 +12,7 @@ from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate
 from golf.randomizer.manifest import Settings
 from golf.ratings.rules import DailyRules
+from server.dailies import score_day
 from server.ratings import refit
 from server.submissions import submit_scan
 from tests.app_state import app_state
@@ -98,7 +99,12 @@ def test_a_player_who_has_played_sees_the_standing_their_matches_and_skins(site,
     assert len(standing_users(article)) == 2
     assert "data-winner" in article and "data-viewer" in article
     assert re.findall(r'data-result="(\w+)"', article) == ["win"]
-    # dee's 4s beat eve's 5s on every hole: every skin is dee's, none carried
+    # dee's 4s beat eve's 5s on every hole: the match is over 10 up with 8 to play, and
+    # its result opens the match's card
+    assert 'data-lead="10"' in article and 'data-to-play="8"' in article
+    assert "W 10&amp;8" in article
+    assert re.search(r'href="/r/\w{10}/vs/\w{10}"', article)
+    # every skin is dee's, none carried
     assert 'class="skins-list' in article
     assert "data-carried" not in article
 
@@ -131,6 +137,7 @@ def test_tied_holes_carry_their_skins(site, daily):
     # both play at the starting index, so every hole ties and every skin carries
     assert skins.count("data-carried") == 18
     assert re.findall(r'data-result="(\w+)"', article) == ["half"]
+    assert "Halved" in article
 
 
 def test_a_field_of_one_has_a_standing_but_no_skins(site, daily):
@@ -284,3 +291,74 @@ def test_yesterdays_box_shows_a_player_their_own_round(site, daily, clock):
     page = site.get("/").text
     box = page[page.index("previous-daily") :]
     assert 'class="daily-seed-card"' in box
+
+
+# -- A match's card -------------------------------------------------------------------------
+
+
+def match_card(site, mine: str, theirs: str) -> str:
+    response = site.get(f"/r/{mine}/vs/{theirs}")
+    assert response.status_code == 200
+    return response.text
+
+
+def test_a_match_card_shows_the_match_hole_by_hole_from_either_side(site, daily):
+    dee = play(site, daily, "dee", 4, 12)
+    eve = play(site, daily, "eve", 5, 13)
+    site.get("/auth/login", params={"as": "dee"})
+    page = match_card(site, dee, eve)
+    assert 'class="match-card"' in page
+    assert 'data-lead="10"' in page and 'data-to-play="8"' in page
+    # dee wins the first 10 holes, and the match is over: the last 8 count for nothing
+    assert page.count("data-won") == 10
+    assert re.findall(r'<td class="num" data-lead="(-?\d+)"', page) == [
+        str(n) for n in range(1, 11)
+    ]
+    assert page.count("after-decided") == 3 * 8
+    assert "W 10&amp;8" in page
+    theirs = match_card(site, eve, dee)
+    assert 'data-lead="-10"' in theirs and "L 10&amp;8" in theirs
+    # level handicaps: nobody receives a stroke
+    assert "match-dots" not in page
+
+
+def test_the_weaker_player_receives_the_difference_in_the_match(site, daily):
+    dee = play(site, daily, "dee", 4, 12)
+    eve = play(site, daily, "eve", 4, 13)
+    db = app_state(site).db
+    with db.transaction() as conn:
+        conn.execute(
+            "UPDATE daily_cards SET handicap = handicap + 2 WHERE round_public_id = ?",
+            (eve,),
+        )
+        score_day(conn, DAY)
+    site.get("/auth/login", params={"as": "dee"})
+    page = match_card(site, dee, eve)
+    received = [int(r) for r in attribute_values(page, "data-received")]
+    # both players' 18 holes, and only eve's two hardest carry a dot
+    assert len(received) == 36 and sum(received[:18]) == 0 and sum(received[18:]) == 2
+    assert page.count('class="match-dots"') == 2
+    # eve's two strokes win her the two hardest holes, the 1st and 12th, and nothing
+    # else differs: 2 up with 1 to play
+    assert 'data-lead="-2"' in page and 'data-to-play="1"' in page
+    assert "L 2&amp;1" in page
+
+
+def test_a_match_card_hides_from_a_viewer_who_has_not_played_an_open_day(site, daily):
+    dee = play(site, daily, "dee", 4, 12)
+    eve = play(site, daily, "eve", 5, 13)
+    site.get("/auth/login", params={"as": "fay"})
+    page = match_card(site, dee, eve)
+    assert 'data-state="scores-hidden"' in page
+    assert "data-won" not in page and "match-card" not in page
+
+
+def test_only_two_players_on_the_same_day_have_a_match_card(site, daily, manifests):
+    dee = play(site, daily, "dee", 4, 12)
+    eve = play(site, daily, "eve", 5, 13)
+    other = play(site, store_seed(app_state(site).db, manifests[0]), "fay", 4, 14)
+    site.get("/auth/login", params={"as": "dee"})
+    assert site.get(f"/r/{dee}/vs/{dee}").status_code == 404
+    assert site.get(f"/r/{dee}/vs/{other}").status_code == 404
+    assert site.get(f"/r/{dee}/vs/nosuchrnd0").status_code == 404
+    assert site.get(f"/r/{dee}/vs/{eve}").status_code == 200

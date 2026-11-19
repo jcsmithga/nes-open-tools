@@ -1,12 +1,12 @@
-"""Recording a round and showing it: the scan a ROM's QR code links to, `/s/<scan>`, and
-the round's permalink, `/r/<id>`."""
+"""Recording a round and showing it: the scan a ROM's QR code links to, `/s/<scan>`, the
+round's permalink, `/r/<id>`, and a daily match's card, `/r/<id>/vs/<other id>`."""
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from ..auth import current_user
-from ..dailies import load_net_card, scores_hidden
+from ..dailies import load_match_card, load_net_card, scores_hidden
 from ..db import Database
 from ..rounds import VoidedRound, find_round
 from ..seeds import load_seed
@@ -100,6 +100,36 @@ def round_router(templates: Jinja2Templates) -> APIRouter:
                 # TEMPORARY: ?net=combined shows the other layout, to compare the two
                 # in a browser until one is chosen
                 "net_layout": request.query_params.get("net", NET_LAYOUT),
+            },
+        )
+
+    @router.get("/r/{round_id}/vs/{other_id}", response_class=HTMLResponse)
+    def match_page(request: Request, round_id: str, other_id: str):
+        # the match between two daily rounds' players, hole by hole, from the first
+        # round's side. Its scores are the two rounds', so it hides as they would from a
+        # viewer who has not played an open daily
+        db: Database = request.app.state.db
+        card = load_match_card(db, round_id, other_id)
+        if card is None:
+            raise not_found()
+        row = load_seed(db, card.seed_id)
+        if row is None:  # pragma: no cover - seeds are never deleted
+            raise not_found()
+        viewer = current_user(request)
+        hidden = scores_hidden(
+            db,
+            card.seed_id,
+            None if viewer is None else viewer.id,
+            request.app.state.clock(),
+        )
+        return templates.TemplateResponse(
+            request,
+            "match.html",
+            {
+                "page": None,
+                "match": card,
+                "magic_words": row.manifest.course.magic_words,
+                "scores_hidden": hidden,
             },
         )
 

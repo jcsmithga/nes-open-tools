@@ -62,6 +62,8 @@ FIELD = (
 
 #: the field player a browser signs in as to see a played daily
 VIEWER = "luigi"
+#: the field player whose match against the viewer the match card shows
+RIVAL = "birdiequeen"
 #: a dev user who is in no field, to see an open daily unplayed
 OUTSIDER = "outsider"
 #: how many of the field play the ordinary seed
@@ -79,6 +81,8 @@ class Populated:
     daily: str
     #: the viewer's daily round, its public id
     round: str
+    #: the rival's daily round, its public id
+    rival_round: str
 
 
 def open_moment(day: date) -> datetime:
@@ -193,7 +197,7 @@ def populate(state, day: date) -> Populated:
     )
     # the field's rounds come in through the open window, before the open moment
     step = (open_moment(day) - made) / (len(FIELD) + 1)
-    viewer_round = ""
+    viewer_round = rival_round = ""
     for number, player in enumerate(FIELD, start=1):
         public_id = _play(
             db,
@@ -205,4 +209,6 @@ def populate(state, day: date) -> Populated:
         )
         if player.username == VIEWER:
             viewer_round = public_id
-    return Populated(seed, daily.seed_id, viewer_round)
+        if player.username == RIVAL:
+            rival_round = public_id
+    return Populated(seed, daily.seed_id, viewer_round, rival_round)

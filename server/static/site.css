@@ -1042,19 +1042,78 @@ article.daily-results .results-columns > * {
   min-width: 0;
 }
 
-/* A match's result reads at a glance: green for a win, red for a loss. */
-table.matches tr[data-result="win"] > :last-child {
+/* A match's result reads at a glance: green for a win, red for a loss. The result links
+   to the match's card, in the result's color rather than the link color. */
+table.matches tr[data-result="win"] .match-score a {
   color: var(--pico-ins-color);
 }
 
-table.matches tr[data-result="loss"] > :last-child {
+table.matches tr[data-result="loss"] .match-score a {
   color: var(--pico-del-color);
 }
 
-/* "12 down" stays on one line, so every row keeps one height. */
-table.matches th:last-child,
-table.matches td:last-child {
+/* "W 7&6" and "vs" a name stay on one line, so every row keeps one height. */
+table.matches th,
+table.matches td {
   white-space: nowrap;
+}
+
+/* A daily match's card: each hole's winner is tinted, and the holes played after the
+   match was decided are muted, since they count for nothing. */
+table.scorecard.match td.hole-won {
+  background-color: color-mix(in srgb, var(--pico-ins-color) 22%, transparent);
+  font-weight: 600;
+}
+
+table.scorecard.match .after-decided {
+  opacity: 0.45;
+}
+
+/* Every hole, Out and In column is one width, whatever it holds, so the card keeps its
+   grid as the match ends and its status cells empty: wide enough for the widest status
+   ("10 up", in the status row's small type) and a two-digit nine total, and narrow
+   enough that twenty of them fit a desktop's width. In rem, as Pico scales the root
+   font with the screen and the type in the cells with it. */
+table.scorecard.match tr > :not(:first-child):not(:last-child) {
+  width: 2.15rem;
+  min-width: 2.15rem;
+}
+
+/* The strokes a player receives in a match, as dots in the corner of their score as on a
+   paper card. Positioned, so they take no room: the cell is no wider or taller for them. */
+table.scorecard.match td.strokes {
+  position: relative;
+}
+
+table.scorecard.match .match-dots {
+  position: absolute;
+  top: 0.1em;
+  right: 0.2em;
+  font-size: 0.7em;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  color: var(--pico-color);
+}
+
+/* The state after each hole is set small, so "4 dn" is no wider than a score and the
+   card fits a desktop's width as the net card does. */
+table.scorecard.match tr.match-status > * {
+  font-weight: 600;
+  border-top: 2px solid var(--pico-muted-color);
+}
+
+table.scorecard.match tr.match-status > td:not(.match-result) {
+  font-size: 0.75em;
+  padding-inline: calc(var(--pico-spacing) * 0.1);
+}
+
+table.scorecard.match .match-result[data-result="win"] {
+  color: var(--pico-ins-color);
+}
+
+table.scorecard.match .match-result[data-result="loss"] {
+  color: var(--pico-del-color);
 }
 
 /* Strokes received, as dots on a scorecard. */

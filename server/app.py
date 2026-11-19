@@ -30,7 +30,7 @@ from golf.rendering.hole_renders import HoleRenders
 from .auth import DiscordClient, current_user
 from .builder import BuilderUnavailableError, SeedBuilder
 from .config import Config
-from .dailies import ROLLOVER_SECONDS, roll_over_periodically
+from .dailies import ROLLOVER_SECONDS, rescore_unmatched_days, roll_over_periodically
 from .db import Database, DatabaseError
 from .logging import request_id
 from .pages import PageCatalog
@@ -162,6 +162,10 @@ def create_app(
             after = db.migrate()
             if after != before:
                 log.info("schema migrated %d to %d", before, after)
+            # days whose matches a migration emptied (migration 14) are scored again
+            rescored = rescore_unmatched_days(db)
+            if rescored:
+                log.info("rescored %d days without their matches", rescored)
             unfilled = unfilled_seeds(db)
             if unfilled:
                 raise DatabaseError(

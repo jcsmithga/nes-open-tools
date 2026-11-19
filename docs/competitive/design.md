@@ -171,7 +171,9 @@ closing at 10:00 UTC the next day.
   handicap index.
 - **A daily's seed page** shows its results under its banner: the standing beside the
   viewer's own matches, best result first, and each hole's skins in a collapsed list,
-  subject to Spoilers below.
+  subject to Spoilers below. Each match's result opens its card: the two players' scores
+  hole by hole, the strokes received in the match and its state after each hole, as a
+  match play scorecard.
 
 Until handicaps exist (Milestone A), a daily shows its recorded rounds as any seed does,
 to players who have submitted: no standing, no winner and no records. A winner by gross
@@ -543,8 +545,11 @@ nothing of them. Each daily produces three results for each player.
   standing decides the day's winner, in a field of at least 2. Ties at every position
   are broken by countback: the most points over the last 9 holes, then the last 6, the
   last 3 and the 18th; players still tied share the position (jdharms, 2026-11-17).
-- **Matches**, net match play against every other player in the field, hole by hole, over
-  all 18 holes even once a match is decided.
+- **Matches**, net match play against every other player in the field, hole by hole. A
+  match is decided once a player leads by more holes than are left, and its result reads
+  as golf states it: won 7 and 6, 2 up, halved (jdharms, 2026-11-19). Every player plays
+  all 18, so the holes after a match is decided are played and shown, and count for
+  nothing.
 - **Skins**, net, across the whole field, in a field of at least 2: a hole is won by the
   one player with the lowest net score on it. When that score is shared, the skin carries
   over, and the next hole won takes every skin carried to it (jdharms, 2026-11-17: more
