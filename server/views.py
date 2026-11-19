@@ -174,6 +174,9 @@ class CalendarView:
     #: the first of the month shown
     month: date
     weeks: tuple[tuple[CalendarDay | None, ...], ...]
+    #: the month's days up to `today`, newest first: the list a narrow screen shows in
+    #: place of the weeks, where a day after today would only push today's down
+    days: tuple[CalendarDay, ...]
     #: the first of the months to link to, when there is anything there
     previous: date | None
     following: date | None
@@ -198,6 +201,9 @@ def calendar_view(
     return CalendarView(
         month=month,
         weeks=tuple(tuple(cells[i : i + 7]) for i in range(0, len(cells), 7)),
+        days=tuple(
+            cell for cell in reversed(cells) if cell is not None and cell.day <= today
+        ),
         previous=previous_month
         if first_day is not None and first_day < month
         else None,

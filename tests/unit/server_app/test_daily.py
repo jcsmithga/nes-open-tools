@@ -341,6 +341,49 @@ def test_the_calendar_shows_each_day_with_its_players(site, today):
     assert f'href="/daily/{today.isoformat()}"' in page
 
 
+def calendar_list(page: str) -> list[tuple[str, str | None]]:
+    """The narrow-screen list's days in page order, each with its `data-state`."""
+    found = re.search(r'<ol class="daily-calendar-list">(.*?)</ol>', page, re.DOTALL)
+    assert found is not None
+    items = re.findall(r"<li ([^>]*)>", found.group(1))
+    return [
+        (
+            re.search(r'data-day="([^"]+)"', item).group(1),  # type: ignore[union-attr]
+            state.group(1)
+            if (state := re.search(r'data-state="(\w+)"', item))
+            else None,
+        )
+        for item in items
+    ]
+
+
+def test_the_calendar_list_runs_newest_first_up_to_today(site, today):
+    make_daily(site, today)
+    days = calendar_list(site.get("/daily/calendar").text)
+    month = [today.replace(day=n).isoformat() for n in range(today.day, 0, -1)]
+    assert [day for day, _ in days] == month
+    assert days[0] == (today.isoformat(), "played")
+    # the days without a daily keep their rows, with no state to mark them played
+    assert all(state is None for _, state in days[1:])
+
+
+def test_the_calendar_list_marks_a_withdrawn_day(site, today):
+    make_daily(site, today)
+    withdraw_daily(app_state(site).db, today, admin_id(site))
+    days = calendar_list(site.get("/daily/calendar").text)
+    assert days[0] == (today.isoformat(), "withdrawn")
+
+
+def test_a_past_months_list_holds_every_day(site, today):
+    earlier = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+    make_daily(site, earlier)
+    make_daily(site, today)
+    page = site.get("/daily/calendar", params={"month": earlier.strftime("%Y-%m")})
+    days = calendar_list(page.text)
+    assert days[-1] == (earlier.isoformat(), "played")
+    assert len(days) == (today.replace(day=1) - earlier).days
+
+
 @pytest.mark.parametrize("month", ["2026-13", "soon", "2999-01"])
 def test_the_calendar_refuses_a_bad_or_future_month(site, month):
     assert site.get("/daily/calendar", params={"month": month}).status_code == 404

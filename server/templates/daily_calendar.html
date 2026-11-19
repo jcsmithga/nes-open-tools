@@ -1,6 +1,31 @@
 {% extends "base.html" %}
 {% block title %}{{ t_plain("daily.calendar.page_title") }}{% endblock %}
 {% block content %}
+  {% set weekdays = [
+    t("daily.calendar.weekday.monday"),
+    t("daily.calendar.weekday.tuesday"),
+    t("daily.calendar.weekday.wednesday"),
+    t("daily.calendar.weekday.thursday"),
+    t("daily.calendar.weekday.friday"),
+    t("daily.calendar.weekday.saturday"),
+    t("daily.calendar.weekday.sunday"),
+  ] %}
+  {% macro day_facts(cell) %}
+    {% set day = cell.daily %}
+    <a href="/daily/{{ cell.day.isoformat() }}">{{ day.theme.name }}</a>
+    {% if day.withdrawn %}
+      <small>{{ t("daily.calendar.withdrawn") }}</small>
+    {% else %}
+      <small>{% if day.players == 1 %}{{ t("daily.calendar.players_one") }}{% else %}{{ t("daily.calendar.players", count=day.players) }}{% endif %}</small>
+    {% endif %}
+  {% endmacro %}
+  {% macro day_attributes(cell) -%}
+    data-day="{{ cell.day.isoformat() }}"
+    {%- if cell.daily is not none %}
+      data-players="{{ cell.daily.players }}"
+      data-state="{% if cell.daily.withdrawn %}withdrawn{% else %}played{% endif %}"
+    {%- endif %}
+  {%- endmacro %}
   <hgroup>
     <h1>{{ t("daily.calendar.heading") }}</h1>
     <p class="daily-calendar-month">{{ calendar.month | calendar_month }}</p>
@@ -26,47 +51,41 @@
     </ul>
   </nav>
 
-  <div class="overflow-auto">
-    <table class="daily-calendar">
-      <thead>
+  <table class="daily-calendar">
+    <thead>
+      <tr>
+        {% for weekday in weekdays %}<th scope="col">{{ weekday }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for week in calendar.weeks %}
         <tr>
-          <th scope="col">{{ t("daily.calendar.weekday.monday") }}</th>
-          <th scope="col">{{ t("daily.calendar.weekday.tuesday") }}</th>
-          <th scope="col">{{ t("daily.calendar.weekday.wednesday") }}</th>
-          <th scope="col">{{ t("daily.calendar.weekday.thursday") }}</th>
-          <th scope="col">{{ t("daily.calendar.weekday.friday") }}</th>
-          <th scope="col">{{ t("daily.calendar.weekday.saturday") }}</th>
-          <th scope="col">{{ t("daily.calendar.weekday.sunday") }}</th>
+          {% for cell in week %}
+            {% if cell is none %}
+              <td class="daily-calendar-blank"></td>
+            {% else %}
+              <td {{ day_attributes(cell) }}>
+                <span class="daily-calendar-number">{{ cell.day.day }}</span>
+                {% if cell.daily is not none %}{{ day_facts(cell) }}{% endif %}
+              </td>
+            {% endif %}
+          {% endfor %}
         </tr>
-      </thead>
-      <tbody>
-        {% for week in calendar.weeks %}
-          <tr>
-            {% for cell in week %}
-              {% if cell is none %}
-                <td class="daily-calendar-blank"></td>
-              {% elif cell.daily is none %}
-                <td data-day="{{ cell.day.isoformat() }}">
-                  <span class="daily-calendar-number">{{ cell.day.day }}</span>
-                </td>
-              {% else %}
-                {% set day = cell.daily %}
-                <td data-day="{{ cell.day.isoformat() }}"
-                    data-players="{{ day.players }}"
-                    data-state="{% if day.withdrawn %}withdrawn{% else %}played{% endif %}">
-                  <span class="daily-calendar-number">{{ cell.day.day }}</span>
-                  <a href="/daily/{{ cell.day.isoformat() }}">{{ day.theme.name }}</a>
-                  {% if day.withdrawn %}
-                    <small>{{ t("daily.calendar.withdrawn") }}</small>
-                  {% else %}
-                    <small>{% if day.players == 1 %}{{ t("daily.calendar.players_one") }}{% else %}{{ t("daily.calendar.players", count=day.players) }}{% endif %}</small>
-                  {% endif %}
-                </td>
-              {% endif %}
-            {% endfor %}
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <ol class="daily-calendar-list">
+    {% for cell in calendar.days %}
+      <li {{ day_attributes(cell) }}>
+        <span class="daily-calendar-date">
+          <span>{{ weekdays[cell.day.weekday()] }}</span>
+          <span class="daily-calendar-number">{{ cell.day.day }}</span>
+        </span>
+        {% if cell.daily is not none %}
+          <span class="daily-calendar-facts">{{ day_facts(cell) }}</span>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ol>
 {% endblock %}
