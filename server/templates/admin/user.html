@@ -67,11 +67,7 @@
               <th scope="col" class="num">Adj.</th>
               <th scope="col" class="num">CR</th>
               <th scope="col" class="num">Slope</th>
-              <th scope="col" class="num">
-                Index before
-                <br>
-                <small>card / now</small>
-              </th>
+              <th scope="col" class="num">Index before</th>
               <th scope="col" class="num">Hcp</th>
               <th scope="col" class="num">
                 Diff
@@ -84,7 +80,7 @@
               <th scope="col" class="num">
                 Index after
                 <br>
-                <small>card / now</small>
+                <small>stored / now</small>
               </th>
             </tr>
           </thead>
@@ -98,12 +94,9 @@
                 <td class="num">{{ row.adjusted_gross }}</td>
                 <td class="num">{{ '%.1f' % row.course_rating }}</td>
                 <td class="num">{{ row.slope|golf_slope }}</td>
-                <td class="num" data-card-now>
-                  {% if row.card_index_before is not none %}{{ row.card_index_before|golf_figure }}{% else %}—{% endif %}
-                  / {{ row.index_before|golf_figure }}
-                </td>
-                <td class="num" data-card-now>
-                  {% if row.card_handicap is not none %}{{ row.card_handicap|golf_figure(0) }}{% else %}—{% endif %}
+                <td class="num">{{ row.index_before|golf_figure }}</td>
+                <td class="num">
+                  {% if row.handicap is not none %}{{ row.handicap|golf_figure(0) }}{% else %}—{% endif %}
                 </td>
                 <td class="num" data-differential="{{ row.differential_now }}">
                   {{ row.differential|golf_figure }} / {{ row.differential_now|golf_figure }}
@@ -113,16 +106,15 @@
                 <td class="num">
                   {% if row.low_mark is not none %}{{ row.low_mark|golf_figure }}{% else %}—{% endif %}
                 </td>
-                <td class="num" data-card-now data-index-after="{{ row.index_after }}">
-                  {% if row.card_index_after is not none %}{{ row.card_index_after|golf_figure }}{% else %}—{% endif %}
-                  / {{ row.index_after|golf_figure }}
+                <td class="num" data-index-after="{{ row.index_after_now }}">
+                  {{ row.index_after|golf_figure }} / {{ row.index_after_now|golf_figure }}
                 </td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-      <p><small>A highlighted row is one whose card and the current rules disagree: an earlier round voided or restored since it was filled, or rules changed.</small></p>
+      <p><small>Every number but "now" is as the round stored it at scan. A highlighted row is one whose stored index after it and a read of the stored rounds now disagree: an earlier round voided, restored or withdrawn since, or the index rules changed.</small></p>
     {% endif %}
     {% if handicap.uncounted %}
       <h3>Daily cards that do not count</h3>
@@ -143,7 +135,7 @@
                 <td>
                   {% if card.reason == "withdrawn" %}the day is withdrawn
                   {% elif card.reason == "voided" %}the round is voided
-            {% else %}the seed is not rated{% endif %}
+            {% else %}the seed was not rated when it was scanned{% endif %}
               </td>
               </tr>
             {% endfor %}

@@ -15,7 +15,8 @@ An admin can flag a round, which leaves it counted and marked, or void it. A voi
 moves to `voided_rounds` with its public id, freeing its slot for a different round, and a
 scan of its payload is refused until an admin restores it. Each admin action writes its
 audit row through `server/audit.py` in the same transaction. Recording a round on a
-daily's seed gives it a card in the same transaction (`server/dailies.py`).
+daily's seed gives it a card in the same transaction (`server/dailies.py`), and a player's
+own round stores the index they hold (`server/round_indexes.py`).
 """
 
 import json
@@ -24,11 +25,13 @@ from dataclasses import dataclass
 
 from golf.qr import payload
 from golf.randomizer.manifest import StoredManifest
+from golf.ratings.params import IndexRules
 
 from . import audit
 from .dailies import card_round, rescore_round
 from .db import Database
 from .ids import is_id, new_id
+from .round_indexes import record_index
 from .seeds import utc_now
 
 #: draws before recording a round gives up on finding an unused public id
@@ -252,9 +255,16 @@ def is_voided(conn: sqlite3.Connection, data: bytes) -> bool:
 
 
 def record_round(
-    conn: sqlite3.Connection, entry_id: int, slot: int, data: bytes, received_at: str
+    conn: sqlite3.Connection,
+    entry_id: int,
+    slot: int,
+    data: bytes,
+    received_at: str,
+    index_rules: IndexRules | None = None,
 ) -> Round:
     """Record a verified payload as the entry's round for its slot, drawing its public id.
+    A player's own round stores the index they hold under `index_rules`, the site's,
+    which default to the checked-in rules' defaults.
 
     The caller holds the transaction and has checked that the slot is free and the payload
     not voided.
@@ -264,7 +274,13 @@ def record_round(
     )
     recorded = _load_round(conn, "rounds.id = ?", (round_id,))
     assert recorded is not None
-    # a player's own round on an open daily's seed counts toward the day
+    rules = index_rules if index_rules is not None else IndexRules()
+    state = (
+        record_index(conn, recorded.public_id, recorded.user_id, received_at, rules)
+        if recorded.slot == 0
+        else None
+    )
+    # a player's own round on an open daily's seed counts toward the day and their index
     card_round(
         conn,
         recorded.public_id,
@@ -272,6 +288,8 @@ def record_round(
         recorded.user_id,
         recorded.slot,
         received_at,
+        state,
+        rules,
     )
     return recorded
 

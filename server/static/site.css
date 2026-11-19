@@ -1033,12 +1033,12 @@ article.daily-results table.skins-list td {
 }
 
 /* Admin ratings: a count or run that needs looking at, a day the refit missed, and an
-   index row whose card and the current rules disagree. */
+   index row whose stored index and a read of the stored rounds now disagree. */
 .admin-counts tr[data-state="attention"] th,
 .admin-counts tr[data-state="attention"] td,
 td[data-state="attention"],
 tr[data-state="missing"] td,
-table.admin-index tr[data-state="mismatch"] td[data-card-now] {
+table.admin-index tr[data-state="mismatch"] td[data-index-after] {
   color: var(--pico-del-color);
 }
 

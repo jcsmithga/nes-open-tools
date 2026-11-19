@@ -15,8 +15,12 @@ index, New players and Sandbagging).
 
 Every number is in `IndexRules`. Which rounds count is the caller's: on the site, a
 player's daily rounds and no others. Each round's rating is its seed's stored
-rating, made once when the seed was generated and never redone, so a round's
-differential never changes and an index moves only when its player plays.
+rating, made once when the seed was generated and never redone.
+
+The site scores each round once, at scan (`score`), and stores its differential and cut
+(ADR 0034). A player's index is then read from those stored numbers (`replay`), which
+never goes back to strokes or ratings; `compute` scores every round from its strokes,
+for the backtest and for the one replay that filled the stored rows.
 """
 
 from collections.abc import Sequence
@@ -145,46 +149,84 @@ def initial(rules: IndexRules) -> IndexState:
     return IndexState(rules.start_index, None, 0, (), ())
 
 
+def advance(
+    state: IndexState, played_at: datetime, diff: float, cut: float, rules: IndexRules
+) -> tuple[IndexState, float]:
+    """The index after one more round with this differential, before any cut, and the
+    cut it earned, which comes off every differential in the record. Returns the new
+    state and the index before the caps above the low mark."""
+    record = rules.best_of or rules.window
+    diffs = [*state.differentials, diff]
+    for i in range(max(0, len(diffs) - record), len(diffs)):
+        diffs[i] -= cut
+    low = low_mark(state.history, played_at, rules)
+    uncapped = blend(diffs, rules)
+    index = capped(uncapped, low, rules)
+    history = (*state.history, (played_at, index))
+    return IndexState(index, low, len(diffs), tuple(diffs), history), uncapped
+
+
+def score(
+    state: IndexState, r: ScoredRound, rules: IndexRules
+) -> tuple[IndexState, RoundStep]:
+    """Score one round from the index the player holds: its adjusted gross, differential
+    and cut, and the index after it."""
+    adjusted = sum(
+        capped_holes(r.strokes, r.rating, state.index, rules.hole_cap_over_par)
+    )
+    raw = differential(r.strokes, r.rating, state.index, rules)
+    cut = exceptional_cut(raw, state.index, rules)
+    after, uncapped = advance(state, r.played_at, raw, cut, rules)
+    step = RoundStep(
+        r.played_at,
+        sum(r.strokes),
+        adjusted,
+        state.index,
+        raw,
+        cut,
+        after.low_mark,
+        uncapped,
+        after.index,
+    )
+    return after, step
+
+
 def compute_steps(
     rounds: Sequence[ScoredRound], rules: IndexRules
 ) -> tuple[IndexState, tuple[RoundStep, ...]]:
     """The index after every round, in the order played, and each round's step."""
     state = initial(rules)
-    diffs: list[float] = []
-    history: list[tuple[datetime, float]] = []
     steps: list[RoundStep] = []
-    low = None
-    record = rules.best_of or rules.window
     for r in sorted(rounds, key=lambda r: r.played_at):
-        adjusted = sum(
-            capped_holes(r.strokes, r.rating, state.index, rules.hole_cap_over_par)
-        )
-        diffs.append(differential(r.strokes, r.rating, state.index, rules))
-        raw = diffs[-1]
-        cut = exceptional_cut(raw, state.index, rules)
-        for i in range(max(0, len(diffs) - record), len(diffs)):
-            diffs[i] -= cut
-        low = low_mark(history, r.played_at, rules)
-        uncapped = blend(diffs, rules)
-        index = capped(uncapped, low, rules)
-        steps.append(
-            RoundStep(
-                r.played_at,
-                sum(r.strokes),
-                adjusted,
-                state.index,
-                raw,
-                cut,
-                low,
-                uncapped,
-                index,
-            )
-        )
-        history.append((r.played_at, index))
-        state = IndexState(index, low, len(diffs), tuple(diffs), tuple(history))
+        state, step = score(state, r, rules)
+        steps.append(step)
     return state, tuple(steps)
 
 
 def compute(rounds: Sequence[ScoredRound], rules: IndexRules) -> IndexState:
     """The index after every round, in the order played."""
     return compute_steps(rounds, rules)[0]
+
+
+@dataclass(frozen=True)
+class StoredRound:
+    """What a round stored when it was scored: its differential before any cut, and the
+    cut it earned."""
+
+    played_at: datetime
+    differential: float
+    cut: float
+
+
+def replay(
+    rounds: Sequence[StoredRound], rules: IndexRules
+) -> tuple[IndexState, tuple[IndexState, ...]]:
+    """The index from stored rounds, in the order given, and the state after each. While
+    the rounds and rules are those they were scored with, it is the index `compute`
+    gives."""
+    state = initial(rules)
+    states: list[IndexState] = []
+    for r in rounds:
+        state, _ = advance(state, r.played_at, r.differential, r.cut, rules)
+        states.append(state)
+    return state, tuple(states)

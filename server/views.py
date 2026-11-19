@@ -353,14 +353,28 @@ def golf_figure(value: float, places: int = 1) -> str:
 
 
 @dataclass(frozen=True)
+class ViewerIndex:
+    """What a signed-in viewer's handicap on a seed comes from (implementation D95)."""
+
+    #: their index now before they play; once they have, the index their round was
+    #: scanned at, None for a round from before rounds stored one
+    index: float | None
+    played: bool
+    #: the handicap their daily card was scored with, which the page shows as it is
+    card_handicap: int | None = None
+
+
+@dataclass(frozen=True)
 class HandicapView:
-    """A signed-in player's handicap on one seed, from their index now."""
+    """A signed-in player's handicap on one seed: from their index now before they play
+    it, and as their round was scored once they have."""
 
     index: str
     #: the daily handicap, at the allowance, as golf writes it
     handicap: str
     #: the strokes it gives on each hole, negative where a plus handicap gives one back
     received: tuple[int, ...]
+    played: bool
 
 
 @dataclass(frozen=True)
@@ -388,19 +402,25 @@ class RatingView:
 
 
 def rating_view(
-    rating: SeedRating | None, index: float | None, allowance: float
+    rating: SeedRating | None, viewer: ViewerIndex | None, allowance: float
 ) -> RatingView | None:
-    """None for a seed not yet rated."""
+    """None for a seed not yet rated. No handicap for a viewer not signed in, or one who
+    played the seed before rounds stored an index."""
     if rating is None:
         return None
     stroke_indexes = tuple(h.stroke_index for h in rating.holes)
     handicap = None
-    if index is not None:
-        whole = daily_handicap(index, rating, allowance)
+    if viewer is not None and viewer.index is not None:
+        whole = (
+            viewer.card_handicap
+            if viewer.card_handicap is not None
+            else daily_handicap(viewer.index, rating, allowance)
+        )
         handicap = HandicapView(
-            index=golf_figure(index),
+            index=golf_figure(viewer.index),
             handicap=golf_figure(whole, 0),
             received=tuple(strokes_received(whole, stroke_indexes)),
+            played=viewer.played,
         )
     return RatingView(
         course_rating=f"{rating.course_rating:.1f}",

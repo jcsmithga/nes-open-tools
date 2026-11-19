@@ -13,6 +13,7 @@ from golf.randomizer.build import credentials_for
 from golf.randomizer.generate import GenerationError
 from golf.randomizer.manifest import ManifestError
 from golf.randomizer.request import RequestError, check_request, resolve
+from golf.ratings.params import IndexRules
 
 from ..auth import current_user
 from ..builder import BuilderUnavailableError, SeedBuilder
@@ -31,12 +32,19 @@ from ..forms import (
     to_save,
 )
 from ..ratelimit import client_key
-from ..ratings import Ratings, player_index, seed_rating
+from ..ratings import Ratings, seed_rating
+from ..round_indexes import player_index, seed_play
 from ..rounds import rounds_for_seed
 from ..seeds import insert_seed, load_seed, load_seed_holes, load_unfinished_ips
 from ..strings import Strings
 from ..timings import OK, Sample
-from ..views import download_stem, generate_options, rating_view, seed_view
+from ..views import (
+    ViewerIndex,
+    download_stem,
+    generate_options,
+    rating_view,
+    seed_view,
+)
 from ..yardage_book import yardage_book
 from .common import (
     json_refusal,
@@ -80,6 +88,17 @@ def starting_settings(request: Request, seed_id: str) -> SavedSettings:
         if entry is not None:
             saved = saved.with_entry(entry.player_name, entry.clubs)
     return saved
+
+
+def viewer_index(
+    db: Database, seed_id: str, user_id: int, rules: IndexRules
+) -> ViewerIndex:
+    """A signed-in viewer's index on a seed: their index now before they play it, and the
+    one their round was scanned at once they have (implementation D95)."""
+    play = seed_play(db, seed_id, user_id)
+    if play is None:
+        return ViewerIndex(player_index(db, user_id, rules).index, played=False)
+    return ViewerIndex(play.index_before, played=True, card_handicap=play.card_handicap)
 
 
 def seed_router(templates: Jinja2Templates, mystery_seeds: bool = False) -> APIRouter:
@@ -323,7 +342,7 @@ def seed_router(templates: Jinja2Templates, mystery_seeds: bool = False) -> APIR
             seed_rating(db, seed_id),
             None
             if user is None
-            else player_index(db, user.id, ratings.parameters).index,
+            else viewer_index(db, seed_id, user.id, ratings.parameters.index),
             ratings.parameters.handicap.allowance,
         )
         return templates.TemplateResponse(

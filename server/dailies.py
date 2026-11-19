@@ -49,13 +49,15 @@ from golf.ratings.formats import (
     stableford,
 )
 from golf.ratings.handicap import daily_handicap, strokes_received
-from golf.ratings.index import compute
+from golf.ratings.index import IndexState
+from golf.ratings.params import IndexRules
 from golf.ratings.rules import DailyRules
 
 from . import audit
 from .builder import BuilderUnavailableError, SeedBuilder
 from .db import Database
-from .ratings import Ratings, counted_rounds, refit, seed_rating_on
+from .ratings import Ratings, refit, seed_rating_on
+from .round_indexes import record_step, stored_index
 from .seeds import (
     SeedAlreadyWithdrawnError,
     SeedRater,
@@ -258,12 +260,19 @@ def card_round(
     user_id: int,
     slot: int,
     received_at: str,
+    state: IndexState | None = None,
+    index_rules: IndexRules | None = None,
 ) -> bool:
     """Give a just-recorded round a card when it is a player's own round on a day's seed,
     received while the day was open and not withdrawn. Returns whether it did.
 
-    The caller holds the transaction that recorded the round. A card whose round has since
-    been voided passes to this one, the round now in the freed slot.
+    A daily counts toward an index, so the round's step is stored from `state`, the
+    index the player was scanned at, under `index_rules` (`record_step`), unless its
+    seed is unrated, which only a database before its first ratings run allows.
+
+    The caller holds the transaction that recorded the round and stored its index. A
+    card whose round has since been voided passes to this one, the round now in the
+    freed slot.
     """
     if slot != 0:
         return False
@@ -297,6 +306,7 @@ def card_round(
             """,
             (row["day"], user_id, public_id, received_at),
         )
+        _count(conn, public_id, seed_id, state, index_rules)
         _fill_with(conn, row["day"], user_id, row["rules"])
         return True
     if held["recorded"] is not None:  # pragma: no cover - one own round per entry
@@ -308,8 +318,28 @@ def card_round(
         """,
         (public_id, received_at, row["day"], user_id),
     )
+    _count(conn, public_id, seed_id, state, index_rules)
     _fill_with(conn, row["day"], user_id, row["rules"])
     return True
+
+
+def _count(
+    conn: sqlite3.Connection,
+    public_id: str,
+    seed_id: str,
+    state: IndexState | None,
+    index_rules: IndexRules | None,
+) -> None:
+    """Store a daily round's step in its player's index."""
+    if state is None or index_rules is None:
+        return
+    rating = seed_rating_on(conn, seed_id)
+    if rating is None:
+        log.warning(
+            "round %s is on unrated seed %s: it does not count", public_id, seed_id
+        )
+        return
+    record_step(conn, public_id, state, rating, index_rules)
 
 
 def _fill_with(
@@ -427,43 +457,50 @@ def rescore_round(conn: sqlite3.Connection, public_id: str) -> None:
 def fill_card(
     conn: sqlite3.Connection, day: str, user_id: int, rules: DailyRules
 ) -> bool:
-    """Fill a card from its round, as its player is shown it: the index they held
-    before it, from their counted rounds received earlier; the daily handicap and the
-    net card it gives; and their index and low mark counting this round. Returns
-    whether it did: a card whose round is voided, on a withdrawn day, or on a seed not
-    yet rated stays as it is.
+    """Fill a card from its round, as its player is shown it: the index the round was
+    scanned at, stored with it (`server/round_indexes.py`), and the daily handicap and
+    net card it gives. Returns whether it did: a card whose round is voided or stored no
+    index, on a withdrawn day, or on a seed not yet rated stays as it is.
 
-    The caller holds the transaction. A card is a function of the player's counted
-    rounds, their seeds' stored ratings and `rules`, so filling it again gives the
-    same card while those are unchanged.
+    The caller holds the transaction. A card is a function of its round's stored index,
+    its seed's stored ratings and `rules`, so filling it again gives the same card.
     """
     card = conn.execute(
-        "SELECT round_public_id FROM daily_cards WHERE day = ? AND user_id = ?",
+        """
+        SELECT c.round_public_id, r.id AS round_id, e.seed_id
+        FROM daily_cards c
+        JOIN dailies d ON d.day = c.day
+        JOIN rounds r ON r.public_id = c.round_public_id
+        JOIN entries e ON e.id = r.entry_id
+        WHERE c.day = ? AND c.user_id = ? AND d.withdrawn_at IS NULL
+        """,
         (day, user_id),
     ).fetchone()
     if card is None:
         return False
-    counted = counted_rounds(conn, user_id)
-    ids = [c.public_id for c in counted]
-    if card["round_public_id"] not in ids:
+    index = stored_index(conn, card["round_public_id"])
+    rating = seed_rating_on(conn, card["seed_id"])
+    if index is None or rating is None:
         return False
-    at = ids.index(card["round_public_id"])
-    before = compute([c.round for c in counted[:at]], rules.index)
-    after = compute([c.round for c in counted[: at + 1]], rules.index)
-    played = counted[at].round
-    holes = played.rating.holes
-    handicap = daily_handicap(before.index, played.rating, rules.allowance)
+    strokes = [
+        row["strokes"]
+        for row in conn.execute(
+            "SELECT strokes FROM round_holes WHERE round_id = ? ORDER BY position",
+            (card["round_id"],),
+        )
+    ]
+    holes = rating.holes
+    handicap = daily_handicap(index, rating, rules.allowance)
     received = strokes_received(handicap, [h.stroke_index for h in holes])
     pars = [h.par for h in holes]
-    nets = net(played.strokes, received)
-    points = stableford(played.strokes, pars, received, rules.stableford_par)
+    nets = net(strokes, received)
+    points = stableford(strokes, pars, received, rules.stableford_par)
     conn.execute(
         """
-        UPDATE daily_cards SET index_before = ?, handicap = ?, index_after = ?,
-                               low_mark = ?
+        UPDATE daily_cards SET index_used = ?, handicap = ?
         WHERE day = ? AND user_id = ?
         """,
-        (before.index, handicap, after.index, after.low_mark, day, user_id),
+        (index, handicap, day, user_id),
     )
     conn.execute(
         "DELETE FROM daily_card_holes WHERE day = ? AND user_id = ?", (day, user_id)
@@ -696,7 +733,8 @@ class NetCard:
     """A daily round's net card, as its player was shown it."""
 
     day: str
-    index_before: float
+    #: the index the round was scored with
+    index_used: float
     handicap: int
     received: tuple[int, ...]
     nets: tuple[int, ...]
@@ -714,7 +752,7 @@ def load_net_card(db: Database, public_id: str) -> NetCard | None:
     with db.transaction() as conn:
         card = conn.execute(
             """
-            SELECT c.day, c.user_id, c.index_before, c.handicap
+            SELECT c.day, c.user_id, c.index_used, c.handicap
             FROM daily_cards c JOIN dailies d ON d.day = c.day
             WHERE c.round_public_id = ? AND c.handicap IS NOT NULL
               AND d.withdrawn_at IS NULL
@@ -755,7 +793,7 @@ def load_net_card(db: Database, public_id: str) -> NetCard | None:
     position = None if placed is None else placed["position"]
     return NetCard(
         day=card["day"],
-        index_before=card["index_before"],
+        index_used=card["index_used"],
         handicap=card["handicap"],
         received=tuple(h["received"] for h in holes),
         nets=tuple(h["net"] for h in holes),

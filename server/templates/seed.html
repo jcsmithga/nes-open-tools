@@ -67,19 +67,26 @@
 
   {% if results %}{{ daily_results.results_article(results, viewer_id) }}{% endif %}
 
-  {% if rating %}
-    <article class="seed-rating"
-             data-course-rating="{{ rating.course_rating }}"
-             data-slope="{{ rating.slope }}">
+  <article class="seed-rating"
+           data-par="{{ seed.total_par }}"
+           data-distance="{{ seed.total_distance }}"
+           {% if rating %}data-course-rating="{{ rating.course_rating }}" data-slope="{{ rating.slope }}"{% endif %}>
+    <p>{{ t("seed.rating.course", par=seed.total_par, yards=seed.total_distance) }}</p>
+    {% if rating %}
       <p>{{ t("seed.rating.ratings", course_rating=rating.course_rating, slope=rating.slope) }}</p>
       {% if rating.handicap %}
         <p data-index="{{ rating.handicap.index }}"
-           data-handicap="{{ rating.handicap.handicap }}">
-          {{ t("seed.rating.handicap", handicap=rating.handicap.handicap, index=rating.handicap.index) }}
+           data-handicap="{{ rating.handicap.handicap }}"
+           data-played="{{ 'true' if rating.handicap.played else 'false' }}">
+          {% if rating.handicap.played %}
+            {{ t("seed.rating.handicap_played", handicap=rating.handicap.handicap, index=rating.handicap.index) }}
+          {% else %}
+            {{ t("seed.rating.handicap", handicap=rating.handicap.handicap, index=rating.handicap.index) }}
+          {% endif %}
         </p>
       {% endif %}
-    </article>
-  {% endif %}
+    {% endif %}
+  </article>
 
   {% set download = seed.download %}
   <section>

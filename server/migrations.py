@@ -414,4 +414,44 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (day, user_a, user_b)
     ) WITHOUT ROWID;
     """,
+    # 13: round indexes (docs/competitive/data_model.md, Round indexes; ADR 0034). Every
+    # player's own round keeps the index its player held at scan, and a counted round its
+    # step, never computed again; the startup backfill fills the rows of rounds counted
+    # before this. The index rules are the site's, kept once per version: a day's rules
+    # keep only the competition's numbers, and a card the index it was scored with.
+    """
+    CREATE TABLE index_rules (
+        hash TEXT PRIMARY KEY,
+        rules TEXT NOT NULL CHECK (json_valid(rules) AND json_type(rules) = 'object'),
+        first_used_at TEXT NOT NULL
+    ) WITHOUT ROWID;
+
+    CREATE TABLE round_indexes (
+        round_public_id TEXT PRIMARY KEY CHECK (length(round_public_id) = 10),
+        user_id INTEGER NOT NULL REFERENCES users (id),
+        received_at TEXT NOT NULL,
+        index_before REAL NOT NULL,
+        rules_hash TEXT REFERENCES index_rules (hash),
+        adjusted_gross INTEGER,
+        differential REAL,
+        cut REAL CHECK (cut IS NULL OR cut >= 0),
+        index_after REAL,
+        low_mark REAL,
+        -- a counted round's step is all there or none of it; a low mark may be NULL in one
+        CHECK (
+            (rules_hash IS NULL) = (adjusted_gross IS NULL)
+            AND (rules_hash IS NULL) = (differential IS NULL)
+            AND (rules_hash IS NULL) = (cut IS NULL)
+            AND (rules_hash IS NULL) = (index_after IS NULL)
+            AND (rules_hash IS NOT NULL OR low_mark IS NULL)
+        )
+    );
+    CREATE INDEX round_indexes_by_user ON round_indexes (user_id, received_at);
+
+    ALTER TABLE daily_cards RENAME COLUMN index_before TO index_used;
+    ALTER TABLE daily_cards DROP COLUMN index_after;
+    ALTER TABLE daily_cards DROP COLUMN low_mark;
+
+    UPDATE dailies SET rules = json_remove(rules, '$.index') WHERE rules IS NOT NULL;
+    """,
 ]

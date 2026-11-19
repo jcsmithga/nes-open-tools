@@ -579,13 +579,21 @@ text = "Calendar"
 note = "in place of the rounds table while a daily is open, to a viewer who has not recorded a round on it: scores show once they submit their own"
 text = "This is an official Daily Seed, so scorecards are hidden until you've submitted one yourself."
 
+[seed.rating.course]
+note = "the top of the seed's rating box, as a scorecard's header: the course's total par and length; values par (e.g. 72), yards (total, e.g. 6850)"
+text = "Par {par} | Distance {yards} yds"
+
 [seed.rating.ratings]
 note = "a rated seed's course rating and slope, golf's numbers; values course_rating (e.g. 71.3), slope (golf's scale, 113 standard)"
 text = "Rating {course_rating} | Slope {slope}"
 
 [seed.rating.handicap]
-note = "signed-in players only: their handicap on this seed from their index now, at the daily's allowance; values handicap (whole strokes, '+2' better than scratch), index (e.g. 12.4 or +1.3)"
+note = "signed-in players who have not played this seed: their handicap on it from their index now, at the daily's allowance; values handicap (whole strokes, '+2' better than scratch), index (e.g. 12.4 or +1.3)"
 text = "Your handicap: {handicap} (from index {index})"
+
+[seed.rating.handicap_played]
+note = "signed-in players who have played this seed: the handicap their round was scored with and the index they held when they scanned it; values handicap (whole strokes, '+2' better than scratch), index (e.g. 12.4 or +1.3)"
+text = "Your handicap when played: {handicap} (from index {index})"
 
 [seed.results.heading]
 note = "h2 of a daily's results on its seed page: the standing, the skins and the viewer's matches"

@@ -23,7 +23,8 @@ from server.admin_ratings import (
     user_index,
 )
 from server.db import Database
-from server.ratings import Ratings, player_index, refit
+from server.ratings import Ratings, refit
+from server.round_indexes import player_index
 from server.rounds import void_round
 from server.submissions import submit_scan
 from tests.stored_seeds import checked_in_catalog, store_seed
@@ -277,31 +278,31 @@ def test_the_batched_indexes_agree_with_each_players(db, seeds):
     ids = [user_id(db, name) for name in ("ann", "bo", "cy")]
     batched = player_indexes(db, ids, PARAMETERS)
     for each in ids:
-        assert batched[each] == player_index(db, each, PARAMETERS)
+        assert batched[each] == player_index(db, each, PARAMETERS.index)
     assert [batched[each].rounds_counted for each in ids] == [2, 1, 0]
 
 
-def test_the_index_rows_match_the_cards_while_nothing_changes(db, seeds):
+def test_the_index_rows_match_a_read_now_while_nothing_changes(db, seeds):
     for i, (day, strokes) in enumerate(
         (("2026-11-18", 5), ("2026-11-19", 4), ("2026-11-20", 6))
     ):
         daily_round(db, seeds[2 + i], day, "ann", strokes)
     ann = user_id(db, "ann")
     shown = user_index(db, ann, PARAMETERS)
-    assert shown.state == player_index(db, ann, PARAMETERS)
+    assert shown.state == player_index(db, ann, PARAMETERS.index)
     assert [row.day for row in shown.rows] == ["2026-11-20", "2026-11-19", "2026-11-18"]
     assert [row.gross for row in shown.rows] == [108, 72, 90]
     assert not any(row.mismatch for row in shown.rows)
     # best 8 of 10 keeps 2 of 3: the 108 is dropped
     assert [row.counts for row in shown.rows] == [False, True, True]
-    assert shown.rows[0].index_after == shown.state.index
+    assert shown.rows[0].index_after == pytest.approx(shown.state.index)
     assert shown.rows[-1].index_before == PARAMETERS.index.start_index
     assert shown.rounds_to_low_mark == PARAMETERS.index.low_min_rounds - 3
     assert shown.parameters_hash == PARAMETERS.digest()
     assert shown.uncounted == []
 
 
-def test_a_void_shows_where_cards_and_rules_now_disagree(db, seeds):
+def test_a_void_shows_where_stored_rows_and_a_read_now_disagree(db, seeds):
     first = daily_round(db, seeds[2], "2026-11-18", "ann", 8)
     daily_round(db, seeds[3], "2026-11-19", "ann", 4)
     daily_round(db, seeds[4], "2026-11-20", "ann", 4)
@@ -309,7 +310,7 @@ def test_a_void_shows_where_cards_and_rules_now_disagree(db, seeds):
     void_round(db, first, admin_id=ann)
     shown = user_index(db, ann, PARAMETERS)
     assert [row.day for row in shown.rows] == ["2026-11-20", "2026-11-19"]
-    # the later cards were scored with the voided round's index
+    # the later rounds stored indexes counting the voided round
     assert all(row.mismatch for row in shown.rows)
     assert [(c.day, c.reason) for c in shown.uncounted] == [("2026-11-18", "voided")]
 

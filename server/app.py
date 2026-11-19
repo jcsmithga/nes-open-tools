@@ -36,6 +36,7 @@ from .logging import request_id
 from .pages import PageCatalog
 from .ratelimit import GENERATE_CAPACITY, GENERATE_REFILL_SECONDS, RateLimiter
 from .ratings import Ratings
+from .round_indexes import backfill as backfill_round_indexes
 from .routes.account import account_router
 from .routes.admin_pages import admin_router
 from .routes.claim_pages import claim_router
@@ -178,6 +179,9 @@ def create_app(
             ratings = Ratings(seed_builder.catalog, parameters)
             ratings.load_latest(db)
             app.state.ratings = ratings
+            # the rounds counted before round indexes get theirs, once; a replay that
+            # disagrees with a card stops the start (ADR 0034)
+            backfill_round_indexes(db, parameters.index)
             stop_prewarm = threading.Event()
             prewarmer = (
                 threading.Thread(

@@ -28,6 +28,7 @@ import logging
 from dataclasses import dataclass
 
 from golf.qr import payload
+from golf.ratings.params import IndexRules
 
 from .db import Database
 from .rounds import Round, is_voided, record_round, round_in_slot
@@ -113,11 +114,17 @@ def _missing_entry_cause(conn, qr_seed_id: int, player_id: int) -> str:
     return "no entry for the seed and player"
 
 
-def submit_scan(db: Database, text: str, now: str | None = None) -> ScanResult:
+def submit_scan(
+    db: Database,
+    text: str,
+    now: str | None = None,
+    index_rules: IndexRules | None = None,
+) -> ScanResult:
     """Record the round a scan's base64url text carries, or find it already recorded.
 
     Raises ScanError for a payload that is malformed, from an unfinished ROM, or matches
-    no entry's key. Unknown seeds, unknown players, missing entries and bad MACs are one
+    no entry's key. A new round stores its player's index under `index_rules`, the
+    site's (`record_round`). Unknown seeds, unknown players, missing entries and bad MACs are one
     reason, so a rejection says nothing about which part failed.
     """
     data, round_payload = _parse(text)
@@ -164,7 +171,8 @@ def submit_scan(db: Database, text: str, now: str | None = None) -> ScanResult:
         if recorded is not None:
             return ScanResult(recorded, new=False)
         return ScanResult(
-            record_round(conn, entry["id"], round_slot, data, received_at), new=True
+            record_round(conn, entry["id"], round_slot, data, received_at, index_rules),
+            new=True,
         )
 
 

@@ -167,10 +167,11 @@ in this package.
   `daily_cards`, `daily_card_holes`, `daily_results` and `daily_matches` (ADR 0033,
   `docs/competitive/data_model.md`). The library half, the
   window, schedule, PRNG seed and magic words, is `golf/randomizer/daily.py`. A card is
-  written by `card_round` in the transaction `record_round` records the round in, and
-  filled there by `fill_card` when the day has rules: the index the round is scored
-  with, the handicap, the net card and the index after it. It is never deleted, and
-  counts while its round is recorded. A day takes the current rules when it is made if
+  written by `card_round` in the transaction `record_round` records the round in, which
+  also stores the round's step in its player's index (`server/round_indexes.py`), and
+  filled there by `fill_card` when the day has rules: the index the round was scanned
+  at, the handicap and the net card. It is never deleted, and counts while its round is
+  recorded. A day takes the current rules when it is made if
   its seed is rated; `fill_days`, at each rollover after the refit, gives any other day
   them once its seed is. `score_day` rebuilds a day's results (the formats are
   `golf/ratings/formats.py`) whenever a card is filled or the day is withdrawn or
@@ -191,12 +192,19 @@ in this package.
   database lock, and rates every seed not yet rated. `Ratings`, on `app.state.ratings`,
   holds the latest run rebuilt into its model; a route storing a seed passes it to
   `insert_seed` as `rater`, which rates the seed in the transaction that stores it. A
-  seed's ratings are written once and never rewritten. A player's index is computed from
-  their counted rounds when a page asks (`player_index`), never stored here;
-  `counted_rounds_for` reads several players' counted rounds at once, and
-  `counted_rounds` is it for one. Pages show
+  seed's ratings are written once and never rewritten. Pages show
   slope on golf's scale (`golf_slope` in `server/views.py`); every formula uses the
   model's.
+- `server/round_indexes.py` is the only code that writes `round_indexes` and
+  `index_rules` (ADR 0034, `docs/competitive/data_model.md`, Round indexes). In the
+  transaction that records a player's own round, `record_index` stores the index they
+  hold, on any seed, and `card_round` has `record_step` store a daily round's step under
+  the site's index rules, which `submit_scan` takes from `app.state.ratings`. Neither is
+  computed again. A player's index is read from the stored rows of their counted rounds
+  (`player_index`, `player_indexes`), and a seed page reads what a player's round on it
+  stored with `seed_play`. At startup the lifespan runs `backfill`, which fills the rows
+  of rounds counted before the table existed once, while it is empty, and stops the
+  start if the replay disagrees with a card.
 - `server/submissions.py` is the only place a scan is decoded and verified. It writes
   nothing itself: an accepted scan becomes a round through `server/rounds.py`, and a
   rejected one is stored nowhere. Its rejection reasons deliberately do not say which lookup
@@ -218,9 +226,9 @@ in this package.
   When it grows, split it into a package by area (seeds, rounds, users, the audit log).
   The ratings' reads are already apart, in `server/admin_ratings.py`: the health counts on
   `/admin`, the runs at `/admin/ratings`, a seed's stored ratings, and a player's index on
-  `/admin/users` and their own page. An index there is recomputed with the same
-  `counted_rounds_for` and `compute_steps` that fill a card, under the current rules, beside
-  what each card stored; a row where the two disagree is marked, not resolved.
+  `/admin/users` and their own page. A player's rounds there are as each stored them at
+  scan, beside what reading the stored rows under the current rules gives now; a row
+  where the two disagree is marked, not resolved.
   Admin actions write through the owning module: `flag_round`, `unflag_round`,
   `void_round` and `restore_round` in `server/rounds.py`, which take the round's
   `public_id`. Each takes the admin's `users.id` and logs itself through

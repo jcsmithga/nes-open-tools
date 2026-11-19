@@ -6,10 +6,8 @@
 > `dailies`, `daily_seeds` and `daily_cards` without handicaps, in `server/dailies.py`),
 > and so are the ratings tables (migration 10, in `server/ratings.py`) and a day's rules
 > and filled cards (migration 11) and its results (migration 12), in
-> `server/dailies.py`. Round indexes, stored when each round is scanned, are planned
-> (implementation tasks 47 to 49): until they are built, a card holds its round's index
-> values and every read of an index replays the player's counted rounds. Records are
-> proposed.
+> `server/dailies.py`, and round indexes (migration 13, in `server/round_indexes.py`).
+> Records are proposed.
 
 ## The rule
 
@@ -161,9 +159,9 @@ a counted round stores its step in the player's index too. Neither is computed a
   same transaction. Nothing makes a round count later.
 - **A player's index** is read from the stored rows of their counted rounds still in
   `rounds`, on days not withdrawn, in `received_at` order: each stored differential,
-  each stored cut applied to the rounds in the record when it was earned, the best 8 of
-  the last 10 blended with the starting index, and the caps over the low mark, under the
-  current index rules. While nothing has been voided or withdrawn and the rules have not
+  each stored cut taken off the differentials in the record at that point, the best 8
+  of the last 10 blended with the starting index, and the caps over the low mark, under
+  the current index rules (`replay` in `golf/ratings/index.py`). While nothing has been voided or withdrawn and the rules have not
   changed, that is the latest row's `index_after`.
 - **A void, a restore or a withdrawn day** changes which rows the read includes, and
   nothing else: later rounds keep the index they were scored with, and no row is
@@ -210,7 +208,9 @@ does. At the first rollover after that, `fill_days` gives each of them the rules
 force and fills its cards, as for any day made while no run existed, so they get results
 too. Every player's first counted round is scored at the starting index.
 
-When `round_indexes` is built (task 47), each counted round gets its row from a replay of
-the player's counted rounds under the rules then in force, matching what its card shows.
-A round on any other seed received before then has no row, and a seed page shows a player
-who played it the seed's ratings without a handicap.
+Migration 13 added `round_indexes`. At the first start after it, while the table is
+empty, the app gives each counted round its row from one replay of its player's counted
+rounds under the rules in force, and refuses to start if the replay gives any card's
+round another index or handicap than the card shows (`backfill` in
+`server/round_indexes.py`). A round on any other seed received before then has no row,
+and a seed page shows a player who played it the seed's ratings without a handicap.

@@ -17,6 +17,7 @@ from golf.ratings.rules import DailyRules
 from server.dailies import fill_days, load_day_results, restore_daily, withdraw_daily
 from server.db import Database
 from server.ratings import Ratings, refit, seed_rating
+from server.round_indexes import stored_index
 from server.rounds import restore_round, void_round
 from server.submissions import submit_scan
 from tests.stored_seeds import checked_in_catalog, store_seed
@@ -87,26 +88,30 @@ def test_a_scan_on_a_day_with_rules_fills_its_card(db, seeds):
     rating = seed_rating(db, seeds[2])
     assert rating is not None
     # dee has no earlier counted round: the starting index
-    assert filled["index_before"] == RULES.index.start_index
+    assert filled["index_used"] == PARAMETERS.index.start_index
     assert filled["handicap"] == daily_handicap(0.0, rating, RULES.allowance)
     received = [h[0] for h in filled["holes"]]
     assert sum(received) == filled["handicap"]
     assert [h[1] for h in filled["holes"]] == [5 - r for r in received]
     pars = [h.par for h in rating.holes]
     assert [h[2] for h in filled["holes"]] == stableford([5] * 18, pars, received)
-    assert filled["index_after"] != filled["index_before"]
 
 
-def test_the_next_daily_is_scored_with_the_index_after_the_last(db, seeds):
+def test_the_next_daily_is_scored_with_the_index_its_round_was_scanned_at(db, seeds):
     make_daily(db, "2026-11-18", seeds[2], rules=RULES)
     make_daily(db, "2026-11-19", seeds[3], rules=RULES)
     dee = Player(db, seeds[2], "dee")
     submit_scan(db, dee.scan(holes=FIVES), now="2026-11-18T12:00:00Z")
     dee_next = Player(db, seeds[3], "dee")
-    submit_scan(db, dee_next.scan(holes=FIVES), now="2026-11-19T12:00:00Z")
+    second_round = submit_scan(
+        db, dee_next.scan(holes=FIVES), now="2026-11-19T12:00:00Z"
+    ).round
     first = card(db, "2026-11-18", dee.user.id)
     second = card(db, "2026-11-19", dee.user.id)
-    assert second["index_before"] == first["index_after"]
+    with db.transaction() as conn:
+        scanned_at = stored_index(conn, second_round.public_id)
+    assert second["index_used"] == scanned_at
+    assert second["index_used"] != first["index_used"]
 
 
 def test_a_day_without_rules_keeps_its_cards_unfilled(db, seeds):

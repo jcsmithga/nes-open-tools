@@ -37,7 +37,9 @@ def round_router(templates: Jinja2Templates) -> APIRouter:
         db: Database = request.app.state.db
         headers = {"Cache-Control": "no-store"}
         try:
-            result = submit_scan(db, scan)
+            result = submit_scan(
+                db, scan, index_rules=request.app.state.ratings.parameters.index
+            )
         except ScanError as rejection:
             status_code = 400 if rejection.reason in (MALFORMED, UNFINISHED) else 404
             return templates.TemplateResponse(

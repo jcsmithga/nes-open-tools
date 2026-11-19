@@ -1,6 +1,6 @@
-"""Ratings on the site: the refit writes a run once a day and rates every seed, a seed
-stored after it is rated in its own transaction, and a player's index counts their daily
-rounds."""
+"""Ratings on the site: the refit writes a run once a day and rates every seed, and a seed
+stored after it is rated in its own transaction. The helpers below make dailies for the
+tests of cards and round indexes."""
 
 import json
 from datetime import date
@@ -18,11 +18,9 @@ from golf.ratings.rules import DailyRules
 from server.db import Database
 from server.ratings import (
     Ratings,
-    player_index,
     refit,
     seed_rating,
 )
-from server.rounds import void_round
 from server.submissions import submit_scan
 from tests.stored_seeds import checked_in_catalog, store_seed
 from tests.unit.test_server_submissions import Player
@@ -192,51 +190,3 @@ def make_daily(
             "INSERT INTO daily_seeds (day, attempt, seed_id) VALUES (?, 1, ?)",
             (day, seed),
         )
-
-
-@pytest.fixture
-def rated_daily(db, ratings, manifests):
-    """Seeds 0 and 1 played and rated; seed 2 the day's daily, rated too."""
-    seeds = [store_seed(db, m) for m in manifests]
-    play_all(db, seeds[:2])
-    refit(db, ratings, DAY, NOW, min_rounds=5)
-    make_daily(db, "2026-11-18", seeds[2])
-    return seeds[2]
-
-
-def test_before_any_counted_round_a_player_holds_the_starting_index(db):
-    state = player_index(db, 1, PARAMETERS)
-    assert state.index == PARAMETERS.index.start_index
-    assert state.rounds_counted == 0
-
-
-def test_a_daily_round_counts_and_an_ordinary_one_does_not(db, rated_daily):
-    ann = Player(db, rated_daily, "ann")
-    submit_scan(
-        db, ann.scan(holes=(HoleRecord(6, 2),) * 18), now="2026-11-18T12:00:00Z"
-    )
-    state = player_index(db, ann.user.id, PARAMETERS)
-    assert state.rounds_counted == 1
-    # 108 on a seed rated near par moves a scratch start up
-    assert state.index > PARAMETERS.index.start_index
-    # her rounds on the other seeds, from play_all, are not daily rounds
-    assert len(state.differentials) == 1
-
-
-def test_a_voided_daily_round_stops_counting(db, rated_daily):
-    ann = Player(db, rated_daily, "ann")
-    recorded = submit_scan(db, ann.scan(), now="2026-11-18T12:00:00Z")
-    void_round(db, recorded.round.public_id, admin_id=ann.user.id)
-    assert player_index(db, ann.user.id, PARAMETERS).rounds_counted == 0
-
-
-def test_a_withdrawn_days_rounds_do_not_count(db, ratings, manifests):
-    seeds = [store_seed(db, m) for m in manifests]
-    play_all(db, seeds[:2])
-    refit(db, ratings, DAY, NOW, min_rounds=5)
-    make_daily(db, "2026-11-18", seeds[2])
-    ann = Player(db, seeds[2], "ann")
-    submit_scan(db, ann.scan(), now="2026-11-18T12:00:00Z")
-    with db.transaction() as conn:
-        conn.execute("UPDATE dailies SET withdrawn_at = ?", ("2026-11-18T13:00:00Z",))
-    assert player_index(db, ann.user.id, PARAMETERS).rounds_counted == 0

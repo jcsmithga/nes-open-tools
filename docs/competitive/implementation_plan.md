@@ -4,7 +4,7 @@
 > 2026-11-12, updated for the ratings decisions of 2026-11-17 (design.md, Handicaps). It
 > orders the work that takes [design.md](design.md) to production. Tasks
 > 1, 13, 14, 15 and 17 are built (2026-11-16), tasks 3 to 9 (2026-11-17), and tasks 10
-> to 12, 24 and 18 to 23 (2026-11-17), and tasks 36 to 40 (2026-11-18); the decisions made while building them are in
+> to 12, 24 and 18 to 23 (2026-11-17), and tasks 36 to 40 and 47 to 49 (2026-11-18); the decisions made while building them are in
 > [Decisions made in building](#decisions-made-in-building), to be discussed.
 
 Tasks are numbered for reference, not strictly in the order to do them: the
@@ -97,14 +97,14 @@ with jdharms on 2026-11-18 and built the same day.
 
 ### Stored indexes
 
-Indexes become values stored when each round is scanned rather than derived on every
-read (ADR 0034, amended; ADR 0035). Planned with jdharms on 2026-11-18.
+Indexes are values stored when each round is scanned rather than derived on every read
+(ADR 0034, amended; ADR 0035). Planned with jdharms on 2026-11-18 and built the same day.
 
 | # | Task | Needs |
 |---|------|-------|
-| 47 | `round_indexes` and `index_rules` (`data_model.md`, Round indexes). A scan of any slot-0 round stores the index its player holds; a scan onto an open daily also stores the step, under the site's index rules, and fills the card from it. Pull a `step` out of `compute_steps` in `golf/ratings/index.py` for the scan to call. The migration replays every counted round once and writes its row, checks each player's index read from the rows against the replay, and moves `index_before` on `daily_cards` to `index_used`, dropping `index_after` and `low_mark`; the index rules leave the day's `rules` | 19 |
-| 48 | A player's index read from the stored rows (D92), everywhere `player_index` and `counted_rounds` replay today. A void or restore rescores the day and fills no card from a replay; the "left out until rated" path goes. The admin index page (task 36) shows the stored rows, marking a player whose read index differs from their latest `index_after`. Update the docstring of `golf/ratings/index.py` | 47 |
-| 49 | The seed page shows a player who has played it the index and handicap they played with (D95) | 47 |
+| 47 | **Done.** `round_indexes` and `index_rules` (`data_model.md`, Round indexes). A scan of any slot-0 round stores the index its player holds; a scan onto an open daily also stores the step, under the site's index rules, and fills the card from it. Pull a `step` out of `compute_steps` in `golf/ratings/index.py` for the scan to call. The migration replays every counted round once and writes its row, checks each player's index read from the rows against the replay, and moves `index_before` on `daily_cards` to `index_used`, dropping `index_after` and `low_mark`; the index rules leave the day's `rules` | 19 |
+| 48 | **Done.** A player's index read from the stored rows (D92), everywhere `player_index` and `counted_rounds` replay today. A void or restore rescores the day and fills no card from a replay; the "left out until rated" path goes. The admin index page (task 36) shows the stored rows, marking a player whose read index differs from their latest `index_after`. Update the docstring of `golf/ratings/index.py` | 47 |
+| 49 | **Done.** The seed page shows a player who has played it the index and handicap they played with (D95), and every seed's par and total distance at the top of its rating box, as a scorecard's header (jdharms) | 47 |
 
 ### Later
 
@@ -405,6 +405,9 @@ Decided with jdharms on 2026-11-18, before building (ADR 0034, amended, and ADR 
 | D96 | A round on an unrated seed | Not a case to handle: every seed is rated when it is generated (jdharms). A scan on an unrated seed, which only a fresh database before its first run can produce, is logged and stores no step |
 | D97 | Which competitions count | Only those the site or an admin runs, decided at scan; a game players arrange uses the index and never feeds it, so two players cannot throw rounds between themselves to gain strokes (jdharms). Today only dailies count. A competition scores with the index at scan unless it freezes handicaps at its start, and games will use the index at scan (jdharms). The tables stay the daily's until a second kind of competition is designed (ADR 0035) |
 | D98 | Recomputing history | No tool until a bug in the index code needs one; rewriting stored rows is a deliberate migration |
+| D99 | Where the backfill runs | At app startup, while `round_indexes` is empty, as the existing startup checks do: a migration is SQL and cannot run the replay. It checks each card's `index_used` and handicap against the replay, which also covers the dropped `index_after`, since a card's index after is the next card's index before. Claude, in building |
+| D100 | Rounds scanned before any ratings run | Store the starting index, or whatever index the player holds: an index exists before any seed is rated. Claude, in building |
+| D101 | The admin index page | Each counted round as stored at scan, with "now" columns from reading the stored rows under the current rules; a row whose stored index after and the read disagree is marked. Claude, in building |
 
 ### Checked
 

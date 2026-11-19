@@ -13,21 +13,18 @@ This is the only code that writes `ratings_runs`, `ratings_effects`, `seed_ratin
   in `insert_issued_seed`'s transaction), or, when no run existed then, by the next
   refit, which rates every seed that is not. The first refit after the launch's deploy
   rates the whole site.
-- **An index** is a pure function of the player's counted rounds, their seeds' stored
-  ratings and the index rules: computed when asked, never stored here.
+
+A player's index is stored with each round, in `server/round_indexes.py`.
 """
 
 import json
 import logging
 import sqlite3
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
 from golf.randomizer.catalog import Catalog
 from golf.ratings import sitedb
-from golf.ratings.backtest import played_at
-from golf.ratings.index import IndexState, ScoredRound, compute
 from golf.ratings.model import Model, fit
 from golf.ratings.params import Parameters
 from golf.ratings.reference import reference_slots
@@ -239,89 +236,3 @@ def seed_rating(db: Database, seed_id: str) -> SeedRating | None:
     """A seed's stored ratings, or None while it is unrated."""
     with db.transaction() as conn:
         return seed_rating_on(conn, seed_id)
-
-
-_COUNTED_SQL = """
-SELECT c.user_id, r.id, r.public_id, r.received_at, e.seed_id
-FROM daily_cards c
-JOIN dailies d ON d.day = c.day
-JOIN rounds r ON r.public_id = c.round_public_id
-JOIN entries e ON e.id = r.entry_id
-WHERE c.user_id IN ({users}) AND d.withdrawn_at IS NULL
-ORDER BY c.user_id, r.received_at, r.id
-"""
-
-_COUNTED_HOLES_SQL = """
-SELECT h.round_id, h.strokes
-FROM daily_cards c
-JOIN dailies d ON d.day = c.day
-JOIN rounds r ON r.public_id = c.round_public_id
-JOIN round_holes h ON h.round_id = r.id
-WHERE c.user_id IN ({users}) AND d.withdrawn_at IS NULL
-ORDER BY h.round_id, h.position
-"""
-
-_COUNTED_RATINGS_SQL = """
-SELECT r.seed_id, h.par, r.rating, r.spread, r.stroke_index
-FROM seed_hole_ratings r
-JOIN seed_holes h ON h.seed_id = r.seed_id AND h.position = r.position
-WHERE r.seed_id IN (
-    SELECT e.seed_id
-    FROM daily_cards c
-    JOIN dailies d ON d.day = c.day
-    JOIN rounds rd ON rd.public_id = c.round_public_id
-    JOIN entries e ON e.id = rd.entry_id
-    WHERE c.user_id IN ({users}) AND d.withdrawn_at IS NULL
-)
-ORDER BY r.seed_id, r.position
-"""
-
-
-@dataclass(frozen=True)
-class CountedRound:
-    public_id: str
-    round: ScoredRound
-
-
-def counted_rounds(conn: sqlite3.Connection, user_id: int) -> list[CountedRound]:
-    """A player's counted rounds in the order received: their cards on days not
-    withdrawn whose rounds are still recorded, each with its seed's stored ratings. A
-    round on a seed not yet rated is left out until it is."""
-    return counted_rounds_for(conn, [user_id])[user_id]
-
-
-def counted_rounds_for(
-    conn: sqlite3.Connection, user_ids: Sequence[int]
-) -> dict[int, list[CountedRound]]:
-    """`counted_rounds` for several players in three queries, whatever their history:
-    every player asked for has a list, empty when they have no counted round."""
-    out: dict[int, list[CountedRound]] = {user_id: [] for user_id in user_ids}
-    if not out:
-        return out
-    ids = list(out)
-    users = ", ".join("?" * len(ids))
-    strokes: dict[int, list[int]] = {}
-    for row in conn.execute(_COUNTED_HOLES_SQL.format(users=users), ids):
-        strokes.setdefault(row["round_id"], []).append(row["strokes"])
-    holes: dict[str, list[HoleRating]] = {}
-    for row in conn.execute(_COUNTED_RATINGS_SQL.format(users=users), ids):
-        holes.setdefault(row["seed_id"], []).append(
-            HoleRating(row["par"], row["rating"], row["spread"], row["stroke_index"])
-        )
-    ratings = {seed: SeedRating(tuple(h)) for seed, h in holes.items()}
-    for row in conn.execute(_COUNTED_SQL.format(users=users), ids).fetchall():
-        rating = ratings.get(row["seed_id"])
-        if rating is None:
-            continue
-        scored = ScoredRound(
-            played_at(row["received_at"]), rating, tuple(strokes[row["id"]])
-        )
-        out[row["user_id"]].append(CountedRound(row["public_id"], scored))
-    return out
-
-
-def player_index(db: Database, user_id: int, parameters: Parameters) -> IndexState:
-    """The player's handicap index now; the starting index before any counted round."""
-    with db.transaction() as conn:
-        counted = counted_rounds(conn, user_id)
-    return compute([c.round for c in counted], parameters.index)

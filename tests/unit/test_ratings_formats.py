@@ -10,10 +10,9 @@ from golf.ratings.formats import (
     skins,
     standing,
 )
-from golf.ratings.params import IndexRules
 from golf.ratings.rules import DailyRules
 
-RULES = DailyRules(allowance=0.9, index=IndexRules())
+RULES = DailyRules(allowance=0.9)
 STROKE_INDEXES = list(range(1, 19))
 COUNTBACK = (9, 6, 3, 1)
 

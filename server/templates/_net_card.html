@@ -11,7 +11,7 @@
      data-handicap="{{ card.handicap }}"
      data-points="{{ card.points | sum }}"
      {% if card.position %}data-position="{{ card.position }}"{% endif %}>
-    {{ t("round.net.summary", handicap=card.handicap | golf_figure(0), index=card.index_before | golf_figure, points=card.points | sum) }}
+    {{ t("round.net.summary", handicap=card.handicap | golf_figure(0), index=card.index_used | golf_figure, points=card.points | sum) }}
     {% if card.position %}
       {{ t("round.net.position", position=card.position, field=card.field) }}
     {% endif %}

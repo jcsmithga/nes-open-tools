@@ -3,9 +3,10 @@ daily refit wrote, how each moved the hole effects, the counts that say the pipe
 keeping up, a seed's stored ratings, and a player's index round by round.
 
 Reads only, as `server/admin.py` is, kept apart from it by area. A player's index is
-recomputed here with the same `counted_rounds_for` and `compute_steps` that fill a card,
-under the current index rules, beside what each card stored when it was filled; a
-difference between the two is shown, not resolved.
+shown round by round as each round stored it at scan (`server/round_indexes.py`), beside
+what reading the stored rows under the current index rules gives now; a difference
+between the two, after an earlier round's void or a change of rules, is shown, not
+resolved.
 """
 
 import json
@@ -17,16 +18,16 @@ from golf.randomizer.catalog import Catalog
 from golf.randomizer.daily import daily_date
 from golf.ratings.index import (
     IndexState,
-    compute,
-    compute_steps,
     counting,
+    replay,
     start_weight,
 )
 from golf.ratings.params import Parameters
 from golf.ratings.seed import HoleRating
 
+from . import round_indexes
 from .db import Database
-from .ratings import counted_rounds, counted_rounds_for
+from .round_indexes import counted_on
 
 #: days of runs the ratings page lists, as the dailies page does
 RATINGS_DAYS = 60
@@ -91,7 +92,7 @@ def ratings_health(
                    (SELECT count(*) FROM daily_cards c
                     JOIN dailies d ON d.day = c.day
                     JOIN rounds r ON r.public_id = c.round_public_id
-                    WHERE c.index_before IS NULL AND d.withdrawn_at IS NULL) AS unfilled_cards,
+                    WHERE c.handicap IS NULL AND d.withdrawn_at IS NULL) AS unfilled_cards,
                    (SELECT max(day) FROM ratings_runs) AS latest_run_day
             """
         ).fetchone()
@@ -390,12 +391,7 @@ def player_indexes(
     db: Database, user_ids: Sequence[int], parameters: Parameters
 ) -> dict[int, IndexState]:
     """Each player's index now, as `/me` shows it, from one batched read."""
-    with db.transaction() as conn:
-        counted = counted_rounds_for(conn, user_ids)
-    return {
-        user_id: compute([c.round for c in rounds], parameters.index)
-        for user_id, rounds in counted.items()
-    }
+    return round_indexes.player_indexes(db, user_ids, parameters.index)
 
 
 @dataclass(frozen=True)
@@ -407,35 +403,33 @@ class IndexRow:
     course_rating: float
     #: on the model's scale
     slope: float
-    #: what the card stored when it was filled; None on a card not filled
-    card_index_before: float | None
-    card_handicap: int | None
-    card_index_after: float | None
-    #: what the current rules give
+    #: the card's handicap; None on a card not filled
+    handicap: int | None
+    #: as the round stored them at scan
     index_before: float
-    #: the differential as the round was scored, and now, after any later cut
     differential: float
-    differential_now: float
     cut: float
-    counts: bool
     low_mark: float | None
     index_after: float
+    #: what the stored rows give now under the current rules: the differential after any
+    #: later cut, and the index after this round
+    differential_now: float
+    index_after_now: float
+    counts: bool
 
     @property
     def mismatch(self) -> bool:
-        """Whether the card and the current rules disagree as the page shows them."""
-        if self.card_index_before is None or self.card_index_after is None:
-            return True
-        return round(self.card_index_before, 1) != round(self.index_before, 1) or (
-            round(self.card_index_after, 1) != round(self.index_after, 1)
-        )
+        """Whether the stored index after this round and a read of the rows now disagree
+        as the page shows them."""
+        return round(self.index_after, 1) != round(self.index_after_now, 1)
 
 
 @dataclass(frozen=True)
 class UncountedCard:
     day: str
     public_id: str
-    #: `withdrawn` (the day), `voided` (the round) or `unrated` (the seed)
+    #: `withdrawn` (the day), `voided` (the round) or `unrated` (the seed was unrated at
+    #: scan, so the round stored no step)
     reason: str
 
 
@@ -455,13 +449,18 @@ class UserIndex:
 def user_index(db: Database, user_id: int, parameters: Parameters) -> UserIndex:
     rules = parameters.index
     with db.transaction() as conn:
-        counted = counted_rounds(conn, user_id)
-        cards = {
-            row["round_public_id"]: row
+        counted = counted_on(conn, [user_id])[user_id]
+        details = {
+            row["public_id"]: row
             for row in conn.execute(
                 """
-                SELECT day, round_public_id, index_before, handicap, index_after
-                FROM daily_cards WHERE user_id = ?
+                SELECT r.public_id, c.day, c.handicap, r.total_strokes,
+                       s.course_rating, s.slope
+                FROM daily_cards c
+                JOIN rounds r ON r.public_id = c.round_public_id
+                JOIN entries e ON e.id = r.entry_id
+                JOIN seed_ratings s ON s.seed_id = e.seed_id
+                WHERE c.user_id = ?
                 """,
                 (user_id,),
             )
@@ -469,41 +468,37 @@ def user_index(db: Database, user_id: int, parameters: Parameters) -> UserIndex:
         uncounted_rows = conn.execute(
             """
             SELECT c.day, c.round_public_id, d.withdrawn_at IS NOT NULL AS withdrawn,
-                   r.id IS NULL AS voided,
-                   e.seed_id IS NOT NULL
-                       AND e.seed_id NOT IN (SELECT seed_id FROM seed_ratings) AS unrated
+                   r.id IS NULL AS voided
             FROM daily_cards c
             JOIN dailies d ON d.day = c.day
             LEFT JOIN rounds r ON r.public_id = c.round_public_id
-            LEFT JOIN entries e ON e.id = r.entry_id
             WHERE c.user_id = ?
             ORDER BY c.day DESC
             """,
             (user_id,),
         ).fetchall()
-    state, steps = compute_steps([c.round for c in counted], rules)
+    state, states = replay([c.stored for c in counted], rules)
     counts = set(counting(state.differentials, rules))
     rows = []
-    for i, (played, step) in enumerate(zip(counted, steps, strict=True)):
-        card = cards[played.public_id]
+    for i, (played, now) in enumerate(zip(counted, states, strict=True)):
+        detail = details[played.public_id]
         rows.append(
             IndexRow(
-                day=card["day"],
+                day=detail["day"],
                 public_id=played.public_id,
-                gross=step.gross,
-                adjusted_gross=step.adjusted_gross,
-                course_rating=played.round.rating.course_rating,
-                slope=played.round.rating.slope,
-                card_index_before=card["index_before"],
-                card_handicap=card["handicap"],
-                card_index_after=card["index_after"],
-                index_before=step.index_before,
-                differential=step.differential,
+                gross=detail["total_strokes"],
+                adjusted_gross=played.adjusted_gross,
+                course_rating=detail["course_rating"],
+                slope=detail["slope"],
+                handicap=detail["handicap"],
+                index_before=played.index_before,
+                differential=played.stored.differential,
+                cut=played.stored.cut,
+                low_mark=played.low_mark,
+                index_after=played.index_after,
                 differential_now=state.differentials[i],
-                cut=step.cut,
+                index_after_now=now.index,
                 counts=i in counts,
-                low_mark=step.low_mark,
-                index_after=step.index_after,
             )
         )
     counted_ids = {c.public_id for c in counted}
