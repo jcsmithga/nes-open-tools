@@ -601,7 +601,7 @@ text = "Results"
 
 [seed.results.standing]
 note = "h3 over the standing table, beside the viewer's matches"
-text = "Standings"
+text = "Standings (Net Stableford)"
 
 [seed.results.position]
 note = "results column header; a player's position in the day's standing by Stableford points"
@@ -633,7 +633,7 @@ text = "Skins"
 
 [seed.results.your_matches]
 note = "h3 over the viewer's own matches against each other player in the field"
-text = "Your Matches"
+text = "Your Matches (Net Match Play)"
 
 
 [seed.results.opponent]

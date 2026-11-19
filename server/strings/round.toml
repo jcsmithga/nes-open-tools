@@ -85,6 +85,22 @@ text = "✗"
 note = "round table footer cell under round.holes.fairway, for a nine and for the round; {hit} fairways hit, {possible} the par 4s and 5s"
 text = "{hit}/{possible}"
 
+[round.holes.gir]
+note = "round table column header, after round.holes.fairway and always shown with it (wide screens only); whether the ball was on the green, or holed, in par less two strokes or fewer: strokes less putts, so anywhere the game makes the player putt counts as the green"
+text = "GIR"
+
+[round.holes.gir_hit]
+note = "round table cell under round.holes.gir: on the green in regulation (as round.holes.fairway_hit is for a fairway)"
+text = "✓"
+
+[round.holes.gir_missed]
+note = "round table cell under round.holes.gir: not on the green in regulation (as round.holes.fairway_missed is for a fairway)"
+text = "✗"
+
+[round.holes.greens_count]
+note = "round table footer cell under round.holes.gir, for a nine and for the round; {hit} greens hit in regulation, {possible} the holes (9, or 18 for the round)"
+text = "{hit}/{possible}"
+
 [round.penalty_strokes]
 note = "line under the round tables; {count} the round's penalty strokes, one each for a ball in the water or out of bounds (0 included). Only on rounds from ROMs that record it"
 text = "Penalty Strokes: {count}"

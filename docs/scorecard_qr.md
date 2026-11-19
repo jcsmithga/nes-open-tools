@@ -667,7 +667,11 @@ top of what was written.
   never a miss or a zero. The stored fairway is the ROM's bit, or one stroke on a par 4 or
   longer: the ROM sends no bit for a tee shot that goes in, and stats count it as a hit.
   The payload kept beside it holds the bit as sent. The round page shows no fairways or
-  penalties for a version 1 round.
+  penalties for a version 1 round. Beside the fairways it shows greens in regulation,
+  computed when it renders rather than stored: strokes less putts at most par less two,
+  so a hole-out counts, and so does anywhere the game makes the player putt. The two
+  columns go together, so a version 1 round shows neither, and both hide on a narrow
+  screen.
 - **First submission per (entry, slot) is authoritative.** A later scan that verifies
   records nothing and redirects to the round already recorded. An admin can void a round, which
   frees the slot for a different round; a scan of the voided payload itself is rejected as

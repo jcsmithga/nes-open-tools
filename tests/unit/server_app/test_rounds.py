@@ -6,6 +6,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from server.views import RoundHoleView
 from tests.app_state import app_state
 from tests.unit.server_app.helpers import UNWRITTEN, dev_client, entered_seed, scan_path
 
@@ -149,6 +150,56 @@ def test_a_round_shows_each_holes_fairway_and_the_penalties(fake_builder):
     assert 'class="nine striped with-fairways"' in page
 
 
+def gir_cells(page: str) -> list[str]:
+    return re.findall(r'<td class="gir"\s+data-gir="(\w+)">', page)
+
+
+def greens_counts(page: str) -> list[tuple[int, int]]:
+    found = re.findall(r'data-greens-hit="(\d+)"\s+data-greens-possible="(\d+)"', page)
+    return [(int(hit), int(possible)) for hit, possible in found]
+
+
+def test_a_round_shows_each_holes_green_in_regulation(fake_builder):
+    """Fours with two putts: on in two, which is regulation on a par 4 or 5 and not on a
+    par 3."""
+    with dev_client(fake_builder) as test_client:
+        seed_id = entered_seed(test_client, "alice")
+        pars = [hole.par for hole in fake_builder.built.course.holes]
+        page = test_client.get(
+            scan_path(test_client, seed_id, "alice", strokes=4, putts=2)
+        ).text
+    assert gir_cells(page) == ["hit" if par >= 4 else "miss" for par in pars]
+    front = sum(par >= 4 for par in pars[:9])
+    back = sum(par >= 4 for par in pars[9:])
+    assert greens_counts(page) == [(front, 9), (back, 9), (front + back, 18)]
+
+
+def test_a_hole_out_counts_as_a_green_in_regulation(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        seed_id = entered_seed(test_client, "alice")
+        page = test_client.get(
+            scan_path(test_client, seed_id, "alice", strokes=1, putts=0)
+        ).text
+    assert gir_cells(page) == ["hit"] * 18
+
+
+@pytest.mark.parametrize(
+    "strokes, putts, par, gir",
+    [
+        (3, 2, 3, True),
+        (4, 2, 3, False),
+        (5, 3, 4, True),
+        (5, 2, 4, False),
+        (3, 0, 5, True),
+        (6, 3, 5, True),
+        (6, 2, 5, False),
+    ],
+)
+def test_green_in_regulation_is_the_strokes_before_the_putts(strokes, putts, par, gir):
+    hole = RoundHoleView(1, par, strokes, putts)
+    assert hole.green_in_regulation is gir
+
+
 def test_a_tee_shot_that_goes_in_counts_as_a_fairway(fake_builder):
     """It never comes to rest, so the ROM sends no bit for it; the site counts it."""
     with dev_client(fake_builder) as test_client:
@@ -169,6 +220,7 @@ def test_a_version_one_round_shows_no_fairways_or_penalties(fake_builder):
         page = test_client.get(path).text
     assert 'class="nine striped"' in page
     assert "data-fairway" not in page
+    assert "data-gir" not in page
     assert "data-penalty-strokes" not in page
 
 

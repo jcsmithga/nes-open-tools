@@ -11,7 +11,9 @@
 {% endblock %}
 {% block content %}
   {# one nine as a table of its own; the back nine's also carries the round's totals. A
-     round from a ROM that records fairways (protocol version 2) has a fairway column. #}
+     round from a ROM that records fairways (protocol version 2) has a fairway column and,
+     always beside it, a greens in regulation column, from the strokes before the putts;
+     the CSS shows both or neither, by screen width. #}
   {% macro nine_table(nine, total_label, totals=none, first=0) %}
     {% set fairways = round.stats_recorded %}
     {# combined: a daily round's net card in the nines, the scores together - gross, net
@@ -33,6 +35,7 @@
         {% endif %}
         {% if fairways %}
           <col class="fairway">
+          <col class="gir">
         {% endif %}
         <col class="putts">
       </colgroup>
@@ -47,6 +50,7 @@
           {% endif %}
           {% if fairways %}
             <th scope="col" class="fairway">{{ t("round.holes.fairway") }}</th>
+            <th scope="col" class="gir">{{ t("round.holes.gir") }}</th>
           {% endif %}
           <th scope="col" class="num">{{ t("round.holes.putts") }}</th>
         </tr>
@@ -76,6 +80,14 @@
                   {{ t("round.holes.fairway_missed") }}
                 {%- endif -%}
               </td>
+              <td class="gir"
+                  data-gir="{{ 'hit' if hole.green_in_regulation else 'miss' }}">
+                {%- if hole.green_in_regulation -%}
+                  {{ t("round.holes.gir_hit") }}
+                {%- else -%}
+                  {{ t("round.holes.gir_missed") }}
+                {%- endif -%}
+              </td>
             {% endif %}
             <td class="num">{{ hole.putts }}</td>
           </tr>
@@ -98,6 +110,11 @@
                 data-fairways-possible="{{ nine.fairways_possible }}">
               {{- t("round.holes.fairways_count", hit=nine.fairways_hit, possible=nine.fairways_possible) -}}
             </td>
+            <td class="gir"
+                data-greens-hit="{{ nine.greens_hit }}"
+                data-greens-possible="{{ nine.holes | length }}">
+              {{- t("round.holes.greens_count", hit=nine.greens_hit, possible=nine.holes | length) -}}
+            </td>
           {% endif %}
           <td class="num">{{ nine.putts }}</td>
         </tr>
@@ -117,6 +134,11 @@
                   data-fairways-hit="{{ totals.fairways_hit }}"
                   data-fairways-possible="{{ totals.fairways_possible }}">
                 {{- t("round.holes.fairways_count", hit=totals.fairways_hit, possible=totals.fairways_possible) -}}
+              </td>
+              <td class="gir"
+                  data-greens-hit="{{ totals.greens_hit }}"
+                  data-greens-possible="18">
+                {{- t("round.holes.greens_count", hit=totals.greens_hit, possible=18) -}}
               </td>
             {% endif %}
             <td class="num">{{ totals.total_putts }}</td>

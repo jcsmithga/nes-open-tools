@@ -570,6 +570,13 @@ class RoundHoleView:
     #: FAIRWAY_HIT, FAIRWAY_MISSED or FAIRWAY_NONE; None when the round did not record it
     fairway: str | None = None
 
+    @property
+    def green_in_regulation(self) -> bool:
+        """On the green, or holed, in par less two strokes or fewer: the strokes before
+        the putts. The game makes a player putt only on the putting surface, so its putts
+        count from there, the fringe included."""
+        return self.strokes - self.putts <= self.par - 2
+
 
 @dataclass(frozen=True)
 class NineView:
@@ -596,6 +603,10 @@ class NineView:
     @property
     def fairways_possible(self) -> int:
         return sum(hole.fairway in (FAIRWAY_HIT, FAIRWAY_MISSED) for hole in self.holes)
+
+    @property
+    def greens_hit(self) -> int:
+        return sum(hole.green_in_regulation for hole in self.holes)
 
 
 @dataclass(frozen=True)
@@ -632,6 +643,10 @@ class RoundView:
     @property
     def fairways_possible(self) -> int:
         return self.front.fairways_possible + self.back.fairways_possible
+
+    @property
+    def greens_hit(self) -> int:
+        return self.front.greens_hit + self.back.greens_hit
 
 
 def round_view(

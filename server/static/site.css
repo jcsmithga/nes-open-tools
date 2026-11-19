@@ -601,7 +601,7 @@ article.download code[data-filename] {
 
 table.nine {
   table-layout: fixed;
-  width: 27rem;
+  width: 29rem;
   max-width: 100%;
 }
 
@@ -611,6 +611,16 @@ table.nine td {
   overflow-wrap: normal;
   padding-inline: 0.25rem;
   text-align: center;
+}
+
+/* Fairways and greens in regulation, together or not at all: only where a screen is wide
+   enough for them, and the even split gives their share to the other columns where it is
+   not. */
+@media (max-width: 767px) {
+  table.nine .fairway,
+  table.nine .gir {
+    display: none;
+  }
 }
 
 /* The hole number labels its row, so a rule sets it off from the numbers. */
