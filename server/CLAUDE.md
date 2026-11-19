@@ -87,7 +87,8 @@ in this package.
   giving name and clubs over them. `/me` edits the account's settings and forgets them,
   expiring this browser's cookie too.
 - `server/live.py`'s `LiveServer` serves an app on a free localhost port for tools and
-  tests that drive a real browser.
+  tests that drive a real browser, and `server/dev_fixtures.py` fills a started app with
+  placeholder seeds, rounds and a daily for them to look at (see "Seeing pages").
 - A route a script fetches answers a refusal as JSON, `{"error": reason, "values": {...}}`,
   and the script picks the notice for `error`. A missing seed on a path ending `.json` or
   `.ips` is a JSON 404 rather than the not-found page.
@@ -465,6 +466,26 @@ settings, rounds, hole table and details) is taken again with them all open, as 
 `tools/site_screenshot.py`; `tests/integration/test_site_screenshot.py` skips without a
 Playwright browser.
 
+A page that shows other players' data, such as a seed page's rounds, a daily's results or
+a net card, needs some to show. `--populate` fills the database before capturing with
+`server/dev_fixtures.py`'s placeholder data: a rated seed three players have played,
+named `@seed` in the paths, today's daily with a field of twelve rated players and
+production-like display names (`@daily`), and the viewer's round on it (`@round`). It
+fixes the app's clock inside the day's window and runs no rollover, so the placeholder
+day is the one stored. `--viewer` picks who looks: a player in the field (`played`, the
+default), a signed-in player outside it (`unplayed`), or nobody (`signed-out`).
+`--closed` looks once the day has closed. It builds four seeds, so it needs the vanilla
+US ROM, and takes about ten seconds:
+
+```bash
+uv run golf-site-screenshot @seed @daily @round --populate --expand -o <scratchpad>/shots
+uv run golf-site-screenshot @daily --populate --viewer signed-out --closed -o <scratchpad>/shots
+```
+
+A new state worth looking at, such as a withdrawn day or a field of one, goes in
+`server/dev_fixtures.py` behind an option, rather than in a one-off script; the data goes
+in through the owning modules, never with SQL of its own.
+
 ## Tests
 
 `tests/unit/test_server_*.py`, one file per module, and `tests/unit/server_app/` for the
@@ -488,6 +509,8 @@ directly.
 - `test_ratings.py`: a seed's ratings and a player's handicap on the seed page, and
   their index on `/me`
 - `test_daily_results.py`: a daily's results on its seed page
+- `test_dev_fixtures.py`: `server/dev_fixtures.py`, the placeholder data
+  `golf-site-screenshot --populate` captures
 - `test_account.py`: `server/routes/account.py`
 - `test_claim.py`: `server/routes/claim_pages.py`
 - `conftest.py`: the fixtures they share (`client`, `unwritten_client`, `fake_builder`)

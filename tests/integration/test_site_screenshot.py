@@ -148,3 +148,32 @@ def test_generate_with_roms_captures_the_download_form_ready(
     )
     assert completed.returncode == 0, completed.stderr
     assert re.search(r"seed /h/[0-9A-Za-z]{10} download ready$", completed.stdout, re.M)
+
+
+def test_populate_captures_the_placeholder_seed_daily_and_round(
+    vanilla_courses, vanilla_jp_courses, tmp_path
+):
+    completed = run(
+        "@seed",
+        "@daily",
+        "@round",
+        "--populate",
+        "--viewports",
+        "phone",
+        "--schemes",
+        "light",
+        "-o",
+        tmp_path,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert re.search(r"^@daily: /h/[0-9A-Za-z]{10}$", completed.stdout, re.M)
+    assert re.search(r"^@round: /r/\w+$", completed.stdout, re.M)
+    for name in ("seed", "daily", "round"):
+        shot = tmp_path / f"{name}-phone-light.png"
+        assert shot.read_bytes().startswith(PNG_SIGNATURE)
+
+
+def test_a_placeholder_page_needs_populate(tmp_path):
+    completed = run("@daily", "-o", tmp_path)
+    assert completed.returncode == 2
+    assert "need --populate" in completed.stderr

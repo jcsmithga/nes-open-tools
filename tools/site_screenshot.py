@@ -12,7 +12,11 @@ repository root by default). With --rom as well, the files are loaded on the ROM
 first, so the seed page shows the download form ready. With --login, each browser signs in
 through the development login bypass before capturing, so pages show the signed-in
 header. With --expand, each capture that has collapsed sections in the page body (such
-as the seed page's) is repeated with them all opened. Browser console
+as the seed page's) is repeated with them all opened. With --populate, the database is
+filled first with placeholder data (`server/dev_fixtures.py`): a rated ordinary seed with
+a few rounds and today's daily with a field of twelve, which paths name as @seed, @daily
+and @round (the viewer's daily round); --viewer picks who looks and --closed shuts the
+day. That builds four seeds, so it needs the vanilla US ROM too. Browser console
 errors and page errors are printed and make the command exit 1.
 
 Needs the dev dependencies and a Playwright browser (uv run playwright install chromium).
@@ -22,6 +26,7 @@ import argparse
 import re
 import sys
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 VIEWPORTS = {"desktop": (1280, 800), "phone": (390, 844)}
@@ -37,7 +42,14 @@ examples:
   golf-site-screenshot /generate --generate -o shots
   golf-site-screenshot / /generate --login alice -o shots
   golf-site-screenshot /generate --generate --expand -o shots
+  golf-site-screenshot --populate -o shots
+  golf-site-screenshot @daily @round --populate --viewer unplayed -o shots
+  golf-site-screenshot @daily --populate --viewer signed-out --closed -o shots
 """
+
+#: what --populate names, each a page of the placeholder data
+TOKENS = ("@seed", "@daily", "@round")
+VIEWERS = ("played", "unplayed", "signed-out")
 
 
 def comma_choices(choices):
@@ -113,7 +125,10 @@ def card_states(page) -> str:
     return " ".join(states)
 
 
-def capture(base: str, args: argparse.Namespace) -> tuple[list[Path], list[str]]:
+def capture(
+    base: str, pages: list[tuple[str, str]], args: argparse.Namespace
+) -> tuple[list[Path], list[str]]:
+    """Capture each (name, path) page; `name` is what its files are named for."""
     from playwright.sync_api import sync_playwright
 
     written: list[Path] = []
@@ -123,7 +138,7 @@ def capture(base: str, args: argparse.Namespace) -> tuple[list[Path], list[str]]
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         try:
-            for path in args.pages:
+            for page_name, path in pages:
                 for viewport in args.viewports:
                     for scheme in args.schemes:
                         width, height = VIEWPORTS[viewport]
@@ -148,10 +163,10 @@ def capture(base: str, args: argparse.Namespace) -> tuple[list[Path], list[str]]
                             ),
                         )
                         try:
-                            if args.login:
+                            if args.sign_in:
                                 # The session cookie is per browser context: sign each one in.
                                 response = page.goto(
-                                    f"{base}/auth/login?as={args.login}",
+                                    f"{base}/auth/login?as={args.sign_in}",
                                     wait_until="networkidle",
                                 )
                                 if response is None or not response.ok:
@@ -161,13 +176,13 @@ def capture(base: str, args: argparse.Namespace) -> tuple[list[Path], list[str]]
                                         else "no response"
                                     )
                                     problems.append(
-                                        f"{label}: signing in as {args.login}: HTTP {status}"
+                                        f"{label}: signing in as {args.sign_in}: HTTP {status}"
                                     )
                                 elif not page.locator(
                                     "form[action='/auth/logout']"
                                 ).count():
                                     problems.append(
-                                        f"{label}: signing in as {args.login} left the header signed out"
+                                        f"{label}: signing in as {args.sign_in} left the header signed out"
                                     )
                             response = page.goto(base + path, wait_until="networkidle")
                             if response is None or not response.ok:
@@ -178,7 +193,7 @@ def capture(base: str, args: argparse.Namespace) -> tuple[list[Path], list[str]]
                                 )
                                 problems.append(f"{label}: HTTP {status}")
                             settle(page)
-                            name = f"{slug(path)}-{viewport}-{scheme}"
+                            name = f"{page_name}-{viewport}-{scheme}"
                             shot = args.out_dir / f"{name}.png"
                             page.screenshot(path=shot, full_page=True)
                             written.append(shot)
@@ -247,8 +262,8 @@ def main() -> int:
     parser.add_argument(
         "pages",
         nargs="*",
-        default=["/", "/rom"],
-        help="paths to capture (default: / /rom)",
+        help="paths to capture, and with --populate @seed, @daily and @round "
+        "(default: / /rom, or @seed @daily with --populate)",
     )
     parser.add_argument(
         "-o",
@@ -294,7 +309,37 @@ def main() -> int:
         help="for each capture with collapsed sections in the page body, open them all and capture again "
         "as <name>-expanded.png (the seed page as <name>-seed-expanded.png)",
     )
+    parser.add_argument(
+        "--populate",
+        action="store_true",
+        help="fill the database first with placeholder data: a rated seed with a few rounds "
+        "(@seed) and today's daily with a field of twelve (@daily, and the viewer's round "
+        "@round); builds four seeds, so needs the vanilla US ROM",
+    )
+    parser.add_argument(
+        "--viewer",
+        choices=VIEWERS,
+        help="with --populate, who looks: a player in the daily's field (played, the "
+        "default), a signed-in player outside it, or nobody signed in",
+    )
+    parser.add_argument(
+        "--closed",
+        action="store_true",
+        help="with --populate, look after the daily has closed rather than while it is open",
+    )
     args = parser.parse_args()
+    if not args.populate and (args.viewer or args.closed):
+        parser.error("--viewer and --closed need --populate")
+    if args.populate and args.login and args.viewer:
+        parser.error("--login and --viewer each pick who signs in; pass one")
+    if args.pages is None or not args.pages:
+        args.pages = ["@seed", "@daily"] if args.populate else ["/", "/rom"]
+    tokens = [path for path in args.pages if path.startswith("@")]
+    unknown = [token for token in tokens if token not in TOKENS]
+    if unknown:
+        parser.error(f"unknown page {', '.join(unknown)}; expected {', '.join(TOKENS)}")
+    if tokens and not args.populate:
+        parser.error(f"{', '.join(tokens)} need --populate")
 
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -305,6 +350,8 @@ def main() -> int:
         )
         return 1
 
+    from golf.randomizer.daily import daily_date
+    from server import dev_fixtures
     from server.app import create_app
     from server.config import Config
     from server.live import LiveServer
@@ -312,19 +359,49 @@ def main() -> int:
 
     # The environment's ROM and hole directories, so --generate can build; never its database.
     config = replace(Config.from_env(), database=":memory:")
-    if args.login:
+    args.sign_in = args.login
+    if args.populate and not args.login:
+        args.sign_in = {
+            "played": dev_fixtures.VIEWER,
+            "unplayed": dev_fixtures.OUTSIDER,
+            "signed-out": None,
+        }[args.viewer or "played"]
+    if args.sign_in:
         # The bypass only runs on a localhost base URL, which the served app is.
-        config = replace(
-            config,
-            dev_login=True,
-            base_url="http://127.0.0.1:8000",
-            admin_users=frozenset({f"dev:{args.login}"}),
+        config = replace(config, dev_login=True, base_url="http://127.0.0.1:8000")
+    if args.login:
+        config = replace(config, admin_users=frozenset({f"dev:{args.login}"}))
+    app_options = {}
+    # Today's daily, looked at from a fixed moment in or after its window; the
+    # placeholder data makes the day, so no rollover may make it first.
+    day = daily_date(datetime.now(UTC))
+    if args.populate:
+        moment = (
+            dev_fixtures.closed_moment(day)
+            if args.closed
+            else dev_fixtures.open_moment(day)
         )
+        app_options = {"clock": lambda: moment, "rollover_seconds": None}
     # Every viewport and scheme may generate a seed, more than a player's bucket holds.
     limiter = RateLimiter(capacity=1000, refill_seconds=1)
+    app = create_app(config, rate_limiter=limiter, **app_options)
     try:
-        with LiveServer(create_app(config, rate_limiter=limiter)) as base:
-            written, problems = capture(base, args)
+        with LiveServer(app) as base:
+            named: dict[str, str] = {}
+            if args.populate:
+                populated = dev_fixtures.populate(app.state, day)
+                named = {
+                    "@seed": f"/h/{populated.seed}",
+                    "@daily": f"/h/{populated.daily}",
+                    "@round": f"/r/{populated.round}",
+                }
+                for token, path in named.items():
+                    print(f"{token}: {path}")
+            pages = [
+                (path[1:], named[path]) if path in named else (slug(path), path)
+                for path in args.pages
+            ]
+            written, problems = capture(base, pages, args)
     except PlaywrightError as problem:
         print(f"error: {problem}", file=sys.stderr)
         print(
