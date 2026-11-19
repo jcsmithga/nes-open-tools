@@ -968,6 +968,34 @@ ul.daily-seed-facts > li {
   margin: 0;
 }
 
+/* The previous day's top three: place, name and points, the points bold as on the seed
+   page's standing. */
+/* in the style of the box's own small label */
+.podium-header {
+  margin-bottom: 0.25rem;
+  color: var(--pico-muted-color);
+  font-size: 0.875em;
+  font-weight: 600;
+}
+
+table.daily-podium {
+  width: auto;
+  margin-bottom: var(--pico-spacing);
+}
+
+table.daily-podium td {
+  padding: 0.25rem 0.75rem 0.25rem 0;
+  border-bottom: none;
+}
+
+table.daily-podium .points {
+  font-weight: 600;
+}
+
+.daily-seed-results {
+  margin-bottom: 0;
+}
+
 /* A daily's results on its seed page. The viewer's own line stands out from the field's,
    and the points that decide the standing are bold. */
 article.daily-results tr[data-viewer] > * {

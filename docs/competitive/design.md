@@ -143,6 +143,12 @@ closing at 10:00 UTC the next day.
   with its date, how long until it closes, how many players have played it, and a link
   to its seed page. A signed-in player who has played it also sees their own round's
   score, linking to the round: nothing is spoiled for them.
+- **Under it, the home page shows the previous day's daily**, titled and dated the same
+  way. Through the hour its window overlaps today's it is a last call: its closing time,
+  how many have played it so far and a link to play it. Once closed, it shows the
+  players in the top three places with their net Stableford points (more than three
+  when a place is shared), how many players recorded a round on it, and a link to its
+  seed page's full results. A withdrawn previous day shows nothing.
 - **`/daily`** redirects to the Daily Seed's page, a link that never goes stale.
   **`/daily/<date>`** redirects to that day's seed, the replacement after a rerun.
 - **The calendar of past dailies** shows each day's theme and how many players it drew,

@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
-from golf.randomizer.daily import DayPlan, Theme, daily_date, magic_words
+from golf.randomizer.daily import DayPlan, Theme, daily_date, magic_words, opens_at
 from server import dailies
 from server.app import create_app
 from server.config import Config
@@ -255,6 +255,66 @@ def test_a_withdrawn_day_is_not_the_daily_seed(site, today):
     make_daily(site, today)
     withdraw_daily(app_state(site).db, today, admin_id(site))
     assert 'class="daily-seed"' not in site.get("/").text
+
+
+def previous_box(page: str) -> str | None:
+    found = re.search(
+        r'<article class="daily-seed previous-daily"(.*?)</article>', page, re.S
+    )
+    return None if found is None else found.group(1)
+
+
+def test_yesterdays_box_is_a_last_call_while_it_is_open(site, clock, today):
+    yesterday = make_daily(site, today - timedelta(days=1))
+    make_daily(site, today)
+    clock.now = opens_at(today) + timedelta(minutes=30)
+    box = previous_box(site.get("/").text)
+    assert box is not None
+    assert f'data-day="{yesterday.day.isoformat()}"' in box
+    assert 'data-state="open"' in box
+    assert f'<time datetime="{yesterday.closes_at}" data-countdown>' in box
+    assert f'href="/h/{yesterday.seed_id}" role="button"' in box
+    assert "daily-podium" not in box and "daily-seed-results" not in box
+
+
+def test_yesterdays_box_links_its_results_once_it_closes(site, clock, today):
+    yesterday = make_daily(site, today - timedelta(days=1))
+    make_daily(site, today)
+    clock.now = opens_at(today) + timedelta(hours=2)
+    box = previous_box(site.get("/").text)
+    assert box is not None
+    assert 'data-state="closed"' in box
+    assert 'data-players="0"' in box
+    assert "data-countdown" not in box and 'role="button"' not in box
+    # nobody played, so there is no standing to show
+    assert "daily-podium" not in box
+    assert f'href="/h/{yesterday.seed_id}"' in box
+
+
+def test_yesterdays_box_shows_with_no_daily_seed_today(site, clock, today):
+    make_daily(site, today - timedelta(days=1))
+    withdraw_daily(app_state(site).db, make_daily(site, today).day, admin_id(site))
+    clock.now = opens_at(today) + timedelta(hours=2)
+    page = site.get("/").text
+    assert 'class="daily-seed"' not in page
+    assert previous_box(page) is not None
+
+
+def test_a_withdrawn_yesterday_has_no_box(site, clock, today):
+    make_daily(site, today - timedelta(days=1))
+    make_daily(site, today)
+    withdraw_daily(app_state(site).db, today - timedelta(days=1), admin_id(site))
+    clock.now = opens_at(today) + timedelta(hours=2)
+    assert previous_box(site.get("/").text) is None
+
+
+def test_yesterday_still_the_daily_seed_has_no_second_box(site, clock, today):
+    # today's is not made yet, so yesterday's, open for another half hour, is the Daily Seed
+    yesterday = make_daily(site, today - timedelta(days=1))
+    clock.now = opens_at(today) + timedelta(minutes=30)
+    page = site.get("/").text
+    assert f'data-day="{yesterday.day.isoformat()}"' in page
+    assert previous_box(page) is None
 
 
 def test_a_dailys_seed_page_says_it_is_one(site, today):

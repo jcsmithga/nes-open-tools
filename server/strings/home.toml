@@ -69,7 +69,7 @@ Stats, analytics, and leaderboards are coming soon!
 
 [home.daily.heading]
 note = "plain: small label above the Daily Seed box's title, which is the day's theme name (as Easy Monday), with the date under it"
-text = "Daily Seed"
+text = "Today's Daily Seed"
 
 [home.daily.closes]
 note = "in the Daily Seed box, when the daily stops taking rounds; {time} counts down to it in the viewer's language, as \"in 6 hours\" or \"in 40 minutes\" (shown as the UTC time when scripts are off), with the local time on hover"
@@ -94,3 +94,23 @@ text = "Play"
 [home.daily.calendar]
 note = "link to the calendar of past dailies, beside the date under the Daily Seed box's title"
 text = "Full Calendar"
+
+[home.yesterday.heading]
+note = "plain: small label above the previous day's daily box, under the Daily Seed box, as home.daily.heading is above today's; the title under it is that day's theme name (as Windy Wednesday). While it is still open (the first hour of today's window) the box shows home.daily.closes, home.daily.players and home.daily.play like today's; once closed, its top three and how many played"
+text = "Yesterday"
+
+[home.yesterday.podium_header]
+note = "plain: small label above the previous day's top three once it has closed, saying what the list is and what the number beside each name counts (net Stableford points)"
+text = "Top Players, Net Stableford Points"
+
+[home.yesterday.players]
+note = "in the previous day's box once it has closed, under its top three; {count} how many players recorded a round on it, 0 or 2 and up (1 is home.yesterday.players_one)"
+text = "{count} scorecards submitted."
+
+[home.yesterday.players_one]
+note = "as home.yesterday.players, when exactly one player recorded a round on the previous day's daily"
+text = "1 scorecard submitted."
+
+[home.yesterday.results]
+note = "link at the bottom of the previous day's box once it has closed, to that day's seed page, which has its full standing, skins and rounds"
+text = "Full Results"

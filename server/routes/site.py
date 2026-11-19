@@ -9,7 +9,7 @@ from golf.randomizer.roms import VANILLA_ROMS
 from golf.rendering.rangefinder import METADATA
 
 from ..auth import current_user
-from ..dailies import card_for, daily_seed
+from ..dailies import card_for, daily_seed, load_day_results, previous_daily
 from ..pages import ContentPage, PageCatalog
 from ..static_files import FAVICON, REVALIDATE, STATIC_DIR
 from ..strings import Strings
@@ -32,11 +32,28 @@ def site_router(templates: Jinja2Templates, pages: PageCatalog) -> APIRouter:
         updates = pages.get(LATEST_UPDATE_PAGE)
         latest = updates.newest if updates is not None else None
         db = request.app.state.db
-        daily = daily_seed(db, request.app.state.clock())
+        now = request.app.state.clock()
+        daily = daily_seed(db, now)
+        previous = previous_daily(db, now)
+        if previous is not None and daily is not None and previous.day == daily.day:
+            # today's is not made yet, so yesterday's is still the Daily Seed
+            previous = None
         user = current_user(request)
-        # the viewer's own round on it, which spoils nothing for them
+        # the viewer's own round on each, which spoils nothing for them
         card = (
             None if daily is None or user is None else card_for(db, daily.day, user.id)
+        )
+        previous_card = (
+            None
+            if previous is None or user is None
+            else card_for(db, previous.day, user.id)
+        )
+        # its results only once it closes: while open they are hidden from anyone
+        # who has not played it (design.md, Spoilers)
+        previous_results = (
+            None
+            if previous is None or previous.is_open(now)
+            else load_day_results(db, previous.day.isoformat())
         )
         return templates.TemplateResponse(
             request,
@@ -47,6 +64,10 @@ def site_router(templates: Jinja2Templates, pages: PageCatalog) -> APIRouter:
                 "latest_update": latest if latest and latest.summary else None,
                 "daily": daily,
                 "daily_card": card,
+                "previous_daily": previous,
+                "previous_open": previous is not None and previous.is_open(now),
+                "previous_card": previous_card,
+                "previous_results": previous_results,
             },
         )
 

@@ -1,5 +1,46 @@
 {% extends "base.html" %}
 {% import "_daily.html" as daily_theme %}
+{% import "_daily_results.html" as daily_results %}
+
+{# A daily box's title: a small label, the day's theme, then its date and the calendar. #}
+{% macro daily_header(daily, heading) %}
+  <header>
+    <hgroup>
+      <p>{{ heading }}</p>
+      <h2>{{ daily.theme.name }}</h2>
+      <p class="daily-seed-date">
+        {{ daily.day | calendar_date }}
+        <span aria-hidden="true">·</span>
+        <a href="/daily/calendar">{{ t("home.daily.calendar") }}</a>
+      </p>
+    </hgroup>
+  </header>
+{% endmacro %}
+
+{# An open daily's closing time and how many have played it so far. #}
+{% macro open_facts(daily) %}
+  <ul class="daily-seed-facts" role="list">
+    <li class="daily-seed-closes">{{ t("home.daily.closes", time=daily.closes_at | countdown) }}</li>
+    <li class="daily-seed-players" data-players="{{ daily.players }}">{% if daily.players == 1 %}{{ t("home.daily.players_one") }}{% else %}{{ t("home.daily.players", count=daily.players) }}{% endif %}</li>
+  </ul>
+{% endmacro %}
+
+{# The viewer's own round on a daily, which spoils nothing for them; nothing without one. #}
+{% macro your_round(card) %}
+  {% if card %}
+    <p class="daily-seed-card"
+       data-strokes="{{ card.strokes }}"
+       data-to-par="{{ card.to_par }}">
+      <a href="/r/{{ card.public_id }}">{{ t("home.daily.your_round", strokes=card.strokes, to_par=card.to_par) }}</a>
+    </p>
+  {% endif %}
+{% endmacro %}
+
+{% macro play_button(daily) %}
+  <p class="daily-seed-play">
+    <a href="/h/{{ daily.seed_id }}" role="button">{{ t("home.daily.play") }}</a>
+  </p>
+{% endmacro %}
 {% block content %}
   <hgroup>
     <h1>{{ t("home.heading") }}</h1>
@@ -10,32 +51,56 @@
 
   {% if daily %}
     <article class="daily-seed" data-day="{{ daily.day.isoformat() }}">
-      <header>
-        <hgroup>
-          <p>{{ t("home.daily.heading") }}</p>
-          <h2>{{ daily.theme.name }}</h2>
-          <p class="daily-seed-date">
-            {{ daily.day | calendar_date }}
-            <span aria-hidden="true">·</span>
-            <a href="/daily/calendar">{{ t("home.daily.calendar") }}</a>
-          </p>
-        </hgroup>
-      </header>
+      {{ daily_header(daily, t("home.daily.heading")) }}
       {{ daily_theme.description_paragraph(daily.theme) }}
-      <ul class="daily-seed-facts" role="list">
-        <li class="daily-seed-closes">{{ t("home.daily.closes", time=daily.closes_at | countdown) }}</li>
-        <li class="daily-seed-players" data-players="{{ daily.players }}">{% if daily.players == 1 %}{{ t("home.daily.players_one") }}{% else %}{{ t("home.daily.players", count=daily.players) }}{% endif %}</li>
-      </ul>
-      {% if daily_card %}
-        <p class="daily-seed-card"
-           data-strokes="{{ daily_card.strokes }}"
-           data-to-par="{{ daily_card.to_par }}">
-          <a href="/r/{{ daily_card.public_id }}">{{ t("home.daily.your_round", strokes=daily_card.strokes, to_par=daily_card.to_par) }}</a>
+      {{ open_facts(daily) }}
+      {{ your_round(daily_card) }}
+      {{ play_button(daily) }}
+    </article>
+  {% endif %}
+
+  {# The day before: a last call through the hour its window overlaps today's, then its
+     results, which are no longer hidden from anyone once it closes. #}
+  {% if previous_daily %}
+    <article class="daily-seed previous-daily"
+             data-day="{{ previous_daily.day.isoformat() }}"
+             data-state="{{ 'open' if previous_open else 'closed' }}">
+      {{ daily_header(previous_daily, t("home.yesterday.heading")) }}
+      {{ daily_theme.description_paragraph(previous_daily.theme) }}
+      {% if previous_open %}
+        {{ open_facts(previous_daily) }}
+      {% else %}
+        {% if previous_results %}
+          <p class="podium-header">{{ t("home.yesterday.podium_header") }}</p>
+          <table class="daily-podium">
+            <tbody>
+              {% for line in previous_results.podium %}
+                <tr data-user="{{ line.user_id }}"
+                    data-position="{{ line.position }}"
+                    data-points="{{ line.points }}">
+                  <td class="num">{{ daily_results.position(line) }}</td>
+                  <td>
+                    <a href="/r/{{ line.round_public_id }}">{{ line.name }}</a>
+                  </td>
+                  <td class="num points">{{ line.points }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+        <p class="daily-seed-players"
+           data-players="{{ previous_daily.players }}">
+          {% if previous_daily.players == 1 %}{{ t("home.yesterday.players_one") }}{% else %}{{ t("home.yesterday.players", count=previous_daily.players) }}{% endif %}
         </p>
       {% endif %}
-      <p class="daily-seed-play">
-        <a href="/h/{{ daily.seed_id }}" role="button">{{ t("home.daily.play") }}</a>
-      </p>
+      {{ your_round(previous_card) }}
+      {% if previous_open %}
+        {{ play_button(previous_daily) }}
+      {% else %}
+        <p class="daily-seed-results">
+          <a href="/h/{{ previous_daily.seed_id }}">{{ t("home.yesterday.results") }}</a>
+        </p>
+      {% endif %}
     </article>
   {% endif %}
 

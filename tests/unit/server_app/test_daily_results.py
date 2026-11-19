@@ -23,6 +23,8 @@ from tests.unit.test_server_submissions import Player
 DAY = "2026-11-18"
 OPEN = datetime(2026, 11, 18, 20, 0, tzinfo=UTC)
 CLOSED = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+#: the next day, with DAY closed and the home page's previous day
+NEXT_DAY = datetime(2026, 11, 19, 12, 0, tzinfo=UTC)
 
 
 class Clock:
@@ -195,3 +197,42 @@ def test_an_open_dailys_net_card_is_hidden_from_a_player_who_has_not_played(
     page = site.get(f"/r/{round_id}").text
     assert 'data-state="scores-hidden"' in page
     assert "data-received" not in page
+
+
+def podium(site) -> list[tuple[str, str]]:
+    """The home page's previous day's top places, as (position, points) pairs."""
+    page = site.get("/").text
+    found = re.search(r'<table class="daily-podium">(.*?)</table>', page, re.S)
+    assert found is not None
+    return re.findall(r'data-position="(\d+)"\s+data-points="(\d+)"', found.group(1))
+
+
+def test_the_home_page_shows_yesterdays_top_three_with_shared_places(
+    site, daily, clock
+):
+    rounds = {
+        name: play(site, daily, name, strokes, 12 + number)
+        for number, (name, strokes) in enumerate(
+            (("dee", 3), ("eve", 4), ("fay", 5), ("gus", 5), ("hal", 6))
+        )
+    }
+    clock.now = NEXT_DAY
+    places = podium(site)
+    # fay and gus play the same card, so they share third and both show; hal is fifth
+    assert [position for position, _ in places] == ["1", "2", "3", "3"]
+    points = [int(p) for _, p in places]
+    assert points == sorted(points, reverse=True) and points[2] == points[3]
+    page = site.get("/").text
+    assert 'class="podium-header"' in page
+    assert all(f'href="/r/{rounds[n]}"' in page for n in ("dee", "eve", "fay", "gus"))
+    assert f'href="/r/{rounds["hal"]}"' not in page
+    assert 'data-players="5"' in page
+
+
+def test_yesterdays_box_shows_a_player_their_own_round(site, daily, clock):
+    play(site, daily, "dee", 4, 12)
+    clock.now = NEXT_DAY
+    site.get("/auth/login", params={"as": "dee"})
+    page = site.get("/").text
+    box = page[page.index("previous-daily") :]
+    assert 'class="daily-seed-card"' in box

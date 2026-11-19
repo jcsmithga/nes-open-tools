@@ -187,6 +187,13 @@ def daily_seed(db: Database, now: datetime) -> Daily | None:
     return None if row is None else _daily(row)
 
 
+def previous_daily(db: Database, now: datetime) -> Daily | None:
+    """The day before the Daily Seed's date at `now`, unless it was never made or is
+    withdrawn. Open for the first hour of the next day's window, then closed."""
+    found = load_daily(db, daily_date(now) - timedelta(days=1))
+    return None if found is None or found.withdrawn else found
+
+
 def opened_dailies(db: Database, first: date, last: date, now: datetime) -> list[Daily]:
     """The dailies from `first` to `last` inclusive that had opened by `now`, by date."""
     with db.transaction() as conn:
@@ -590,6 +597,9 @@ def card_for(db: Database, day: date, user_id: int) -> CardRound | None:
 
 # -- Results ---------------------------------------------------------------------------------
 
+#: the places the home page shows for the previous day
+PODIUM = 3
+
 
 @dataclass(frozen=True)
 class StandingLine:
@@ -642,6 +652,11 @@ class DayResults:
     matches: dict[int, tuple[MatchLine, ...]]
     #: each hole's skins; empty when the field is too small to win any
     skins: tuple[SkinHole, ...]
+
+    @property
+    def podium(self) -> tuple[StandingLine, ...]:
+        """The standing's lines in the top places, more of them when a place is shared."""
+        return tuple(line for line in self.standing if line.position <= PODIUM)
 
 
 _STANDING_SQL = """
