@@ -28,6 +28,7 @@ from golf.formats.hole_data import HoleData
 from golf.qr.port import layout as qr_layout
 
 from .base import ROMPatch
+from .clubhouse_roof import clubhouse_roof_patch
 from .composite import CompositePatch
 from .course import CoursePatch
 from .course_intro_sky import (
@@ -247,6 +248,12 @@ class CourseIntroSkyParams:
 @dataclass(frozen=True)
 class PeachDressParams:
     #: one of peach_dress.DRESS_COLORS
+    color: int
+
+
+@dataclass(frozen=True)
+class ClubhouseRoofParams:
+    #: one of clubhouse_roof.ROOF_COLORS
     color: int
 
 
@@ -634,6 +641,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "Recolor Peach's dress in the putting view to a curated NES color",
             PeachDressParams,
             lambda ctx, params: peach_dress_patch(params.color),
+        ),
+        PatchSpec(
+            "clubhouse_roof",
+            "Recolor the club house roof in the walk-out scene to a curated NES color (docs/cutscene_sprites.md)",
+            ClubhouseRoofParams,
+            lambda ctx, params: clubhouse_roof_patch(params.color),
         ),
         PatchSpec(
             "course_intro_sky",

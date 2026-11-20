@@ -19,6 +19,7 @@ from golf.core.rng import HoleWindForecast, predict_hole
 
 from .base import PatchError, ROMPatch
 from .byte_patch import BytePatch
+from .clubhouse_roof import ROOF_COLORS, clubhouse_roof_patch
 from .composite import CompositePatch
 from .course import CoursePatch, CourseWriteStats
 from .course_intro_sky import (
@@ -192,6 +193,8 @@ __all__ = [
     "signpost_color_patch",
     "SIGNPOST_COLOR_FAMILIES",
     "SIGNPOST_COLORS",
+    "clubhouse_roof_patch",
+    "ROOF_COLORS",
     "Club",
     "sram_defaults_patch",
     "sram_defaults_patches",

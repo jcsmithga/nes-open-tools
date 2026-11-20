@@ -78,6 +78,20 @@ with two players, each with its own streams), then loads the whole screen:
 and the palette at `$ADA4`. The same scene's phase 2 handler, `LC_9A68_RoundEndDispatch`,
 is where a finished round returns to the main menu (`scorecard_qr.md`).
 
+**[C]** The roof is background subpalette 1, color 2: the byte at `$ADAA`, vanilla `$27`.
+Only the roof's tiles draw that entry; subpalette 1's other colors are the walls' white
+`$30` and the sky's `$3C`. **[D]** Mario Open gives each course its own roof (`$21` Japan,
+`$26` Australia, `$11` France, `$27` Hawaii, `$1B` UK, `$2C` Extra), as read from that
+game's screens.
+
+**[C]** One roof tile is in the wrong subpalette. Tile (4, 1), on the roof's top edge, is
+the top-left quadrant of attribute byte `$23C1`, which is `$50` (subpalette 0 there), so
+its one roof pixel shows the hedge's `$22`. `$23C1` comes from a literal in the nametable
+stream: the opcode `$01` at bank 7 `$8A1E` writes `$55 $50` from `$8A1F`-`$8A20`. Setting
+`$8A20` to `$51` changes nothing else the stream writes; the quadrant's other three tiles
+are sky drawn only in color 3, `$3C` in both subpalettes. The table's only loader is
+`$AC24` (inline arguments at `$AC26`).
+
 ### The hole result
 
 **[C]** The call chain, once a player holes out:

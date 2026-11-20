@@ -7,7 +7,8 @@ The two-stage build: a manifest into an unfinished ROM, and an unfinished ROM in
   swing view HUD, RC for the course on the in-game HUD, the round stats the QR code
   sends (fairways hit and penalty strokes), the scorecard QR image with
   its credential placeholders at the fill, the signpost banner and the seed's color for
-  its brick, the seed's color for Peach's dress, Mario Open's sky over the course name
+  its brick, the seed's color for Peach's dress, the seed's color for the club house roof
+  in the walk-out scene, Mario Open's sky over the course name
   on the course intro scene (ADR 0019), the magic words on the menus and scorecard, and
   the new-save options routine with its table at the vanilla values. A seed with club rules leaves CHOOSE CLUBS out of the club house, so the bag
   the finisher writes is the bag the save keeps. Everything it reads is
@@ -53,6 +54,7 @@ from golf.core.patches import (
     QrCredentials,
     ROMPatch,
     StrokeIndexesPatch,
+    clubhouse_roof_patch,
     course_intro_sky_patch,
     course_theme_patch,
     green_shortcut_patch,
@@ -287,6 +289,7 @@ def unfinished_steps(
         signpost_step(vanilla),
         signpost_color_patch(course.signpost_color),
         peach_dress_patch(course.dress_color),
+        clubhouse_roof_patch(course.roof_color),
         intro_sky_step(),
         scorecard_course_name_patch(title=scorecard_title(course.magic_words)),
         menu_trim_patch(

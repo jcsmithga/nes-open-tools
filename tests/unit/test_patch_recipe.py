@@ -47,6 +47,7 @@ class TestRegistry:
             "mercy_tap_in": {"mercy_point": 9},
             "peach_dress": {"color": 0x16},
             "signpost_color": {"color": 0x12},
+            "clubhouse_roof": {"color": 0x2C},
             "seeded_wind": {"seed": "x"},
             "wind_anchors": {"anchors": " ".join(["80/7"] * 18)},
             "qr_credentials": {"credentials": str(credentials_file)},

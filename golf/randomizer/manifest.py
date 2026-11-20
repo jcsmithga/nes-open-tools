@@ -8,8 +8,8 @@ Three parts:
 - `settings`: every input to generation, the PRNG seed and the course's rules included,
   as a record of what the seed was made from. Nothing regenerates a stored seed (ADR 0024).
 - `course`: concrete values, and the only part the recipe reads after version checks.
-  Hole ids, never filters; a music slug, never "random"; the dress and signpost colors
-  as NES color values.
+  Hole ids, never filters; a music slug, never "random"; the dress, signpost and roof
+  colors as NES color values.
 
 The patches every seed gets are implied by `build_version`; the interface their unfinished
 artifact exposes to personalization is `finish_abi_version`.
@@ -24,6 +24,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, TypeGuard
 
+from golf.core.patches.clubhouse_roof import ROOF_COLORS
 from golf.core.patches.peach_dress import DRESS_COLORS
 from golf.core.patches.signpost_color import SIGNPOST_COLORS
 from golf.core.patches.sram_defaults import BAG_SIZE, Club, magic_bytes, parse_club
@@ -47,7 +48,7 @@ from .transforms import TransformError, parse_transform
 from .wind import DIRECTION_PROFILES, SPEED_PROFILES, VANILLA
 from .words import MagicWordsError, check_magic_words
 
-SCHEMA = 6
+SCHEMA = 7
 #: what a stored manifest without `build_version` or `finish_abi_version`, as schema 1's
 #: are, was built with and exposes
 LEGACY_BUILD_VERSION = 1
@@ -511,6 +512,8 @@ class Course:
     dress_color: int
     #: the brick behind the signpost's banner, one of `signpost_color.SIGNPOST_COLORS`
     signpost_color: int
+    #: the club house roof in the walk-out scene, one of `clubhouse_roof.ROOF_COLORS`
+    roof_color: int
 
     def __post_init__(self):
         object.__setattr__(self, "holes", tuple(self.holes))
@@ -545,6 +548,7 @@ class Course:
         for what, value, allowed in (
             ("dress_color", self.dress_color, DRESS_COLORS),
             ("signpost_color", self.signpost_color, SIGNPOST_COLORS),
+            ("roof_color", self.roof_color, ROOF_COLORS),
         ):
             if not _is_int(value) or value not in allowed:
                 raise ManifestError(f"{what} {value!r} is not a curated color")
@@ -567,6 +571,7 @@ class Course:
             "sram_magic": self.sram_magic,
             "dress_color": self.dress_color,
             "signpost_color": self.signpost_color,
+            "roof_color": self.roof_color,
         }
 
     @classmethod
@@ -582,6 +587,7 @@ class Course:
                 "sram_magic",
                 "dress_color",
                 "signpost_color",
+                "roof_color",
             ),
             "course",
         )
@@ -600,6 +606,7 @@ class Course:
             sram_magic=data["sram_magic"],
             dress_color=data["dress_color"],
             signpost_color=data["signpost_color"],
+            roof_color=data["roof_color"],
         )
 
 

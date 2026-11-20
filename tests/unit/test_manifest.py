@@ -61,6 +61,7 @@ def course(**overrides) -> Course:
         sram_magic=0x5247,
         dress_color=0x16,
         signpost_color=0x0B,
+        roof_color=0x1B,
     )
     return Course(**(fields | overrides))
 
@@ -575,7 +576,7 @@ def issued(schema: int, **overrides) -> dict:
     return value.to_json() if schema == SCHEMA else as_schema(value.to_json(), schema)
 
 
-@pytest.mark.parametrize("schema", [1, 2, 3, 4, 5, SCHEMA])
+@pytest.mark.parametrize("schema", [1, 2, 3, 4, 5, 6, SCHEMA])
 def test_a_stored_manifest_of_any_schema_reads_as_its_seed_was_made(schema):
     stored = StoredManifest.from_json(issued(schema))
     made = manifest(settings=UNIFORM_SETTINGS)

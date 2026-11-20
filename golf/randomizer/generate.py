@@ -3,8 +3,8 @@ Generation: a catalog, a curation snapshot and settings in, a manifest out.
 
 Every random choice comes from `settings.prng_seed`, drawn fresh when the settings have
 none. Each purpose (a rolled rule's par mix, the hole draw, the transforms, the wind
-directions, the wind speeds, the music, the magic words, the SRAM magic, the dress and
-signpost colors) gets its own
+directions, the wind speeds, the music, the magic words, the SRAM magic, the dress,
+signpost and roof colors) gets its own
 generator derived from the seed, and the wind seeds come from `derive_hole_seeds`, so a
 change to how one thing is drawn leaves the others where they were.
 
@@ -27,6 +27,7 @@ import secrets
 from dataclasses import replace
 
 from golf.core.palettes import draw_family_color
+from golf.core.patches.clubhouse_roof import ROOF_COLORS
 from golf.core.patches.peach_dress import DRESS_COLOR_FAMILIES
 from golf.core.patches.seeded_wind import derive_hole_seeds
 from golf.core.patches.signpost_color import SIGNPOST_COLOR_FAMILIES
@@ -44,7 +45,7 @@ from .transforms import MAX_SEED
 from .wind import draw_directions, draw_speeds
 from .words import draw_magic_words
 
-GENERATOR_VERSION = 5
+GENERATOR_VERSION = 6
 #: the steps of `Problem.mix` every course is put through: enough to bring a standard
 #: course, with or without the expert cap, to the figures of a uniform draw
 MIX_STEPS = 800
@@ -170,6 +171,7 @@ def generate(
         signpost_color=draw_family_color(
             SIGNPOST_COLOR_FAMILIES, stream(prng_seed, "signpost")
         ),
+        roof_color=stream(prng_seed, "roof").choice(ROOF_COLORS),
     )
     return Manifest(
         schema=SCHEMA,

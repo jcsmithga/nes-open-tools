@@ -9,7 +9,13 @@ import pytest
 from golf.algorithms import hazards
 from golf.algorithms.mirror import mirror_hole
 from golf.core import ips
-from golf.core.patches import PatchStack, StackError, peach_dress, signpost_color
+from golf.core.patches import (
+    PatchStack,
+    StackError,
+    clubhouse_roof,
+    peach_dress,
+    signpost_color,
+)
 from golf.core.patches.course import CoursePatch
 from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.qr_credentials import PLACEHOLDERS, placeholder_offset
@@ -70,6 +76,7 @@ UNFINISHED_ORDER = [
     "signpost_random_banner",
     "signpost_color",
     "peach_dress",
+    "clubhouse_roof",
     "course_intro_sky",
     "scorecard_course_name",
     "menu_trim",
@@ -220,8 +227,8 @@ def test_build_version_nine_golden_unfinished_ips_hashes(
         "jp_france_18": hashlib.sha256(unfinished.ips).hexdigest(),
         "nes_only": hashlib.sha256(nes.ips).hexdigest(),
     } == {
-        "jp_france_18": "9916b73bf1dc91d1440547bebfdb0693e639381cfd1eedf03b2d8313f8496604",
-        "nes_only": "e309b12601d81e4733e2ab573569665656117ad4efdd1c7b3d00b9251ebfe058",
+        "jp_france_18": "815f48e0341fa1489eb5a88461d131dcc499d0a9a08d3ee9faa295624ed9e6b9",
+        "nes_only": "9b78e3b78c72368161c85ffcd8a7cf7b66f60d9ac65005fddf90b080e2ca520d",
     }
 
 
@@ -233,6 +240,16 @@ def test_the_unfinished_rom_has_the_seeds_colors_and_the_sky(unfinished, jp_mani
             signpost_color.BANNER_COLOR_ADDR,
             signpost_color.PALETTE_BANK,
             course.signpost_color,
+        ),
+        (
+            clubhouse_roof.ROOF_COLOR_ADDR,
+            clubhouse_roof.PALETTE_BANK,
+            course.roof_color,
+        ),
+        (
+            clubhouse_roof.ROOF_ATTRIBUTE_ADDR,
+            clubhouse_roof.NAMETABLE_BANK,
+            clubhouse_roof.FIXED_ROOF_ATTRIBUTE,
         ),
     ):
         assert unfinished.rom[HEADER + cpu_to_prg_switched(addr, bank)] == color

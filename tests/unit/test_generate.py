@@ -6,6 +6,7 @@ from itertools import pairwise
 
 import pytest
 
+from golf.core.patches.clubhouse_roof import ROOF_COLORS
 from golf.core.patches.peach_dress import DRESS_COLORS
 from golf.core.patches.seeded_wind import derive_hole_seeds
 from golf.core.patches.signpost_color import SIGNPOST_COLORS
@@ -80,7 +81,7 @@ def test_draws_a_prng_seed_when_the_settings_have_none(real_catalog, real_curati
 
 def test_records_versions_and_round_trips(real_catalog, real_curation):
     manifest = generate(real_catalog, real_curation, Settings(prng_seed="abc"))
-    assert manifest.schema == SCHEMA == 6
+    assert manifest.schema == SCHEMA == 7
     assert manifest.generator_version == GENERATOR_VERSION
     assert manifest.build_version == BUILD_VERSION == 9
     assert manifest.finish_abi_version == FINISH_ABI_VERSION == 2
@@ -179,6 +180,7 @@ def test_each_draw_has_its_own_stream(real_catalog, real_curation):
     assert both.sram_magic == us_only.sram_magic
     assert both.dress_color == us_only.dress_color
     assert both.signpost_color == us_only.signpost_color
+    assert both.roof_color == us_only.roof_color
     assert [s.wind_seed for s in both.holes] == [s.wind_seed for s in us_only.holes]
 
 
@@ -207,6 +209,8 @@ def test_the_colors_are_drawn_per_seed_from_the_curated_ones(
     signposts = {course.signpost_color for course in courses}
     assert dresses <= set(DRESS_COLORS) and len(dresses) > 1
     assert signposts <= set(SIGNPOST_COLORS) and len(signposts) > 1
+    roofs = {course.roof_color for course in courses}
+    assert roofs <= set(ROOF_COLORS) and len(roofs) > 1
 
 
 def test_nes_open_seeds_use_nes_open_music(real_catalog, real_curation):

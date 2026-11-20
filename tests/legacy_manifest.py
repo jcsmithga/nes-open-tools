@@ -14,6 +14,8 @@ SCHEMA_4_SETTINGS = ("include",)
 SCHEMA_5_SETTINGS = ("mirror_chance", "hazard_chance")
 #: course fields schema 6 added
 SCHEMA_6_COURSE = ("dress_color", "signpost_color")
+#: course fields schema 7 added
+SCHEMA_7_COURSE = ("roof_color",)
 STANDARD = {"rule": "standard"}
 
 
@@ -28,7 +30,7 @@ def draw_rule(settings: dict) -> dict:
 
 
 def as_schema(data: dict, schema: int) -> dict:
-    """A current manifest's JSON reshaped as schema 1 to 5: the fields it lacks removed,
+    """A current manifest's JSON reshaped as schema 1 to 6: the fields it lacks removed,
     and for schema 1 to 4 the standard course's `par` and `draw_rule` in place of
     `constraints`.
 
@@ -40,6 +42,10 @@ def as_schema(data: dict, schema: int) -> dict:
     """
     data = copy.deepcopy(data)
     data["schema"] = schema
+    for key in SCHEMA_7_COURSE:
+        del data["course"][key]
+    if schema == 6:
+        return data
     for key in SCHEMA_6_COURSE:
         del data["course"][key]
     if schema == 5:

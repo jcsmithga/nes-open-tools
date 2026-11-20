@@ -17,8 +17,8 @@ With the hole list trimmed to one of its 18 slots:
 
 ```json
 {
-  "schema": 6,
-  "generator_version": 5,
+  "schema": 7,
+  "generator_version": 6,
   "build_version": 9,
   "finish_abi_version": 2,
   "catalog_version": 1,
@@ -51,7 +51,8 @@ With the hole list trimmed to one of its 18 slots:
     "magic_words": ["DIVOT", "CADDY", "BOGEY"],
     "sram_magic": 21063,
     "dress_color": 22,
-    "signpost_color": 11
+    "signpost_color": 11,
+    "roof_color": 27
   }
 }
 ```
@@ -115,7 +116,7 @@ strictly, and a stored seed's is read tolerantly (**Reading stored manifests**, 
 | 5 | 6 | 2 | `settings` gains `constraints`, the course's mode and expert cap, and loses `par` and `draw_rule`; it gains `mirror_chance` and `hazard_chance`, and the manifest gains `request` (ADR 0016, ADR 0025). The unfinished buildchain is unchanged. |
 | 5 | 7 | 2 | The unfinished stack adds `swing_speed_hud`, which shows the swing speed (S/M/F) beside the club on the swing view HUD (`docs/swing_speed_hud.md`). |
 | 6 | 8 | 2 | `course` gains `dress_color` and `signpost_color`, which the unfinished stack's new `peach_dress` and `signpost_color` steps write. The stack also adds `course_intro_sky`, Mario Open's sky over the course name on the course intro scene, in every seed (ADR 0019). |
-| 6 | 9 | 2 | The unfinished stack adds `hud_course_abbrev`, which shows RC (Random Course) in place of the course's two letters on the in-game HUD (`docs/hud_course_abbrev.md`). This is the current schema and unfinished buildchain. |
+| 7 | 9 | 2 | `course` gains `roof_color`, which the unfinished stack's new `clubhouse_roof` step writes, with a fix for one roof tile drawn in the wrong subpalette (`docs/cutscene_sprites.md`). The stack also adds `hud_course_abbrev`, which shows RC (Random Course) in place of the course's two letters on the in-game HUD (`docs/hud_course_abbrev.md`). This is the current schema and unfinished buildchain. |
 
 Every stored seed of these schemas is read as described below, and finishes through the
 ABI its row names. None is rebuilt.
@@ -254,6 +255,7 @@ hole's `over_par` in `data/difficulty/holes.json` over 3,000 seeds a cap
 | `sram_magic` | The 16-bit value that marks a save as this seed's, neither byte `$00` or `$FF` |
 | `dress_color` | Peach's dress in the putting view, an NES color from `DRESS_COLOR_FAMILIES` (`golf/core/patches/peach_dress.py`) |
 | `signpost_color` | The brick behind the signpost's banner, an NES color from `SIGNPOST_COLOR_FAMILIES` (`golf/core/patches/signpost_color.py`) |
+| `roof_color` | The club house roof in the walk-out scene, an NES color from `ROOF_COLORS` (`golf/core/patches/clubhouse_roof.py`) |
 
 A slot is a catalog hole `id`, its `par` (a copy of the catalog's, for readability),
 `transforms`, a `wind_seed`, and the hole's wind anchors: `wind_direction`, a multiple of
@@ -426,9 +428,10 @@ given beside the settings it resolved to.
 9. **SRAM magic.** Two bytes, each uniform over `$01`-`$FE`, high byte first.
 10. **Colors.** The dress and the signpost brick each come from `draw_family_color`
     (`golf/core/palettes.py`): a family drawn by its weight, then one of its colors
-    uniformly. Every family weighs 1 but the dress's `white`, which weighs 0.5.
+    uniformly. Every family weighs 1 but the dress's `white`, which weighs 0.5. The
+    roof is one of `ROOF_COLORS`, drawn uniformly, with no families.
 
-The par mix, the holes, the two transforms, the wind directions, wind speeds, music, magic words, SRAM magic, dress color and signpost color each draw from their own generator,
+The par mix, the holes, the two transforms, the wind directions, wind speeds, music, magic words, SRAM magic, dress color, signpost color and roof color each draw from their own generator,
 `random.Random(f"{purpose}\0{prng_seed}")`, and the wind seeds from their own hash, so a
 change to one draw leaves the others as they were.
 

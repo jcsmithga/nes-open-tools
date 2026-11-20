@@ -75,7 +75,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Golfer cutscene poses (club house walk-out, hole result, other club house scenes) | 10, 12 | bank 10 sprite ids `$01`, `$02`, `$03`, `$05` (frame tables `$811D`, `$8994`, `$923B`, `$A2B1`); bank 12 `$B094` the hole result (from bank 11 `$BEE5`; `$B2F3` classifies the score, `$B35B` picks the record), `$AB87` `InitClubHouseWalkOutScene` (`$AC01` `LC_AC01_PlaceClubHouseGolfer` loads it), `$B7D9` the hole in one (`$B81B` shared with the long drive and near-pin scenes), `$A4A4` the tournament placing celebration | `cutscene_sprites.md` |
 | Golfer cutscene CHR | 6, 7, 0 | bank 6 `$8000` (Mario), `$8AB2` (Luigi); bank 7 `$8000` (club house walk-out, both); bank 0 `$B2E2` (wager) | `cutscene_sprites.md` |
 | Golfer outfit color | 5, 12 | the shot screen: bank 5 `$BF1B` `GolferShirtColorTable`, one byte per golfer; a cutscene: color 1 of sprite palette 0, its palette + `$11` in bank 12 (walk-out `$ADB5`, hole result `$B691`) | `cutscene_sprites.md`, `golfer_sprites.md` |
-| Club house walk-out scene | 12, 5, 7 | bank 12 `$AB87` `InitClubHouseWalkOutScene`; background bank 5 `$A22F` (tiles), bank 7 `$88BF` (nametable); palette `$ADA4` | `cutscene_sprites.md` |
+| Club house walk-out scene | 12, 5, 7 | bank 12 `$AB87` `InitClubHouseWalkOutScene`; background bank 5 `$A22F` (tiles), bank 7 `$88BF` (nametable); palette `$ADA4`, the roof `$ADAA` (subpalette 1 color 2, only the roof draws it); bank 7 `$8A20` the attribute byte for roof tile (4, 1), vanilla `$50`, should be `$51` | `cutscene_sprites.md` |
 
 ## Input
 
