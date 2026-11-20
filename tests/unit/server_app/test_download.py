@@ -12,6 +12,7 @@ from golf.randomizer.manifest import StoredManifest
 from golf.randomizer.roms import vanilla_rom
 from server.builder import BuiltSeed, SeedBuilder
 from tests.app_state import app_state
+from tests.stored_seeds import STROKE_INDEXES, store_rating
 from tests.synthetic_holes import built_holes
 from tests.unit.server_app.helpers import (
     FINISHED,
@@ -49,6 +50,25 @@ def test_downloading_finishes_the_stored_seed_as_a_guest(client, fake_builder):
     assert options.player_name == "LUIGI"
     assert options.clubs == {Club.W1, Club.PW, Club.PT}
     assert fake_builder.credentials is None
+
+
+def test_an_unrated_seed_finishes_with_its_holes_own_handicaps(client, fake_builder):
+    assert post_download(client, generate_seed(client)).status_code == 200
+    assert fake_builder.stroke_indexes is None
+
+
+def test_a_rated_seed_finishes_with_its_stored_stroke_indexes(fake_builder):
+    """Signed in or a guest, the ROM's handicap column is the seed's rating (ADR 0036)."""
+    with dev_client(fake_builder) as client:
+        seed_id = generate_seed(client)
+        store_rating(app_state(client).db, seed_id)
+        assert post_download(client, seed_id).status_code == 200
+        assert fake_builder.credentials is None
+        assert fake_builder.stroke_indexes == STROKE_INDEXES
+        client.get("/auth/login", params={"as": "ann"})
+        assert post_download(client, seed_id).status_code == 200
+        assert fake_builder.credentials is not None
+        assert fake_builder.stroke_indexes == STROKE_INDEXES
 
 
 def test_a_us_only_seed_needs_only_the_us_hash(client):

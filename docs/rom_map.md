@@ -91,6 +91,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Hole setup | 15 | `$DA90` `InitHole`, `$DAB4` `LoadHoleParameters`, `$DB5D` `LoadTerrainAndAttrs`, `$DB3F` `CalcFlagXPosition` | `wram_expansion.md` |
 | Pin position | 15 | `$DB15` in `InitHole`: `JSR LSFR_RNG_ALGO`, `AND #$03` picks one of the hole's four flag offsets, read at `$DB21` (`$E02F,Y`) and `$DB40` (`$DF57,Y`) | `seeded_wind.md`, `tournament_days.md` |
 | Pointer and metadata tables | 15 | `$DBBB`-`$E106` (course offsets, terrain/greens pointers, par, distance, tee, green, flags) | rom-layout skill |
+| Stroke indexes (the scorecard's handicap column) | 15, 2 | `$DDDD` `HandicapIndexTable`: 54 bytes, 18 a course for all three courses (Japan, US, UK), indexed by global hole; its only reader found is the scorecard, bank 2 `$AF08` in `DrawScorecardScreen`, Y from `CourseHoleOffsetTable[CurrCourse]` at `$AEBC`. The randomizer writes course 1's 18 at finishing (`stroke_indexes` patch) | `patch_stack.md`, ADR 0036 |
 | Terrain decompression | 15 | `$E107` `DecompressTerrain`; tables `$E1AC`-`$E3AB` | `golf/core/compression.md` |
 | Greens decompression | 15, 3 | `$E3AC` `DecompressGreen`; tables bank 3 `$8000`-`$81BF`, data `GreensCompressedData` | `golf/core/compression.md` |
 | Terrain data | 0, 1, 2 | `JapanCourseTerrainData`, `USCourseTerrainData`, `UKCourseTerrainData` | `terrain_data_locations.md`, `multi_bank_terrain.md` |

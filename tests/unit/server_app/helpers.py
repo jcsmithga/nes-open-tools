@@ -29,9 +29,12 @@ class FakeBuilder(SeedBuilder):
         self.built = manifest
         return BuiltSeed(IPS, built_holes(manifest, self.catalog))
 
-    def finish(self, manifest, unfinished_ips, options, credentials=None):
+    def finish(
+        self, manifest, unfinished_ips, options, credentials=None, stroke_indexes=None
+    ):
         self.finished = (manifest, unfinished_ips, options)
         self.credentials = credentials
+        self.stroke_indexes = stroke_indexes
         return FINISHED
 
 

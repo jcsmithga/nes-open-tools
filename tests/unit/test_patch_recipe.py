@@ -50,6 +50,7 @@ class TestRegistry:
             "seeded_wind": {"seed": "x"},
             "wind_anchors": {"anchors": " ".join(["80/7"] * 18)},
             "qr_credentials": {"credentials": str(credentials_file)},
+            "stroke_indexes": {"indexes": " ".join(map(str, range(18, 0, -1)))},
             "music_import": {"dump": "data/music/music_jp_courses.json"},
         }
         for spec_id in PATCH_SPECS:

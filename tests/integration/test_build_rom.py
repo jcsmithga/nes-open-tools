@@ -15,6 +15,8 @@ from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.qr_credentials import PLACEHOLDERS, placeholder_offset
 from golf.core.patches.scorecard_qr import SCORECARD_QR_PATCH
 from golf.core.patches.sram_defaults import MAGIC_CHECK_ADDRS, Club, magic_bytes
+from golf.core.patches.stroke_indexes import LENGTH as HANDICAP_LENGTH
+from golf.core.patches.stroke_indexes import PRG_OFFSET as HANDICAP_OFFSET
 from golf.core.rom_utils import cpu_to_prg_switched
 from golf.core.rom_writer import RomWriter
 from golf.qr import port
@@ -40,6 +42,7 @@ from golf.randomizer.manifest import (
 )
 from tests.legacy_manifest import as_schema
 from tests.new_save import new_save
+from tests.stored_seeds import STROKE_INDEXES
 
 ROOT = Path(__file__).resolve().parents[2]
 ROM_PATH = ROOT / "nes_open_us.nes"
@@ -332,6 +335,40 @@ def test_signed_in_finishing_changes_only_defaults_and_credentials(
         assert signed_in.rom[start : start + length] == values[suffix]
 
 
+def handicap_table(rom: bytes) -> bytes:
+    start = HEADER + HANDICAP_OFFSET
+    return rom[start : start + HANDICAP_LENGTH]
+
+
+def test_the_unfinished_rom_carries_each_holes_own_handicap(unfinished):
+    assert handicap_table(unfinished.rom) == bytes(
+        hole.metadata["handicap"] for hole in unfinished.holes
+    )
+
+
+@pytest.mark.parametrize("signed_in_too", [False, True], ids=["guest", "signed in"])
+def test_a_rated_seed_finishes_with_its_stroke_indexes(
+    signed_in_too, jp_manifest, unfinished, vanilla
+):
+    credentials = CREDENTIALS if signed_in_too else None
+    finished = finish(
+        jp_manifest,
+        vanilla,
+        unfinished.ips,
+        OPTIONS,
+        credentials,
+        stroke_indexes=STROKE_INDEXES,
+    )
+    assert list(finished.regions) == [
+        "sram_defaults",
+        "stroke_indexes",
+        "qr_credentials" if signed_in_too else "qr_disable",
+    ]
+    assert handicap_table(finished.rom) == bytes(STROKE_INDEXES)
+    allowed = set().union(*(file_offsets(r) for r in finished.regions.values()))
+    assert changed(unfinished.rom, finished.rom) <= allowed
+
+
 @pytest.fixture(scope="module")
 def abi_1_unfinished(jp_manifest, catalog, store, vanilla) -> bytes:
     """An unfinished IPS exposing finish ABI 1: today's stack without the options routine."""
@@ -356,6 +393,20 @@ def test_a_stored_abi_one_unfinished_ips_can_still_be_finished(
     sram = new_save(finished.rom)
     assert sram[0x0F98:0x0FB0] == bytes([0x00]) + bytes([0xFF] * 23)
     assert sram[0x0004:0x000E] == b"LUIGI     "
+
+
+def test_a_stored_abi_one_seed_takes_its_stroke_indexes_too(
+    jp_manifest, vanilla, abi_1_unfinished
+):
+    """No ABI bump: every artifact has left the holes' own handicaps there (ADR 0036)."""
+    finished = finish(
+        legacy(jp_manifest),
+        vanilla,
+        abi_1_unfinished,
+        ABI_1_OPTIONS,
+        stroke_indexes=STROKE_INDEXES,
+    )
+    assert handicap_table(finished.rom) == bytes(STROKE_INDEXES)
 
 
 def test_an_abi_one_seed_refuses_options_it_cannot_write(
@@ -396,9 +447,19 @@ def test_finishing_writes_the_seeds_sram_magic(signed_in, jp_manifest):
         assert signed_in.rom[operand] == magic_bytes(magic)[index]
 
 
-@pytest.mark.parametrize("flavor", ["signed_in", "guest"])
-def test_the_stages_overlap_only_at_the_placeholders(flavor, request, unfinished):
-    finished = request.getfixturevalue(flavor)
+@pytest.mark.parametrize("rated", [False, True], ids=["unrated", "rated"])
+@pytest.mark.parametrize("credentials", [CREDENTIALS, None], ids=["signed in", "guest"])
+def test_the_stages_overlap_only_at_the_placeholders(
+    credentials, rated, jp_manifest, vanilla, unfinished
+):
+    finished = finish(
+        jp_manifest,
+        vanilla,
+        unfinished.ips,
+        OPTIONS,
+        credentials,
+        stroke_indexes=STROKE_INDEXES if rated else None,
+    )
     unfinished_bytes = set().union(
         *(prg_bytes(regions) for regions in unfinished.regions.values())
     )
@@ -408,11 +469,14 @@ def test_the_stages_overlap_only_at_the_placeholders(flavor, request, unfinished
     overlap = unfinished_bytes & finishing_bytes
     qr = prg_bytes(unfinished.regions["scorecard_qr"])
     options = prg_bytes(unfinished.regions["extended_sram_defaults"])
+    # the course wrote each hole's own handicap there; a rated seed's replace them
+    handicaps = set(range(HANDICAP_OFFSET, HANDICAP_OFFSET + HANDICAP_LENGTH))
     assert overlap & qr, (
         "the QR finishing patch should rewrite bytes scorecard_qr wrote"
     )
     assert overlap & options, "the options table should be rewritten"
-    assert overlap <= qr | options
+    assert (overlap & handicaps == handicaps) is rated
+    assert overlap <= qr | options | handicaps
 
 
 @pytest.mark.parametrize(

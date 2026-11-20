@@ -20,6 +20,7 @@ from server.ratings import (
     Ratings,
     refit,
     seed_rating,
+    seed_stroke_indexes,
 )
 from server.submissions import submit_scan
 from tests.stored_seeds import checked_in_catalog, store_seed
@@ -153,11 +154,29 @@ def test_a_stored_run_rates_as_the_run_it_was_fitted_as(db, ratings, manifests):
 
 
 def test_a_seed_is_rated_once(db, ratings, manifests):
+    """A download's ROM carries the stored stroke indexes (ADR 0036), so a later run
+    must leave them as they are."""
     seeds = [store_seed(db, m) for m in manifests]
     play_all(db, seeds)
     refit(db, ratings, DAY, NOW, min_rounds=5)
+    first = seed_rating(db, seeds[0])
     with db.transaction() as conn:
         assert not ratings.rate_on(conn, seeds[0], NOW)
+    play_all(db, seeds, at="2026-11-18T12:00:00Z")
+    assert refit(db, ratings, date(2026, 11, 19), NOW, min_rounds=5) is not None
+    assert seed_rating(db, seeds[0]) == first
+
+
+def test_a_seeds_stroke_indexes_are_its_ratings_in_hole_order(db, ratings, manifests):
+    seeds = [store_seed(db, m) for m in manifests]
+    assert seed_stroke_indexes(db, seeds[0]) is None
+    play_all(db, seeds)
+    refit(db, ratings, DAY, NOW, min_rounds=5)
+    rated = seed_rating(db, seeds[0])
+    assert rated is not None
+    assert seed_stroke_indexes(db, seeds[0]) == tuple(
+        h.stroke_index for h in rated.holes
+    )
 
 
 # -- A player's index ----------------------------------------------------------------------

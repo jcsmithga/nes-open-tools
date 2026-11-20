@@ -236,3 +236,14 @@ def seed_rating(db: Database, seed_id: str) -> SeedRating | None:
     """A seed's stored ratings, or None while it is unrated."""
     with db.transaction() as conn:
         return seed_rating_on(conn, seed_id)
+
+
+def seed_stroke_indexes(db: Database, seed_id: str) -> tuple[int, ...] | None:
+    """A seed's stored stroke indexes in hole order, what finishing writes into its ROM
+    (ADR 0036); None while it is unrated."""
+    with db.transaction() as conn:
+        rows = conn.execute(
+            "SELECT stroke_index FROM seed_hole_ratings WHERE seed_id = ? ORDER BY position",
+            (seed_id,),
+        ).fetchall()
+    return tuple(row["stroke_index"] for row in rows) or None

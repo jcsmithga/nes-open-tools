@@ -107,7 +107,8 @@ The decisions in this section are recorded as ADR 0033 (proposed).
 - Players choose their own bag, as on every seed, unless the day's request sets club
   rules.
 - Its course rating, slope and stroke indexes are fixed when it is generated, as every
-  seed's are.
+  seed's are. The stroke indexes are also the ones its ROM's scorecard shows, written
+  when a download is finished (ADR 0036).
 - A player's round on it is scored with the index they hold when it is scanned: their
   index after their previous counted round. With one daily a day that is the index they
   held when this daily opened. The one exception is the hour two dailies overlap: a

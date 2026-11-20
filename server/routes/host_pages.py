@@ -55,6 +55,7 @@ from ..hosting import (
     save_hosted_options,
 )
 from ..ids import is_id
+from ..ratings import seed_stroke_indexes
 from ..seeds import SeedRow, load_seed, load_unfinished_ips
 from ..strings import Strings
 from ..timings import OK, Sample
@@ -293,10 +294,16 @@ def host_router(templates: Jinja2Templates) -> APIRouter:
                 row.qr_seed_id, players[0].player_id, entries[0].keys
             )
         seed_builder: SeedBuilder = request.app.state.builder
+        stroke_indexes = seed_stroke_indexes(db, row.id)
         try:
             with sample.phase("finish"):
                 patch = await run_in_threadpool(
-                    seed_builder.finish, manifest, unfinished_ips, options, credentials
+                    seed_builder.finish,
+                    manifest,
+                    unfinished_ips,
+                    options,
+                    credentials,
+                    stroke_indexes,
                 )
         except BuilderUnavailableError as problem:
             log.error("cannot finish a hosted download: %s", problem)

@@ -11,7 +11,7 @@ can stand one in that never reads a ROM.
 
 import hashlib
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -180,11 +180,18 @@ class SeedBuilder:
         unfinished_ips: bytes,
         options: PlayerOptions,
         credentials: QrCredentials | None = None,
+        stroke_indexes: Sequence[int] | None = None,
     ) -> bytes:
-        """A player's finished IPS for a stored seed: signed in with credentials, a guest without.
+        """A player's finished IPS for a stored seed: signed in with credentials, a guest
+        without. `stroke_indexes` are the seed's stored ones, None while it is unrated.
 
         Finishing takes milliseconds, so it skips the semaphore.
         """
         return finish(
-            manifest, self.vanilla(), unfinished_ips, options, credentials
+            manifest,
+            self.vanilla(),
+            unfinished_ips,
+            options,
+            credentials,
+            stroke_indexes,
         ).ips

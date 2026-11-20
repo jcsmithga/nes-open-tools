@@ -79,8 +79,14 @@ patch. `ips.apply` reads RLE records and the truncation extension.
 The randomizer site builds a seed in two stages. Once, it applies the seed's course and
 feature stack to the vanilla ROM and stores that **unfinished artifact** as an IPS. For
 each download, it reconstructs the unfinished ROM and applies a much smaller finishing
-stack: new-save defaults, then either player-specific QR credentials or the guest QR
-disable patch.
+stack: new-save defaults, the seed's rated stroke indexes once it has them, then either
+player-specific QR credentials or the guest QR disable patch.
+
+The boundary between them is where a value comes from (ADR 0036). The unfinished
+artifact holds what the randomizer makes from the manifest, the catalog and the vanilla
+ROM. Finishing adds what the site knows: the player's options and credentials, and facts
+the site stores about a seed once and never changes, its QR seed ID and its stroke
+indexes. Neither of those is in the manifest, since generation has no need of them.
 
 Two independent versions describe that boundary:
 
@@ -106,12 +112,22 @@ The current ABI, 2, covers:
   BGM, swing, putt and spin, at the vanilla `$FF $FF $FF $FF`;
 - the QR seed ID, player ID and MAC key placeholder locations, sizes, fill and encoding;
 - the installed QR patch identity that `qr_credentials` requires;
-- the splice `qr_disable` restores for a guest ROM; and
+- the splice `qr_disable` restores for a guest ROM;
+- course 1's 18 entries of the handicap table (`$DDDD`), each a stroke index from 1 to
+  18, which `stroke_indexes` replaces with a rated seed's; and
 - the QR payload protocol consumed by the submission server.
 
 ABI 1, which every artifact built before build version 4 exposes, is the same without the
 options table: its finisher writes BGM with `sram_defaults`' loop edit and cannot write
 swing, putt or spin defaults.
+
+The handicap table is the one consumed location without a known preimage: the unfinished
+build leaves each hole's own handicap there, so the bytes differ from seed to seed.
+`stroke_indexes` checks only that each is 1 to 18. That is enough, because the other
+finishing steps already refuse a ROM that is not an unfinished image, and overwriting
+stroke indexes does no harm. Finishing started writing them without an ABI bump: every
+artifact of either ABI has left bytes of that form there since 1.0, so the interface did
+not change, and the finisher only uses more of it.
 
 Moving or resizing a placeholder, changing a credential's representation, changing the
 guest-disable mechanism, changing the QR payload's meaning, or having the unfinished

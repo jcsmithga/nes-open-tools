@@ -39,7 +39,9 @@ class BrokenGenerate(FakeBuilder):
 class BrokenFinish(FakeBuilder):
     """A builder with a bug that finishing a download runs into."""
 
-    def finish(self, manifest, unfinished_ips, options, credentials=None):
+    def finish(
+        self, manifest, unfinished_ips, options, credentials=None, stroke_indexes=None
+    ):
         raise RuntimeError("bug")
 
 

@@ -18,6 +18,7 @@ from server.routes.common import DOWNLOAD_COOKIE
 from server.routes.host_pages import club_warning, seed_id_from
 from server.seeds import load_seed, withdraw_seed
 from tests.app_state import app_state
+from tests.stored_seeds import STROKE_INDEXES, store_rating
 from tests.unit.server_app.helpers import (
     ALL_HASHES,
     FINISHED,
@@ -340,6 +341,17 @@ def test_a_locked_bag_is_what_a_hosted_rom_carries(client, fake_builder):
     assert download(client, hosted).status_code == 200
     _manifest, _ips, options = fake_builder.finished
     assert options.clubs == {Club.W1, Club.I7, Club.PT}
+
+
+def test_a_hosted_rom_carries_the_seeds_stroke_indexes_once_it_is_rated(
+    client, fake_builder, seed_id, hosted
+):
+    claim(client, hosted, "alice")
+    assert download(client, hosted).status_code == 200
+    assert fake_builder.stroke_indexes is None
+    store_rating(app_state(client).db, seed_id)
+    assert download(client, hosted).status_code == 200
+    assert fake_builder.stroke_indexes == STROKE_INDEXES
 
 
 def test_a_hosted_bag_over_a_club_max_is_refused(client):

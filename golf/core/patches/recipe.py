@@ -100,7 +100,7 @@ def _convert(value, hint, base_dir: Path, where: str):
             return path if path.is_absolute() else base_dir / path
     elif typing.get_origin(hint) is list:
         item = typing.get_args(hint)[0]
-        if isinstance(value, str) and item is str:
+        if isinstance(value, str) and item in (str, int):
             # `golf-patch -p` has no list syntax, and splits steps on commas
             value = value.split()
         if isinstance(value, list):

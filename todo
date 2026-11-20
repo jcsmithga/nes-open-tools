@@ -1,22 +1,6 @@
 Now:
 
-5. Resolve step and mystery generation, using CLI.
-6. Mystery
-
-Notes:
-Derived holes, something like:
-```json
-"nes_us/12-short": {
-  "source": {"base": "nes_us/12", "delta": "holes/derived/nes_us_12_short.json"},
-  "content_hash": "…", "par": 3, "distance": 190, "author": "jdharms"
-}
-```
-
-> Note: need to run difficulty sims for all derived holes eventually.
-
-Used for par 5 -> par 4/3, par 4 -> par 3, and maybe some alternate tee boxes without
-changing par value.  Changing the angle on doglegs, making bunkers or hazards
-more or less in play, making a par 4 drivable.
+I'd like you to look over @docs/competitive/ and the codebase as it stands and let me know what you think about the "Records" section of the implementation plan, as well as what stats we can keep/calculate/show in general, even for non-daily rounds.
 
 Vague release plan:
 

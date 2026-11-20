@@ -102,6 +102,7 @@ from .signpost_color import (
 from .signpost_random_banner import random_banner_patches
 from .sram_defaults import Club, sram_defaults_patch, sram_defaults_patches
 from .stack import PatchStack, StackBuild, StackError
+from .stroke_indexes import StrokeIndexesPatch
 from .swing_speed_hud import SWING_SPEED_HUD_PATCH
 from .tournament_days import (
     DEFAULT_DAYS,
@@ -140,6 +141,7 @@ __all__ = [
     "PatchStack",
     "StackBuild",
     "StackError",
+    "StrokeIndexesPatch",
     "CoursePatch",
     "CourseWriteStats",
     "course_theme_patch",

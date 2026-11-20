@@ -10,6 +10,7 @@ from golf.core.patches import (
     CompositePatch,
     QrCredentials,
     course_theme_patch,
+    stroke_indexes,
 )
 from golf.core.patches.course_theme import VANILLA_COURSE_BGM
 from golf.core.patches.extended_sram_defaults import (
@@ -25,6 +26,7 @@ from golf.core.patches.scorecard_qr import (
     TRAMPOLINE_ENTRY_BYTES,
 )
 from golf.core.patches.sram_defaults import Club, magic_bytes
+from golf.core.patches.stroke_indexes import StrokeIndexesPatch
 from golf.qr import payload, port
 from golf.randomizer.build import (
     FINISH_ABI_VERSION,
@@ -50,6 +52,7 @@ from golf.randomizer.manifest import (
     Settings,
 )
 from golf.randomizer.music import TRACKS
+from tests.stored_seeds import STROKE_INDEXES
 
 KEYS = (bytes(range(1, 9)), bytes(range(9, 17)))
 
@@ -160,26 +163,46 @@ SRAM_MAGIC = (
 )
 
 
+#: the handicap table both ABIs leave the holes' own handicaps in, each 1-18, which
+#: finishing replaces with a rated seed's stroke indexes (ADR 0036)
+HANDICAP_TABLE = (0x3DDDD, 18, range(1, 19))
+
+
 def consumed(steps) -> tuple:
-    """What finishing steps read and write, apart from the QR credentials."""
+    """What finishing steps read and write, apart from the QR credentials and the
+    handicap table."""
     return tuple(
         (patch.name, patch.prg_offset, patch.original, len(patch.patched))
         for step in steps
-        if step.name not in ("qr_credentials", "qr_disable")
+        if step.name not in ("qr_credentials", "qr_disable", "stroke_indexes")
         for patch in step.patches
     )
 
 
+def handicap_table(steps) -> tuple:
+    """Where the stroke indexes step writes, how much, and the values it accepts there
+    and writes: not particular bytes, since each course's holes leave their own."""
+    (step,) = [step for step in steps if isinstance(step, StrokeIndexesPatch)]
+    return (step.prg_offset, len(step.patched), stroke_indexes.STROKE_INDEXES)
+
+
 def test_finish_abi_one_contract_is_stable_without_rom_or_course_data():
     """Changing a consumed location, preimage, width or protocol requires an ABI decision."""
-    steps = finishing_steps(options(bgm=False), 0x5247, None, abi=1)
-    assert {**qr_contract(), "sram": consumed(steps)} == {
+    steps = finishing_steps(
+        options(bgm=False), 0x5247, None, abi=1, stroke_indexes=STROKE_INDEXES
+    )
+    assert {
+        **qr_contract(),
+        "sram": consumed(steps),
+        "handicap_table": handicap_table(steps),
+    } == {
         **QR_CONTRACT,
         "sram": (
             *SRAM_NAME_AND_CLUBS,
             ("sram_defaults_bgm_off", 0x26D4E, b"\x10", 1),
             *SRAM_MAGIC,
         ),
+        "handicap_table": HANDICAP_TABLE,
     }
 
 
@@ -188,11 +211,14 @@ def test_finish_abi_two_contract_is_stable_without_rom_or_course_data():
     all_options = options(
         bgm=False, swing=SwingSpeed.FAST, putt=SwingSpeed.SLOW, spin=BallSpin.BACK2
     )
-    steps = finishing_steps(all_options, 0x5247, None, abi=2)
+    steps = finishing_steps(
+        all_options, 0x5247, None, abi=2, stroke_indexes=STROKE_INDEXES
+    )
     assert FINISH_ABI_VERSION == 2
     assert {
         **qr_contract(),
         "sram": consumed(steps),
+        "handicap_table": handicap_table(steps),
         "extended_sram_defaults": tuple(
             (patch.prg_offset, patch.patched)
             for patch in EXTENDED_SRAM_DEFAULTS_PATCH.patches
@@ -204,6 +230,7 @@ def test_finish_abi_two_contract_is_stable_without_rom_or_course_data():
             *SRAM_MAGIC,
             ("sram_defaults_option_table", 0x27531, b"\xff\xff\xff\xff", 4),
         ),
+        "handicap_table": HANDICAP_TABLE,
         "extended_sram_defaults": (
             (
                 0x27519,
@@ -214,6 +241,27 @@ def test_finish_abi_two_contract_is_stable_without_rom_or_course_data():
             (0x26D46, bytes.fromhex("4c19b5eaeaeaeaeaeaea")),
         ),
     }
+
+
+@pytest.mark.parametrize("abi", [1, 2])
+@pytest.mark.parametrize("credentials", [None, "signed in"])
+def test_finishing_writes_stroke_indexes_only_when_given(abi, credentials):
+    creds = None if credentials is None else credentials_for(1, 1, KEYS)
+    names = [s.name for s in finishing_steps(options(), 0x5247, creds, abi=abi)]
+    assert "stroke_indexes" not in names
+    rated = finishing_steps(
+        options(), 0x5247, creds, abi=abi, stroke_indexes=STROKE_INDEXES
+    )
+    assert [s.name for s in rated] == [
+        "sram_defaults",
+        "stroke_indexes",
+        "qr_disable" if creds is None else "qr_credentials",
+    ]
+
+
+def test_finishing_refuses_stroke_indexes_that_do_not_rank_the_holes():
+    with pytest.raises(BuildError, match="each once"):
+        finishing_steps(options(), 0x5247, None, stroke_indexes=(1,) * 18)
 
 
 def options(**overrides) -> PlayerOptions:

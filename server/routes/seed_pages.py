@@ -32,7 +32,7 @@ from ..forms import (
     to_save,
 )
 from ..ratelimit import client_key
-from ..ratings import Ratings, seed_rating
+from ..ratings import Ratings, seed_rating, seed_stroke_indexes
 from ..round_indexes import player_index, seed_play
 from ..rounds import rounds_for_seed
 from ..seeds import insert_seed, load_seed, load_seed_holes, load_unfinished_ips
@@ -402,10 +402,16 @@ def seed_router(templates: Jinja2Templates, mystery_seeds: bool = False) -> APIR
             with sample.phase("entry"):
                 entry = upsert_entry(db, row.id, user.id, options)
             credentials = credentials_for(row.qr_seed_id, user.player_id, entry.keys)
+        stroke_indexes = seed_stroke_indexes(db, seed_id)
         try:
             with sample.phase("finish"):
                 patch = await run_in_threadpool(
-                    seed_builder.finish, manifest, unfinished_ips, options, credentials
+                    seed_builder.finish,
+                    manifest,
+                    unfinished_ips,
+                    options,
+                    credentials,
+                    stroke_indexes,
                 )
         except BuilderUnavailableError as problem:
             log.error("cannot finish a download: %s", problem)

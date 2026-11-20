@@ -46,7 +46,8 @@ needed:
   unfinished ROM cannot cause downstream problems.
 - **Finished.** Run per download, in milliseconds: SRAM defaults for name, clubs and
   music under the seed's SRAM magic, so a save from vanilla or another seed is rebuilt
-  with the player's choices, and one of two flavors.
+  with the player's choices; a rated seed's stroke indexes over its holes' own in the
+  scorecard's handicap column (ADR 0036); and one of two flavors.
   - *Signed in*: a credentials patch of three byte patches writing the seed's `qr_seed_id` as
     the seed ID, the player ID and the MAC keys into the placeholders. Their expected original bytes are the
     placeholder fill, so finishing can only land on an unfinished image.
@@ -59,9 +60,11 @@ Finishing applies the stored IPS to the vanilla bytes in memory, runs the finish
 `PatchStack` on that unfinished ROM with the stack's vanilla hash check disabled
 (`base_sha1=None`), and diffs the result against vanilla to produce the finished IPS. Overlap tracking is per stack,
 so a finishing patch rewriting bytes the unfinished stage wrote is allowed. `qr_credentials`
-and `qr_disable` rewrite bytes `scorecard_qr` wrote by design. An integration test
-(`tests/integration/test_build_rom.py`) asserts those are the only overlaps between the
-stages, and that one stack of both is refused at the QR finishing patch.
+and `qr_disable` rewrite bytes `scorecard_qr` wrote by design, `sram_defaults` the
+options table `extended_sram_defaults` installed, and `stroke_indexes` the handicaps
+`course` wrote. An integration test (`tests/integration/test_build_rom.py`) asserts
+those are the only overlaps between the stages, and that one stack of both is refused at
+the QR finishing patch.
 
 Generation runs in a threadpool behind a semaphore so a burst of requests serializes
 instead of piling up. One uvicorn worker is enough to start.

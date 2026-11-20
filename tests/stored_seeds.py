@@ -76,3 +76,48 @@ def unfill(db: Database, seed_id: str, keep: tuple[int, ...] = ()) -> None:
             "DELETE FROM hole_data WHERE content_hash NOT IN "
             "(SELECT data_hash FROM seed_holes WHERE data_hash IS NOT NULL)"
         )
+
+
+#: a ranking of 18 holes that is neither hole order nor its reverse
+STROKE_INDEXES = (7, 13, 1, 17, 5, 11, 3, 15, 9, 8, 14, 2, 18, 6, 12, 4, 16, 10)
+
+
+def store_rating(
+    db: Database, seed_id: str, stroke_indexes: tuple[int, ...] = STROKE_INDEXES
+) -> None:
+    """Rate a stored seed with `stroke_indexes` under a stand-in run, without fitting one.
+
+    For tests of what the site does with a seed's stored ratings; the other numbers are
+    placeholders.
+    """
+    with db.transaction() as conn:
+        run = conn.execute("SELECT id FROM ratings_runs LIMIT 1").fetchone()
+        if run is None:
+            run_id = conn.execute(
+                """
+                INSERT INTO ratings_runs (day, created_at, model_version,
+                    parameters_hash, parameters, model, latest_received_at, n_rounds)
+                VALUES ('2026-11-18', '2026-11-18T09:00:00Z', 1, ?, '{}', '{}',
+                    '2026-11-18T09:00:00Z', 1)
+                """,
+                ("0" * 64,),
+            ).lastrowid
+        else:
+            run_id = run["id"]
+        conn.execute(
+            """
+            INSERT INTO seed_ratings (seed_id, run_id, rated_at, par, course_rating, slope)
+            VALUES (?, ?, '2026-11-18T09:00:00Z', 72, 72.0, 1.0)
+            """,
+            (seed_id, run_id),
+        )
+        conn.executemany(
+            """
+            INSERT INTO seed_hole_ratings (seed_id, position, rating, spread, stroke_index)
+            VALUES (?, ?, 4.0, 1.0, ?)
+            """,
+            [
+                (seed_id, position, index)
+                for position, index in enumerate(stroke_indexes, start=1)
+            ],
+        )

@@ -14,7 +14,8 @@ The two-stage build: a manifest into an unfinished ROM, and an unfinished ROM in
   the manifest's `course`, the catalog and the hole store. The site stores the result as an
   IPS against the vanilla ROM.
 - **Finished**, per download: the player's new-save defaults under the seed's SRAM magic
-  (name, clubs, and under finish ABI 2 the BGM, swing, putt and spin table), then either
+  (name, clubs, and under finish ABI 2 the BGM, swing, putt and spin table), the seed's
+  rated stroke indexes when the site has them (ADR 0036), then either
   `qr_credentials` (signed in) or `qr_disable` (guest). It runs as a second
   `PatchStack` on the unfinished ROM, since both QR finishing patches rewrite bytes
   `scorecard_qr` wrote.
@@ -29,7 +30,7 @@ versions may share one finisher without retaining their unfinished buildchains.
 
 import hashlib
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -50,6 +51,7 @@ from golf.core.patches import (
     PatchStack,
     QrCredentials,
     ROMPatch,
+    StrokeIndexesPatch,
     course_intro_sky_patch,
     course_theme_patch,
     green_shortcut_patch,
@@ -348,11 +350,15 @@ def finishing_steps(
     sram_magic: int,
     credentials: QrCredentials | None,
     abi: int = FINISH_ABI_VERSION,
+    stroke_indexes: Sequence[int] | None = None,
 ) -> list[ROMPatch]:
-    """New-save defaults, then credentials when signed in or the QR screen disabled for a guest.
+    """New-save defaults, the stroke indexes when given, then credentials when signed in
+    or the QR screen disabled for a guest.
 
     Under ABI 1 `sram_defaults` writes the BGM option with its fill-loop edit, and swing,
-    putt and spin stay off. Under ABI 2 the new-save options table holds all four.
+    putt and spin stay off. Under ABI 2 the new-save options table holds all four. Both
+    ABIs leave the holes' own handicaps in the handicap table, which `stroke_indexes`
+    replaces; None leaves them.
     """
     if abi == 1:
         if options.has_option_defaults:
@@ -378,6 +384,11 @@ def finishing_steps(
         ]
     else:
         raise BuildError(f"this release cannot finish artifact ABI {abi}")
+    if stroke_indexes is not None:
+        try:
+            steps.append(StrokeIndexesPatch(stroke_indexes))
+        except ValueError as problem:
+            raise BuildError(str(problem)) from None
     steps.append(
         QR_DISABLE_PATCH if credentials is None else qr_credentials_patch(credentials)
     )
@@ -400,10 +411,13 @@ def _finish_through(
     unfinished_ips: bytes,
     options: PlayerOptions,
     credentials: QrCredentials | None,
+    stroke_indexes: Sequence[int] | None,
 ) -> FinishedBuild:
     _check_vanilla(vanilla)
     options.check(manifest.course.clubs)
-    steps = finishing_steps(options, manifest.course.sram_magic, credentials, abi)
+    steps = finishing_steps(
+        options, manifest.course.sram_magic, credentials, abi, stroke_indexes
+    )
     unfinished = ips.apply(vanilla, unfinished_ips)
     build = PatchStack(steps, base_sha1=None).build(unfinished)
     return FinishedBuild(
@@ -417,9 +431,12 @@ def _finish_abi_1(
     unfinished_ips: bytes,
     options: PlayerOptions,
     credentials: QrCredentials | None = None,
+    stroke_indexes: Sequence[int] | None = None,
 ) -> FinishedBuild:
     """Name, clubs and BGM through `sram_defaults`' vanilla locations."""
-    return _finish_through(1, manifest, vanilla, unfinished_ips, options, credentials)
+    return _finish_through(
+        1, manifest, vanilla, unfinished_ips, options, credentials, stroke_indexes
+    )
 
 
 def _finish_abi_2(
@@ -428,9 +445,12 @@ def _finish_abi_2(
     unfinished_ips: bytes,
     options: PlayerOptions,
     credentials: QrCredentials | None = None,
+    stroke_indexes: Sequence[int] | None = None,
 ) -> FinishedBuild:
     """Name and clubs as ABI 1; BGM, swing, putt and spin into the new-save options table."""
-    return _finish_through(2, manifest, vanilla, unfinished_ips, options, credentials)
+    return _finish_through(
+        2, manifest, vanilla, unfinished_ips, options, credentials, stroke_indexes
+    )
 
 
 _FINISHERS = {1: _finish_abi_1, 2: _finish_abi_2}
@@ -442,13 +462,16 @@ def finish(
     unfinished_ips: bytes,
     options: PlayerOptions,
     credentials: QrCredentials | None = None,
+    stroke_indexes: Sequence[int] | None = None,
 ) -> FinishedBuild:
     """Finish a stored artifact through the ABI it declares.
 
     `manifest` is a stored seed's, or a manifest just built: finishing reads only its
     finish ABI, SRAM magic and club rules.
 
-    No credentials finishes a guest ROM. Compatible implementation changes do not bump
+    No credentials finishes a guest ROM. `stroke_indexes` are the seed's rated stroke
+    indexes in hole order, which the site stores (ADR 0036); None, as for an unrated seed
+    or a build with no site, leaves the holes' own handicaps. Compatible implementation changes do not bump
     the ABI; a change to the locations, preimages or meanings the finisher consumes does.
     """
     try:
@@ -457,7 +480,9 @@ def finish(
         raise BuildError(
             f"this release cannot finish artifact ABI {manifest.finish_abi_version}"
         ) from None
-    return finisher(manifest, vanilla, unfinished_ips, options, credentials)
+    return finisher(
+        manifest, vanilla, unfinished_ips, options, credentials, stroke_indexes
+    )
 
 
 def clubs_from_labels(labels: Iterable[str]) -> frozenset[Club]:

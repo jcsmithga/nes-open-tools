@@ -80,6 +80,7 @@ from .sram_defaults import (
     magic_bytes,
     sram_defaults_patch,
 )
+from .stroke_indexes import StrokeIndexesPatch
 from .swing_speed_hud import SWING_SPEED_HUD_PATCH
 from .tournament_days import tournament_days_patch
 from .wind_anchors import wind_anchors_patch
@@ -218,6 +219,12 @@ class TournamentDaysParams:
 class QrCredentialsParams:
     #: a file written by golf-qr-credentials
     credentials: Path
+
+
+@dataclass(frozen=True)
+class StrokeIndexesParams:
+    #: each hole's stroke index in play order, ranking the 18 holes 1-18
+    indexes: list[int]
 
 
 @dataclass(frozen=True)
@@ -568,6 +575,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             QrCredentialsParams,
             _build_qr_credentials,
             _report_qr_credentials,
+        ),
+        PatchSpec(
+            "stroke_indexes",
+            "Write the course's stroke indexes into the scorecard's handicap column, over the holes' own",
+            StrokeIndexesParams,
+            lambda ctx, params: StrokeIndexesPatch(params.indexes),
         ),
         PatchSpec(
             "qr_disable",
