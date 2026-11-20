@@ -8,7 +8,14 @@ const root = document.getElementById("rangefinder");
 const t = makeT("rangefinder-strings");
 const text = {
   holeOption: (number) => t("rangefinder.script.hole_option", { number }),
-  holeInfo: (par, distance) => t("rangefinder.script.hole_info", { par, distance }),
+  holeInfo: (par, distance, strokeIndex) =>
+    strokeIndex == null
+      ? t("rangefinder.script.hole_info", { par, distance })
+      : t("rangefinder.script.hole_info_stroke_index", {
+          par,
+          distance,
+          stroke_index: strokeIndex,
+        }),
   distanceEmpty: () => t("rangefinder.script.distance_empty"),
   distance: (distance) =>
     t("rangefinder.script.distance", { distance: distance.toFixed(1) }),

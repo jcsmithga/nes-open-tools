@@ -480,7 +480,7 @@ a net card, needs some to show. `--populate` fills the database before capturing
 named `@seed` in the paths, today's daily with a field of twelve rated players and
 production-like display names (`@daily`), the viewer's round on it (`@round`) and their
 match against a rival in the field (`@match`). A
-token keeps a query after it, as `"@round?net=separate"`. It
+token keeps a path or query after it, as `@seed/book` or `"@round?net=separate"`. It
 fixes the app's clock inside the day's window and runs no rollover, so the placeholder
 day is the one stored. `--viewer` picks who looks: a player in the field (`played`, the
 default), a signed-in player outside it (`unplayed`), or nobody (`signed-out`).

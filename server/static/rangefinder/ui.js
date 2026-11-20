@@ -87,6 +87,7 @@ export class UIController {
     this.holeInfo.textContent = this.text.holeInfo(
       this.currentHole.par,
       this.currentHole.distance,
+      this.currentHole.stroke_index,
     );
     this.showWind(hole.wind);
     this.updateHoleButtons();

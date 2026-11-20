@@ -100,6 +100,10 @@ text = "Hole {number}"
 note = "plain: current hole summary; receives par and distance in yards"
 text = "Par {par} • {distance}y"
 
+[rangefinder.script.hole_info_stroke_index]
+note = "plain: current hole summary, for a hole with a stroke index (a seed's rated one in a yardage book, the hole's handicap on its own course in the rangefinder); receives par, distance in yards and stroke_index (1-18)"
+text = "Par {par} • {distance}y • HDCP {stroke_index}"
+
 [rangefinder.script.tee_wind]
 note = "plain: wind of the hole's tee shot, in a yardage book, beside an arrow pointing the way it blows; receives speed (0-9, as the game shows it) and direction (a compass point such as NNE, north being up the map)"
 text = "{speed} mph"

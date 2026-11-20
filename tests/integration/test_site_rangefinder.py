@@ -15,6 +15,7 @@ from server.live import LiveServer
 from server.seeds import insert_seed
 from server.strings import Entry, Strings
 from server.yardage_book import tee_wind
+from tests.stored_seeds import STROKE_INDEXES, store_rating
 from tests.synthetic_holes import synthetic_hole
 from tests.unit.server_app.helpers import IPS, FakeBuilder
 
@@ -130,6 +131,12 @@ def test_rangefinder_permalink_tracks_location_copies_and_does_not_add_history(
 
             assert page.locator("#course-select").input_value() == "us"
             assert page.locator("#hole-select").input_value() == "3"
+            # the hole's handicap on its own course
+            assert (
+                page.locator("#hole-info").inner_text()
+                == "⟦rangefinder.script.hole_info_stroke_index par=4 distance=446 "
+                "stroke_index=7⟧"
+            )
             history_length = page.evaluate("history.length")
 
             page.select_option("#hole-select", "4")
@@ -190,6 +197,7 @@ def test_a_yardage_book_shows_one_course_at_the_seeds_pins_with_tee_wind(tmp_pat
     errors: list[str] = []
     with LiveServer(app) as base, sync_playwright() as playwright:
         seed_id = insert_seed(app.state.db, manifest, IPS, holes, builder.catalog)
+        store_rating(app.state.db, seed_id)
         browser = playwright.chromium.launch()
         try:
             page = browser.new_page(viewport={"width": 1280, "height": 800})
@@ -221,6 +229,9 @@ def test_a_yardage_book_shows_one_course_at_the_seeds_pins_with_tee_wind(tmp_pat
                     == f"{direction * 360 / 256:g}deg"
                 )
                 assert page.locator("#hole-wind-text").inner_text() != ""
+                info = page.locator("#hole-info").inner_text()
+                assert info.startswith("⟦rangefinder.script.hole_info_stroke_index ")
+                assert info.endswith(f" stroke_index={STROKE_INDEXES[number - 1]}⟧")
 
             shows(1)
             page.select_option("#hole-select", "5")

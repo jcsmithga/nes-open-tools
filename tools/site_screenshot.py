@@ -257,11 +257,16 @@ def capture(
 
 def named_page(path: str, named: dict[str, str]) -> tuple[str, str]:
     """A page to capture as (file name, path): a token names a page of the placeholder
-    data, keeping any query after it (`@round?net=separate`)."""
-    token, mark, query = path.partition("?")
+    data, keeping any path or query after it (`@seed/book`, `@round?net=separate`)."""
+    token = token_of(path)
     if token not in named:
         return slug(path), path
-    return slug(path[1:]), named[token] + mark + query
+    return slug(path[1:]), named[token] + path[len(token) :]
+
+
+def token_of(path: str) -> str:
+    """The token a page path starts with, up to any path or query after it."""
+    return re.split(r"[/?]", path, maxsplit=1)[0]
 
 
 def main() -> int:
@@ -274,7 +279,8 @@ def main() -> int:
         "pages",
         nargs="*",
         help="paths to capture, and with --populate @seed, @daily, @round and @match "
-        "(default: / /rom, or @seed @daily with --populate)",
+        "(default: / /rom, or @seed @daily with --populate); a token keeps a path or "
+        "query after it, as @seed/book",
     )
     parser.add_argument(
         "-o",
@@ -347,7 +353,7 @@ def main() -> int:
     if args.pages is None or not args.pages:
         args.pages = ["@seed", "@daily"] if args.populate else ["/", "/rom"]
     tokens = [path for path in args.pages if path.startswith("@")]
-    unknown = [token for token in tokens if token.partition("?")[0] not in TOKENS]
+    unknown = [token for token in tokens if token_of(token) not in TOKENS]
     if unknown:
         parser.error(f"unknown page {', '.join(unknown)}; expected {', '.join(TOKENS)}")
     if tokens and not args.populate:

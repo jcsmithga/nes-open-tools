@@ -139,8 +139,8 @@ rangefinder's rendered images or metadata. `golf-rehydrate` (logic in
 `golf/randomizer/rehydrate.py`) dumps the US ROM and, if present, the JP ROM into
 `courses/`, checks every hole against the content hashes in `data/catalog/holes.json`
 before installing any, and renders the rangefinder. Run it once after cloning, and again
-whenever the dumpers or renderer change; a change to what the renderer draws also bumps
-`RENDER_VERSION` in `golf/rendering/rangefinder.py`, so stale renders fail the check. `golf-site` refuses to start until the data
+whenever the dumpers or renderer change; a change to what the renderer draws, or to what its
+metadata says of a hole, also bumps `RENDER_VERSION` in `golf/rendering/rangefinder.py`, so stale renders fail the check. `golf-site` refuses to start until the data
 matches. The checked-in `data/` tables, `renders/` images and the catalog's hashes stay,
 and so does Mario Open's course intro sky
 (`golf/core/patches/data/course_intro_sky.png`), which the `course_intro_sky` patch draws (ADR 0019).

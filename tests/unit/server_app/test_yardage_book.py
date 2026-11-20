@@ -16,6 +16,7 @@ from server.seeds import insert_seed, withdraw_seed
 from server.users import sign_in
 from server.yardage_book import COURSE
 from tests.app_state import app_state
+from tests.stored_seeds import STROKE_INDEXES, store_rating
 from tests.synthetic_holes import built_holes, synthetic_hole
 from tests.unit.server_app.helpers import IPS, UNWRITTEN, FakeBuilder
 
@@ -99,6 +100,18 @@ def test_each_hole_shows_its_tee_shot_wind_and_no_later_one(client):
         assert hole["wind"].keys() == {"direction", "compass", "speed"}
         assert (hole["wind"]["direction"], hole["wind"]["speed"]) == (direction, speed)
         assert 0 <= speed <= 9
+
+
+def test_each_hole_shows_the_seeds_rated_stroke_index(client):
+    seed_id, _ = transformed_seed(client)
+    store_rating(app_state(client).db, seed_id)
+    holes = book_holes(client, seed_id)
+    assert [hole["stroke_index"] for hole in holes] == list(STROKE_INDEXES)
+
+
+def test_an_unrated_seeds_holes_have_no_stroke_index(client):
+    seed_id, _ = transformed_seed(client)
+    assert [hole["stroke_index"] for hole in book_holes(client, seed_id)] == [None] * 18
 
 
 def test_the_books_images_are_rendered_and_served_for_good(client, tmp_path):

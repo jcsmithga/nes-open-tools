@@ -59,10 +59,11 @@ VARIANTS = "variants"
 PINS = 4
 
 #: Names what a hole renders as. Bump it when a change to the renderer, the tilesets, the
-#: palettes or the sprites alters any image: `metadata.json` records it, so
+#: palettes or the sprites alters any image, or a change alters what `metadata.json`
+#: says of a hole: `metadata.json` records it, so
 #: `golf-rehydrate --check` fails on renders an older renderer made, and the yardage
 #: books' image URLs carry it.
-RENDER_VERSION = 1
+RENDER_VERSION = 2
 
 
 class HoleRenderer:
@@ -169,6 +170,8 @@ def render_rangefinder(
                     "number": hole_data.get("hole", 1),
                     "par": hole_data.get("par", 4),
                     "distance": hole_data.get("distance", 0),
+                    # the hole's handicap on its own course, which ranks that course's 18
+                    "stroke_index": hole_data.get("handicap"),
                     "image": f"{IMAGES}/{course_id}/{image_filename}",
                     "width": img.width,
                     "height": img.height,

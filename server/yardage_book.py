@@ -1,7 +1,7 @@
 """A seed's yardage book: the rangefinder's metadata for its 18 holes as the seed plays them.
 
 The book shows each hole with its transforms applied, at the seed's pin, with the wind of
-its tee shot. Every hole is read from `hole_data`, where the seed's build left it
+its tee shot and the seed's rated stroke index. Every hole is read from `hole_data`, where the seed's build left it
 (ADR 0021, ADR 0024), so the book needs neither the catalog nor the hole store. The images
 are rendered the first time a book asks for them (`golf/rendering/hole_renders.py`).
 
@@ -18,6 +18,7 @@ from golf.rendering.hole_renders import HoleRenders
 from golf.rendering.rangefinder import RENDER_VERSION
 
 from .db import Database
+from .ratings import seed_stroke_indexes
 from .seeds import SeedRow, load_hole_data, load_seed_holes
 from .static_files import VERSION_PARAM
 
@@ -48,8 +49,12 @@ def yardage_book(
         return f"{data_url}/{path}?{VERSION_PARAM}={RENDER_VERSION}"
 
     course = row.manifest.course
+    # the seed's rated ranking, which its ROM's scorecard shows; None while it is unrated
+    stroke_indexes = seed_stroke_indexes(db, row.id) or (None,) * len(course.holes)
     holes = []
-    for hole, slot in zip(load_seed_holes(db, row.id), course.holes, strict=True):
+    for hole, slot, stroke_index in zip(
+        load_seed_holes(db, row.id), course.holes, stroke_indexes, strict=True
+    ):
         data = load_hole_data(db, hole.data_hash)
         render = renders.ensure(hole.data_hash, hole.pin_index, data)
         direction, speed = tee_wind(slot)
@@ -58,6 +63,7 @@ def yardage_book(
                 "number": hole.position,
                 "par": hole.par,
                 "distance": data["distance"],
+                "stroke_index": stroke_index,
                 "image": url(render.main),
                 "width": render.width,
                 "height": render.height,

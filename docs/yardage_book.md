@@ -20,6 +20,7 @@ Code: `server/yardage_book.py` (the book's metadata), `server/seeds.py` (the sto
 | Yards | The hole's own `distance` |
 | Pin | `seed_holes.pin_index`, the pin the hole's wind seed deals |
 | Tee-shot wind | `tee_wind` in `server/yardage_book.py`: the first swing's direction and speed |
+| Stroke index | `seed_hole_ratings`, the ranking the seed's ROM scorecard shows; left off while the seed is unrated |
 
 - **One pin.** The whole-hole image has the seed's pin drawn in, and the green view
   shows that pin's flag with no way to change it. A book is open while its round is
@@ -44,7 +45,8 @@ hole, is stored once, and a seed with every hole transformed adds about 20 KB.
 ## The renders
 
 `/h/<id>/book.json` is the book's metadata, in the shape `metadata.json` has for the
-rangefinder, with one course. Before answering it renders whatever its holes lack:
+rangefinder, with one course. Each hole's `stroke_index` is the seed's rated one, or null
+while it is unrated; the rangefinder's are each hole's `handicap` on its own course. Before answering it renders whatever its holes lack:
 
 ```
 <GOLF_RANGEFINDER_DIR>/variants/<content hash>/main_pin_<K>.png
@@ -63,10 +65,10 @@ rangefinder, with one course. Before answering it renders whatever its holes lac
   rangefinder, and nothing else removes them; a seed whose holes all came from a seeded
   transform takes about 400 KB on disk once viewed.
 - `RENDER_VERSION` (`golf/rendering/rangefinder.py`) names what the renderer draws.
-  Bump it when a change alters any image. `metadata.json` records it, so
-  `golf-rehydrate --check` fails on older renders and the service's next start renders
-  again, and a book's image URLs carry it as `?v=`, which the static mount serves as
-  immutable.
+  Bump it when a change alters any image or what `metadata.json` says of a hole.
+  `metadata.json` records it, so `golf-rehydrate --check` fails on older renders and
+  the service's next start renders again, and a book's image URLs carry it as `?v=`,
+  which the static mount serves as immutable.
 
 ## The page
 
@@ -74,4 +76,5 @@ rangefinder, with one course. Before answering it renders whatever its holes lac
 drops the flag indicator, adds the wind readout and marks the section
 `data-kind="book"`, which hides the course selector and keeps the course out of the
 permalink (`?hole=` only). The modules read the same metadata either way: a hole with
-a `wind` shows it, and a hole with one flag image has no other to change to.
+a `wind` shows it, a hole with a `stroke_index` shows it after the yards, and a hole
+with one flag image has no other to change to.

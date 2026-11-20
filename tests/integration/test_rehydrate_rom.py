@@ -1,6 +1,7 @@
 """golf-rehydrate against the real ROMs: dump, verify against the catalog, install, render."""
 
 import dataclasses
+import json
 import shutil
 import subprocess
 import sys
@@ -60,6 +61,21 @@ def test_renders_the_rangefinder_from_what_it_installed(us_only):
         "uk",
         "us",
     ]
+
+
+def test_each_rendered_hole_has_its_stroke_index_on_its_own_course(us_only):
+    holes, rangefinder = us_only
+    metadata = json.loads((rangefinder / METADATA).read_text())
+    for course_id in ("japan", "us", "uk"):
+        rendered = metadata["courses"][course_id]["holes"]
+        handicaps = [
+            json.loads(
+                (holes / course_id / f"hole_{hole['number']:02d}.json").read_text()
+            )["handicap"]
+            for hole in rendered
+        ]
+        assert [hole["stroke_index"] for hole in rendered] == handicaps
+        assert sorted(handicaps) == list(range(1, 19)), course_id
 
 
 def test_a_rangefinder_rendered_from_other_courses_is_stale(us_only, tmp_path):
