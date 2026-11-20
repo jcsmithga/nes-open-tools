@@ -36,7 +36,7 @@ needed:
 
 - **Unfinished.** Run once at generation time: the base patches, the course, seeded
   wind, each hole's wind anchors, the wind fix, music, mercy tap-in, the green detail view and scorecard shortcuts, the swing speed on
-  the swing view HUD, the magic
+  the swing view HUD, RC for the course on the in-game HUD, the magic
   words on the menus and scorecard, signpost and its seeded brick color, Peach's seeded
   dress color, Mario Open's sky on the course intro scene, the round stats the QR code sends (fairways
   hit and penalty strokes), and the scorecard QR image with its credential placeholders

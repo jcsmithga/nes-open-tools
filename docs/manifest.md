@@ -19,7 +19,7 @@ With the hole list trimmed to one of its 18 slots:
 {
   "schema": 6,
   "generator_version": 5,
-  "build_version": 8,
+  "build_version": 9,
   "finish_abi_version": 2,
   "catalog_version": 1,
   "curation_stamp": "f640f8d1…",
@@ -114,7 +114,8 @@ strictly, and a stored seed's is read tolerantly (**Reading stored manifests**, 
 | 4 | 6 | 2 | `settings` gains `include`, the kinds of hole added to the pool beside the vanilla ones (ADR 0023). The unfinished buildchain is unchanged. Schema 4 is the last without `constraints` and the last with `draw_rule`: its courses were standard ones of the settings' par. |
 | 5 | 6 | 2 | `settings` gains `constraints`, the course's mode and expert cap, and loses `par` and `draw_rule`; it gains `mirror_chance` and `hazard_chance`, and the manifest gains `request` (ADR 0016, ADR 0025). The unfinished buildchain is unchanged. |
 | 5 | 7 | 2 | The unfinished stack adds `swing_speed_hud`, which shows the swing speed (S/M/F) beside the club on the swing view HUD (`docs/swing_speed_hud.md`). |
-| 6 | 8 | 2 | `course` gains `dress_color` and `signpost_color`, which the unfinished stack's new `peach_dress` and `signpost_color` steps write. The stack also adds `course_intro_sky`, Mario Open's sky over the course name on the course intro scene, in every seed (ADR 0019). This is the current schema and unfinished buildchain. |
+| 6 | 8 | 2 | `course` gains `dress_color` and `signpost_color`, which the unfinished stack's new `peach_dress` and `signpost_color` steps write. The stack also adds `course_intro_sky`, Mario Open's sky over the course name on the course intro scene, in every seed (ADR 0019). |
+| 6 | 9 | 2 | The unfinished stack adds `hud_course_abbrev`, which shows RC (Random Course) in place of the course's two letters on the in-game HUD (`docs/hud_course_abbrev.md`). This is the current schema and unfinished buildchain. |
 
 Every stored seed of these schemas is read as described below, and finishes through the
 ABI its row names. None is rebuilt.

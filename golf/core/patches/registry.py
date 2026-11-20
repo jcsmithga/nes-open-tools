@@ -47,6 +47,7 @@ from .green_slope_physics import (
     DEFAULT_STRENGTH,
     green_slope_physics_patch,
 )
+from .hud_course_abbrev import HUD_COURSE_ABBREV_PATCH
 from .mario_open_free_play import mario_open_free_play_patch
 from .menu_trim import menu_trim_patch
 from .mercy_tap_in import mercy_tap_in_patches
@@ -537,6 +538,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "Show the swing speed (S/M/F) beside the club on the swing view HUD (docs/swing_speed_hud.md)",
             NoParams,
             _fixed(SWING_SPEED_HUD_PATCH),
+        ),
+        PatchSpec(
+            "hud_course_abbrev",
+            "Show RC (Random Course) for the course on the in-game HUD (docs/hud_course_abbrev.md)",
+            NoParams,
+            _fixed(HUD_COURSE_ABBREV_PATCH),
         ),
         PatchSpec(
             "practice_swing",

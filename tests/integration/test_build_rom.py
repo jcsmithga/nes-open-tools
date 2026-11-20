@@ -64,6 +64,7 @@ UNFINISHED_ORDER = [
     "mercy_tap_in",
     "green_shortcut",
     "swing_speed_hud",
+    "hud_course_abbrev",
     "round_stats",
     "scorecard_qr",
     "signpost_random_banner",
@@ -209,18 +210,18 @@ def test_the_unfinished_build_is_deterministic(
     assert build_unfinished(jp_manifest, catalog, store, vanilla).ips == unfinished.ips
 
 
-def test_build_version_eight_golden_unfinished_ips_hashes(
+def test_build_version_nine_golden_unfinished_ips_hashes(
     unfinished, jp_manifest, nes_manifest, catalog, store, vanilla
 ):
-    assert BUILD_VERSION == 8
+    assert BUILD_VERSION == 9
     assert any(str(slot.id) == "jp_france/18" for slot in jp_manifest.course.holes)
     nes = build_unfinished(nes_manifest, catalog, store, vanilla)
     assert {
         "jp_france_18": hashlib.sha256(unfinished.ips).hexdigest(),
         "nes_only": hashlib.sha256(nes.ips).hexdigest(),
     } == {
-        "jp_france_18": "4a89ac9b4386157ea813708be2f20a2a9ba6b90d5b999e8cf352ffbd178d7287",
-        "nes_only": "797a1aadbf476a40cf1d52525ae95249a60838d9e2a6ba16cbf721851111cbe2",
+        "jp_france_18": "9916b73bf1dc91d1440547bebfdb0693e639381cfd1eedf03b2d8313f8496604",
+        "nes_only": "e309b12601d81e4733e2ab573569665656117ad4efdd1c7b3d00b9251ebfe058",
     }
 
 

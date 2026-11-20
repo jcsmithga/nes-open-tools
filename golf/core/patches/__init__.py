@@ -32,6 +32,7 @@ from .course_intro_sky import (
 )
 from .course_theme import course_theme_patch
 from .green_shortcut import green_shortcut_patch
+from .hud_course_abbrev import HUD_COURSE_ABBREV_PATCH
 from .menu_trim import (
     DEFAULT_WORDS,
     RENDERABLE_CHARS,
@@ -131,6 +132,7 @@ __all__ = [
     "ROUND_STATS_PATCH",
     "WIND_FIX_PATCH",
     "SWING_SPEED_HUD_PATCH",
+    "HUD_COURSE_ABBREV_PATCH",
     "wind_anchors_patch",
     "SCORECARD_QR_PATCH",
     "QR_DISABLE_PATCH",
