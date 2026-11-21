@@ -25,6 +25,9 @@ def range_to_list(min: int, max: int) -> list[int]:
 class TileSubBank:
     """A labeled subgroup of tiles within a bank."""
 
+    # Layout constants, on the class so the picker can size a scroll step from them
+    label_height = 14  # Smaller than bank labels
+    spacing_before = 4  # Vertical spacing before this subbank
     def __init__(self, label: str, tile_indices: list[int]):
         """
         Args:
@@ -33,10 +36,6 @@ class TileSubBank:
         """
         self.label = label
         self.tile_indices = tile_indices
-
-        # Layout constants
-        self.label_height = 14  # Smaller than bank labels
-        self.spacing_before = 4  # Vertical spacing before this subbank
 
     def get_height(self, tiles_per_row: int, tile_scale: int, tile_spacing: int) -> int:
         """

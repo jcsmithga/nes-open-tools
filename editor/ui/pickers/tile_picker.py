@@ -13,6 +13,8 @@ from editor.core.pygame_rendering import Tileset
 
 from .tile_banks import GroupedTileBank, TileSubBank, range_to_list
 
+# Empty space kept below the last bank when scrolled to the bottom
+BOTTOM_MARGIN = 10
 
 class TilePicker:
     """Tile selection panel."""
@@ -146,6 +148,8 @@ class TilePicker:
     def resize(self, rect: Rect):
         """Move the picker to a new rectangle (e.g., on window resize)."""
         self.rect = rect
+        # A taller window may have less left to scroll
+        self.scroll_y = min(self.scroll_y, self._max_scroll())
 
     def _calculate_bank_positions(self):
         """Calculate y-offset for each bank (for layout and hit testing)."""
@@ -155,6 +159,18 @@ class TilePicker:
         for bank in self.banks:
             self._bank_positions.append(current_y)
             current_y += bank.get_height() + self.bank_spacing
+
+        # The last bank's spacing is not a gap before anything
+        self._content_height = current_y - self.bank_spacing + BOTTOM_MARGIN
+
+    def _scroll_step(self) -> int:
+        """How far one notch of the mouse wheel scrolls: one labeled row of tiles."""
+        tile_row = TILE_SIZE * self.tile_scale + self.tile_spacing
+        return TileSubBank.spacing_before + TileSubBank.label_height + tile_row
+
+    def _max_scroll(self) -> int:
+        """The furthest the picker scrolls: its last bank's bottom at the bottom."""
+        return max(0, self._content_height - self.rect.height)
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         """Handle input events. Returns True if handled."""
@@ -190,10 +206,12 @@ class TilePicker:
                 self._select_at(event.pos)
                 return True
             elif event.button == 4:  # Scroll up
-                self.scroll_y = max(0, self.scroll_y - 20)
+                self.scroll_y = max(0, self.scroll_y - self._scroll_step())
                 return True
             elif event.button == 5:  # Scroll down
-                self.scroll_y += 20
+                self.scroll_y = min(
+                    self._max_scroll(), self.scroll_y + self._scroll_step()
+                )
                 return True
         return False
 
