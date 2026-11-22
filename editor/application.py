@@ -72,8 +72,6 @@ from .ui.toolbar import Toolbar, ToolbarCallbacks
 PREFERRED_WINDOW_SIZE = (1280, 1200)
 #: room left on the desktop for the title bar and taskbar
 DESKTOP_MARGIN = (40, 100)
-#: empty rows the course view can scroll up into, above the hole's first row
-ROWS_ABOVE_COURSE = 20
 #: the canvas's zoom levels, as screen pixels per NES pixel; 4 is the usual size,
 #: shown as 1x, so these are 0.5x, 0.75x, 1x, 2x, 3x and 4x
 ZOOM_SCALES = (2, 3, 4, 8, 12, 16)
@@ -92,23 +90,17 @@ def _initial_window_size() -> tuple[int, int]:
     return width, height
 
 
-def _clamp_span(
-    offset: int,
-    overhang: int,
-    near_edge_in: int = 0,
-    far_edge_in: int = 0,
-    room_before: int = 0,
-) -> int:
-    """Clamp a scroll offset between 0 and how far the grid overhangs the canvas.
+def _clamp_offset(offset: int, size: int, canvas_size: int) -> int:
+    """Clamp a scroll offset along one axis of a grid `size` pixels long, in a
+    canvas `canvas_size` long.
 
-    The overhang is negative when the grid is smaller than the canvas, which lets
-    the grid move away from the canvas's near edge until it meets the far one.
-    `near_edge_in` and `far_edge_in` let the grid's near (left or top) and far
-    (right or bottom) edges scroll at least that many pixels into the canvas, and
-    `room_before` lets it move that many pixels further from the near edge.
+    Up to half the grid can be pushed off either end of the canvas, and each of
+    its edges can always come in at least as far as the canvas's middle, which
+    goes further once the grid is bigger than the canvas.
     """
-    low = min(0, overhang, -near_edge_in) - room_before
-    high = max(0, overhang + far_edge_in)
+    middle = canvas_size // 2
+    low = min(size // 2 - canvas_size, -middle)
+    high = max(size // 2, size - middle)
     return min(max(low, offset), high)
 
 
@@ -666,40 +658,25 @@ class EditorApplication:
         self.state.tool_message = f"Zoom {new / USUAL_SCALE:g}x"
 
     def _clamp_canvas_offset(self):
-        """Keep the hole's grid within the canvas.
+        """Keep the hole's grid, the course's or the green's, at least half in view.
 
         The green's grid is its own 24 by 24 tiles, and the course's its 22
-        columns and however many rows the hole has. A grid bigger than the canvas
-        scrolls until its far edge reaches the canvas's; one smaller than the
-        canvas moves around inside it, from the canvas's near edge to its far one.
-
-        The course can also scroll further, at any zoom: its left, right and
-        bottom edges in as far as the middle of the canvas, and its top down by
-        `ROWS_ABOVE_COURSE` empty rows.
+        columns and however many rows the hole has. See `_clamp_offset`.
         """
         if not self.hole_data.terrain:
             self.state.canvas_offset_x = self.state.canvas_offset_y = 0
             return
-        tile = TILE_SIZE * self.state.canvas_scale
-        canvas = self._get_canvas_rect()
         if self.state.mode == "greens":
             columns, rows = GREENS_WIDTH, GREENS_HEIGHT
-            beside = below = above = 0
         else:
             columns, rows = TERRAIN_WIDTH, self.hole_data.get_terrain_height()
-            beside, below = canvas.width // 2, canvas.height // 2
-            above = ROWS_ABOVE_COURSE * tile
-        self.state.canvas_offset_x = _clamp_span(
-            self.state.canvas_offset_x,
-            columns * tile - canvas.width,
-            near_edge_in=beside,
-            far_edge_in=beside,
+        tile = TILE_SIZE * self.state.canvas_scale
+        canvas = self._get_canvas_rect()
+        self.state.canvas_offset_x = _clamp_offset(
+            self.state.canvas_offset_x, columns * tile, canvas.width
         )
-        self.state.canvas_offset_y = _clamp_span(
-            self.state.canvas_offset_y,
-            rows * tile - canvas.height,
-            far_edge_in=below,
-            room_before=above,
+        self.state.canvas_offset_y = _clamp_offset(
+            self.state.canvas_offset_y, rows * tile, canvas.height
         )
 
     def _screen_to_tile(self, screen_pos: tuple[int, int]) -> tuple[int, int] | None:

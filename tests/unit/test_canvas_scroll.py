@@ -5,12 +5,12 @@ from unittest.mock import patch
 import pygame
 import pytest
 
-from editor.application import ROWS_ABOVE_COURSE, EditorApplication
+from editor.application import EditorApplication
 from editor.controllers.event_handler import (
     SCROLL_REPEAT_DELAY_MS,
     SCROLL_REPEAT_INTERVAL_MS,
 )
-from editor.core.constants import GREENS_HEIGHT, TERRAIN_WIDTH, TILE_SIZE
+from editor.core.constants import GREENS_HEIGHT, GREENS_WIDTH, TERRAIN_WIDTH, TILE_SIZE
 from tests.synthetic_holes import synthetic_hole
 
 TILE = TILE_SIZE * 4  # the canvas draws tiles at 4x
@@ -55,27 +55,23 @@ def offset(app):
     return app.state.canvas_offset_x, app.state.canvas_offset_y
 
 
+def span(size, view):
+    """The offsets a grid `size` pixels long scrolls between in a canvas `view`
+    long: up to half of it off either end, or until each of its edges reaches
+    the canvas's middle if that is further."""
+    return min(size // 2 - view, -(view // 2)), max(size // 2, size - view // 2)
+
+
 def furthest(app, columns, rows):
-    """The furthest right and down a grid scrolls.
-
-    The course goes on until its right and bottom edges are in the middle of the
-    canvas.
-    """
+    """The furthest right and down a grid scrolls."""
     canvas = app._get_canvas_rect()
-    across = columns * TILE - canvas.width
-    down = rows * TILE - canvas.height
-    if app.state.mode == "terrain":
-        across += canvas.width // 2
-        down += canvas.height // 2
-    return (max(0, across), max(0, down))
+    return span(columns * TILE, canvas.width)[1], span(rows * TILE, canvas.height)[1]
 
 
-def leftmost(app):
-    """The furthest left the course scrolls: until its left edge is in the
-    middle of the canvas, or its right edge at the canvas's right if that is
-    further."""
-    width = app._get_canvas_rect().width
-    return min(-(width // 2), TERRAIN_WIDTH * TILE - width)
+def nearest(app, columns, rows):
+    """The furthest left and up a grid scrolls."""
+    canvas = app._get_canvas_rect()
+    return span(columns * TILE, canvas.width)[0], span(rows * TILE, canvas.height)[0]
 
 
 def test_one_wheel_notch_scrolls_one_tile(app):
@@ -125,65 +121,87 @@ def test_losing_the_window_stops_the_scrolling(app):
     assert offset(app) == (0, TILE)
 
 
-def test_scrolling_stops_with_the_bottom_and_right_edges_at_the_middle(app):
+def test_scrolling_stops_with_half_the_course_off_the_top_and_left(app):
+    app._on_resize(1800, 1100)  # big enough to hold the whole course
     wheel(app, 5, notches=100)
     for _ in range(100):
         key_down(app, pygame.K_RIGHT)
-    bottom_right = furthest(app, TERRAIN_WIDTH, ROWS)
-    assert bottom_right[0] > 0
-    assert bottom_right[1] > 0
-    assert offset(app) == bottom_right
+    assert offset(app) == (TERRAIN_WIDTH * TILE // 2, ROWS * TILE // 2)
+    assert offset(app) == furthest(app, TERRAIN_WIDTH, ROWS)
 
 
-def test_the_course_scrolls_its_left_edge_to_the_middle(app):
-    assert app._get_canvas_rect().width < TERRAIN_WIDTH * TILE
+def test_scrolling_stops_with_half_the_course_off_the_bottom_and_right(app):
+    app._on_resize(1800, 1100)
+    wheel(app, 4, notches=100)
     for _ in range(100):
         key_down(app, pygame.K_LEFT)
-    assert offset(app) == (leftmost(app), 0)
+    canvas = app._get_canvas_rect()
+    x, y = offset(app)
+    hidden_right = TERRAIN_WIDTH * TILE - (x + canvas.width)
+    hidden_below = ROWS * TILE - (y + canvas.height)
+    assert (hidden_right, hidden_below) == (TERRAIN_WIDTH * TILE // 2, ROWS * TILE // 2)
+    assert offset(app) == nearest(app, TERRAIN_WIDTH, ROWS)
 
 
-def test_the_course_scrolls_up_into_20_empty_rows_and_no_further(app):
-    wheel(app, 4, notches=100)
-    assert offset(app) == (0, -ROWS_ABOVE_COURSE * TILE)
-
-
-def test_the_green_does_not_scroll_above_its_top(app):
-    app._toggle_mode()
-    wheel(app, 4, notches=100)
-    assert app.state.canvas_offset_y == 0
-
-
-def test_the_green_does_not_scroll_past_its_sides(app):
-    app._toggle_mode()
-    for _ in range(100):
-        key_down(app, pygame.K_LEFT)
-    assert app.state.canvas_offset_x == 0
+def test_a_course_bigger_than_the_canvas_scrolls_its_edges_to_the_middle(app):
+    canvas = app._get_canvas_rect()
+    assert canvas.width < TERRAIN_WIDTH * TILE and canvas.height < ROWS * TILE
+    wheel(app, 5, notches=100)
     for _ in range(100):
         key_down(app, pygame.K_RIGHT)
-    assert app.state.canvas_offset_x == furthest(app, 24, 0)[0]
+    x, y = offset(app)
+    right, bottom = TERRAIN_WIDTH * TILE - x, ROWS * TILE - y
+    assert (right, bottom) == (canvas.width // 2, canvas.height // 2)
+    wheel(app, 4, notches=100)
+    for _ in range(100):
+        key_down(app, pygame.K_LEFT)
+    assert offset(app) == (-(canvas.width // 2), -(canvas.height // 2))
 
 
-def test_the_green_stops_at_its_own_edges(app):
+@pytest.mark.parametrize(("key", "end"), [(pygame.K_RIGHT, 1), (pygame.K_LEFT, 0)])
+def test_the_green_follows_the_same_rule(app, key, end):
     app._toggle_mode()
     assert app.state.mode == "greens"
-    wheel(app, 5, notches=100)
-    assert app.state.canvas_offset_y == furthest(app, 0, GREENS_HEIGHT)[1]
+    wheel(app, 5 if end else 4, notches=100)
+    for _ in range(100):
+        key_down(app, key)
+    ends = furthest if end else nearest
+    assert offset(app) == ends(app, GREENS_WIDTH, GREENS_HEIGHT)
 
 
-def test_a_taller_window_brings_a_scrolled_view_back(app):
-    wheel(app, 5, notches=100)
+def test_a_course_narrower_than_the_window_can_be_pushed_half_off_too(app):
+    app._on_resize(1800, 700)
+    canvas = app._get_canvas_rect()
+    assert canvas.width > TERRAIN_WIDTH * TILE
+    for _ in range(100):
+        key_down(app, pygame.K_LEFT)  # the view goes left, so the course goes right
+    x = offset(app)[0]
+    assert canvas.width + x == TERRAIN_WIDTH * TILE // 2  # half of it off the right
+    for _ in range(100):
+        key_down(app, pygame.K_RIGHT)
+    assert offset(app)[0] == TERRAIN_WIDTH * TILE // 2  # half of it off the left
+
+
+def test_a_taller_window_brings_a_zoomed_in_view_back(app):
+    canvas = app._get_canvas_rect()
+    app._zoom_canvas(3, canvas.center)  # 4x: the course is many views tall
+    wheel(app, 5, notches=200)
+    scrolled = offset(app)[1]
     app._on_resize(1000, 1400)
     app._clamp_canvas_offset()
-    assert app.state.canvas_offset_y == furthest(app, 0, ROWS)[1]
+    canvas = app._get_canvas_rect()
+    # its bottom edge comes back to the middle of the taller canvas
+    assert offset(app)[1] == ROWS * TILE_SIZE * 16 - canvas.height // 2 < scrolled
 
 
-def test_rows_added_at_the_bottom_give_the_course_room_to_scroll_further(app):
+def test_rows_added_at_the_bottom_let_the_course_scroll_further(app):
+    app._on_resize(1800, 1100)
     wheel(app, 5, notches=100)
     before = app.state.canvas_offset_y
     key_down(app, pygame.K_EQUALS)  # adds two rows
     assert app.hole_data.get_terrain_height() == ROWS + 2
     wheel(app, 5, notches=100)
-    assert app.state.canvas_offset_y == before + 2 * TILE
+    assert app.state.canvas_offset_y == before + TILE  # half of the two
 
 
 def test_rows_removed_bring_a_scrolled_view_back(app):
@@ -192,20 +210,7 @@ def test_rows_removed_bring_a_scrolled_view_back(app):
     key_down(app, pygame.K_MINUS)  # removes two rows
     assert app.hole_data.get_terrain_height() == ROWS
     app._clamp_canvas_offset()
-    assert app.state.canvas_offset_y == furthest(app, 0, ROWS)[1]
-
-
-def test_a_course_narrower_than_the_window_moves_across_it(app):
-    app._on_resize(1800, 700)
-    room = app._get_canvas_rect().width - TERRAIN_WIDTH * TILE
-    assert room > 0
-    for _ in range(100):
-        key_down(app, pygame.K_LEFT)  # the view goes left, so the course goes right
-    assert offset(app) == (leftmost(app), 0)
-    assert leftmost(app) <= -room  # its right edge reaches the canvas's at least
-    for _ in range(100):
-        key_down(app, pygame.K_RIGHT)
-    assert offset(app) == (furthest(app, TERRAIN_WIDTH, 0)[0], 0)
+    assert offset(app)[1] == furthest(app, TERRAIN_WIDTH, ROWS)[1]
 
 
 def test_a_narrower_window_brings_a_moved_course_back(app):
@@ -214,7 +219,7 @@ def test_a_narrower_window_brings_a_moved_course_back(app):
         key_down(app, pygame.K_LEFT)
     app._on_resize(1000, 700)
     app._clamp_canvas_offset()
-    assert offset(app) == (leftmost(app), 0)
+    assert offset(app) == (nearest(app, TERRAIN_WIDTH, ROWS)[0], 0)
 
 
 def test_the_position_tool_keeps_the_arrows_for_itself(app):
@@ -268,7 +273,7 @@ def test_a_drag_stops_at_the_edges(app):
     move(app, (x - 5000, y - 5000))
     assert offset(app) == furthest(app, TERRAIN_WIDTH, ROWS)
     move(app, (x + 5000, y + 5000))
-    assert offset(app) == (leftmost(app), -ROWS_ABOVE_COURSE * TILE)
+    assert offset(app) == nearest(app, TERRAIN_WIDTH, ROWS)
 
 
 def test_a_drag_let_go_outside_the_window_ends_at_the_next_move(app):

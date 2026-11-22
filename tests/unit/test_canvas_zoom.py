@@ -87,26 +87,6 @@ def test_one_notch_out_from_the_usual_size_is_three_quarters(app):
     assert app.state.tool_message == "Zoom 0.75x"
 
 
-@pytest.mark.parametrize("window_width", [1000, 1500, 1900])
-@pytest.mark.parametrize("notches", [-3, -2, 0, 1, 2, 3])
-def test_at_every_zoom_the_course_edges_come_in_to_the_middle(
-    app, notches, window_width
-):
-    app._on_resize(window_width, 700)
-    app._zoom_canvas(notches, app._get_canvas_rect().center)
-    canvas = app._get_canvas_rect()
-    middle = canvas.x + canvas.width // 2
-    width = 22 * TILE_SIZE * app.state.canvas_scale
-    app._pan_canvas(-100_000, 0)
-    left_edge = canvas.x - app.state.canvas_offset_x
-    assert left_edge >= middle
-    assert left_edge < canvas.right  # never off the canvas altogether
-    app._pan_canvas(100_000, 0)
-    right_edge = canvas.x + width - app.state.canvas_offset_x
-    assert right_edge <= middle
-    assert right_edge > canvas.x
-
-
 def test_scrolling_moves_one_tile_at_any_zoom(app):
     wheel(app, 4)  # 2x
     before = app.state.canvas_offset_y
@@ -130,19 +110,29 @@ def test_ctrl_and_the_wheel_over_the_tile_picker_scroll_the_picker(app):
     assert picker.scroll_y > 0
 
 
-def test_zoomed_in_the_course_scrolls_its_sides_in_to_the_middle(app):
-    wheel(app, 4, notches=2)  # 3x
+@pytest.mark.parametrize("mode", ["terrain", "greens"])
+@pytest.mark.parametrize("window_size", [(1000, 700), (1500, 1000), (1900, 1100)])
+@pytest.mark.parametrize("notches", [-2, -1, 0, 1, 2, 3])  # 0.5x to 4x
+def test_at_every_zoom_a_grid_goes_half_off_or_its_edge_to_the_middle(
+    app, notches, window_size, mode
+):
+    app._on_resize(*window_size)
+    if mode == "greens":
+        app._toggle_mode()
+    app._zoom_canvas(notches, app._get_canvas_rect().center)
     canvas = app._get_canvas_rect()
-    half = canvas.width // 2
-    app._pan_canvas(-100_000, 0)
-    assert app.state.canvas_offset_x == -half
-    app._pan_canvas(100_000, 0)
-    width = 22 * TILE_SIZE * app.state.canvas_scale
-    assert app.state.canvas_offset_x == width - canvas.width + half
-
-
-def test_zoomed_in_the_green_still_stops_at_its_sides(app):
-    app._toggle_mode()
-    wheel(app, 4, notches=2)
-    app._pan_canvas(-100_000, 0)
-    assert app.state.canvas_offset_x == 0
+    tile = TILE_SIZE * app.state.canvas_scale
+    columns, rows = (24, 24) if mode == "greens" else (22, 30)
+    for size, view, axis in (
+        (columns * tile, canvas.width, 0),
+        (rows * tile, canvas.height, 1),
+    ):
+        app._pan_canvas(*((100_000, 0) if axis == 0 else (0, 100_000)))
+        hidden_before = (app.state.canvas_offset_x, app.state.canvas_offset_y)[axis]
+        app._pan_canvas(*((-100_000, 0) if axis == 0 else (0, -100_000)))
+        start = (app.state.canvas_offset_x, app.state.canvas_offset_y)[axis]
+        hidden_after = size - (start + view)
+        # half of it off, or its edge in to the middle if that is further
+        assert hidden_before == hidden_after == max(size // 2, size - view // 2)
+        # either way, its edge comes in at least to the middle of the view
+        assert size - hidden_before <= view - view // 2
