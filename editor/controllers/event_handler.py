@@ -66,6 +66,7 @@ class EventHandler:
         on_quit: Callable[[], bool] | None = None,
         on_scroll_canvas: Callable[[int, int], None] | None = None,
         on_pan_canvas: Callable[[int, int], None] | None = None,
+        on_zoom_canvas: Callable[[int, tuple[int, int]], None] | None = None,
     ):
         """
         Initialize event handler.
@@ -93,6 +94,8 @@ class EventHandler:
             on_quit: Callback asked before quitting; returns False to stay open
             on_scroll_canvas: Callback to scroll the canvas by (columns, rows) of tiles
             on_pan_canvas: Callback to move the canvas by (x, y) screen pixels
+            on_zoom_canvas: Callback to zoom the canvas in (1) or out (-1) a
+                level, keeping the spot at a screen position in place
         """
         self.state = state
         self.hole_data = hole_data
@@ -118,6 +121,7 @@ class EventHandler:
         self.on_pan_canvas = on_pan_canvas
         # where the mouse was when last seen while middle-dragging the canvas
         self._drag_from: tuple[int, int] | None = None
+        self.on_zoom_canvas = on_zoom_canvas
         self.on_select_flag = on_select_flag
         self.on_set_palette = on_set_palette
         self.on_resize = on_resize
@@ -255,12 +259,14 @@ class EventHandler:
             ):
                 modifiers = pygame.key.get_mods()
 
-                # Handle scrolling
-                if event.button == 4:  # Scroll up
-                    self._scroll_canvas(0, -1)
-                    continue
-                elif event.button == 5:  # Scroll down
-                    self._scroll_canvas(0, 1)
+                # The wheel scrolls the canvas, or zooms it with Ctrl held
+                if event.button in (4, 5):
+                    up = event.button == 4
+                    if modifiers & pygame.KMOD_CTRL:
+                        if self.on_zoom_canvas:
+                            self.on_zoom_canvas(1 if up else -1, event.pos)
+                    else:
+                        self._scroll_canvas(0, -1 if up else 1)
                     continue
 
                 tool = self._canvas_tool()
