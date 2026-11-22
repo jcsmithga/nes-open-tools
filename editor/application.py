@@ -12,7 +12,7 @@ from pygame import Rect
 
 from golf.algorithms.forest_fill import ForestFiller
 from golf.formats.hole_check import editable_problem, rom_problems
-from golf.formats.hole_data import HoleData
+from golf.formats.hole_data import MAX_TERRAIN_ROWS, HoleData
 
 from .controllers.editor_state import EditorState, GridMode
 from .controllers.event_handler import EventHandler
@@ -23,10 +23,12 @@ from .core.constants import (
     COLOR_BG,
     COLOR_STATUS,
     COLOR_TEXT,
+    GREENS_HEIGHT,
     GREENS_WIDTH,
     PICKER_WIDTH,
     STATUS_HEIGHT,
     TERRAIN_WIDTH,
+    TILE_SIZE,
     TOOL_PICKER_WIDTH,
     TOOLBAR_HEIGHT,
 )
@@ -70,6 +72,8 @@ from .ui.toolbar import Toolbar, ToolbarCallbacks
 PREFERRED_WINDOW_SIZE = (1280, 1200)
 #: room left on the desktop for the title bar and taskbar
 DESKTOP_MARGIN = (40, 100)
+#: empty rows the course view can scroll up into, above the hole's first row
+ROWS_ABOVE_COURSE = 20
 
 
 def _initial_window_size() -> tuple[int, int]:
@@ -81,6 +85,16 @@ def _initial_window_size() -> tuple[int, int]:
         width = min(width, desktop_w - DESKTOP_MARGIN[0])
         height = min(height, desktop_h - DESKTOP_MARGIN[1])
     return width, height
+
+
+def _clamp_span(offset: int, overhang: int, room_before: int = 0) -> int:
+    """Clamp a scroll offset between 0 and how far the grid overhangs the canvas.
+
+    The overhang is negative when the grid is smaller than the canvas, which lets
+    the grid move away from the canvas's near edge until it meets the far one.
+    `room_before` lets it move that many pixels further from the near edge.
+    """
+    return min(max(min(0, overhang) - room_before, offset), max(0, overhang))
 
 
 class EditorApplication:
@@ -230,6 +244,8 @@ class EditorApplication:
             on_tool_change=self._on_tool_change,
             on_create_stamp=self._on_create_stamp,
             on_quit=self._confirm_discard,
+            on_scroll_canvas=self._scroll_canvas,
+            on_pan_canvas=self._pan_canvas,
         )
 
         # Set forest_filler, tool_manager, highlight_state, stamp_library, and revert callback on tool_context (needed by tools)
@@ -598,6 +614,44 @@ class EditorApplication:
         """Get the canvas drawing area."""
         return canvas_rect(self.screen_width, self.screen_height)
 
+    def _scroll_canvas(self, columns: int, rows: int):
+        """Scroll the canvas by whole tiles, keeping the hole in view."""
+        tile = TILE_SIZE * self.state.canvas_scale
+        self._pan_canvas(columns * tile, rows * tile)
+
+    def _pan_canvas(self, dx: int, dy: int):
+        """Move the canvas by screen pixels, keeping the hole in view."""
+        self.state.canvas_offset_x += dx
+        self.state.canvas_offset_y += dy
+        self._clamp_canvas_offset()
+
+    def _clamp_canvas_offset(self):
+        """Keep the hole's grid within the canvas.
+
+        The green's grid is its own 24 by 24 tiles. The course's is its 22 columns
+        and 60 rows, the tallest a hole can be, so a shorter hole can scroll past
+        its bottom toward where added rows would go; it can also scroll up into
+        `ROWS_ABOVE_COURSE` empty rows above its top. A grid bigger than the canvas
+        scrolls until its far edge reaches the canvas's; one smaller than the
+        canvas moves around inside it, from the canvas's near edge to its far one.
+        """
+        if not self.hole_data.terrain:
+            self.state.canvas_offset_x = self.state.canvas_offset_y = 0
+            return
+        tile = TILE_SIZE * self.state.canvas_scale
+        if self.state.mode == "greens":
+            columns, rows, room_above = GREENS_WIDTH, GREENS_HEIGHT, 0
+        else:
+            columns, rows = TERRAIN_WIDTH, MAX_TERRAIN_ROWS
+            room_above = ROWS_ABOVE_COURSE * tile
+        canvas = self._get_canvas_rect()
+        self.state.canvas_offset_x = _clamp_span(
+            self.state.canvas_offset_x, columns * tile - canvas.width
+        )
+        self.state.canvas_offset_y = _clamp_span(
+            self.state.canvas_offset_y, rows * tile - canvas.height, room_above
+        )
+
     def _screen_to_tile(self, screen_pos: tuple[int, int]) -> tuple[int, int] | None:
         """Convert screen position to tile coordinates."""
         return self.event_handler.tool_context.view_state.screen_to_tile(screen_pos)
@@ -607,6 +661,11 @@ class EditorApplication:
         while self.running:
             events = pygame.event.get()
             self.running = self.event_handler.handle_events(events)
+            self.event_handler.repeat_held_scrolls(pygame.time.get_ticks())
+
+            # Switching to the green or a taller window can leave the canvas
+            # scrolled past the edge; bring it back
+            self._clamp_canvas_offset()
 
             # Update active tool (for time-based behavior like key repeat)
             active_tool = self.tool_manager.get_active_tool()

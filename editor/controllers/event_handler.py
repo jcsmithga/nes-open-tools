@@ -20,6 +20,22 @@ FLAG_KEYS = (pygame.K_F1, pygame.K_F2, pygame.K_F3, pygame.K_F4)
 #: the keys that select palettes 1-3, in order
 PALETTE_KEYS = (pygame.K_1, pygame.K_2, pygame.K_3)
 
+#: the arrow keys, and how far each scrolls the canvas in tiles (columns, rows)
+ARROW_SCROLL = {
+    pygame.K_LEFT: (-1, 0),
+    pygame.K_RIGHT: (1, 0),
+    pygame.K_UP: (0, -1),
+    pygame.K_DOWN: (0, 1),
+}
+
+#: a held arrow key scrolls again after this long, then at this interval, as the
+#: Position tool's held arrows move a position
+SCROLL_REPEAT_DELAY_MS = 500
+SCROLL_REPEAT_INTERVAL_MS = 50
+
+#: pygame's number for the middle mouse button, which drags the canvas
+MIDDLE_BUTTON = 2
+
 
 class EventHandler:
     """Handles all user input events."""
@@ -48,6 +64,8 @@ class EventHandler:
         on_tool_change: Callable[[], None],
         on_create_stamp: Callable[[], None] | None = None,
         on_quit: Callable[[], bool] | None = None,
+        on_scroll_canvas: Callable[[int, int], None] | None = None,
+        on_pan_canvas: Callable[[int, int], None] | None = None,
     ):
         """
         Initialize event handler.
@@ -73,6 +91,8 @@ class EventHandler:
             on_resize: Callback for window resize (width, height)
             on_create_stamp: Callback for creating stamp from selection
             on_quit: Callback asked before quitting; returns False to stay open
+            on_scroll_canvas: Callback to scroll the canvas by (columns, rows) of tiles
+            on_pan_canvas: Callback to move the canvas by (x, y) screen pixels
         """
         self.state = state
         self.hole_data = hole_data
@@ -92,6 +112,12 @@ class EventHandler:
         self.on_toggle_mode = on_toggle_mode
         self.on_create_stamp = on_create_stamp
         self.on_quit = on_quit
+        self.on_scroll_canvas = on_scroll_canvas
+        # each arrow key held down for scrolling, and when it next scrolls (ms ticks)
+        self._held_scroll_keys: dict[int, int] = {}
+        self.on_pan_canvas = on_pan_canvas
+        # where the mouse was when last seen while middle-dragging the canvas
+        self._drag_from: tuple[int, int] | None = None
         self.on_select_flag = on_select_flag
         self.on_set_palette = on_set_palette
         self.on_resize = on_resize
@@ -117,6 +143,38 @@ class EventHandler:
         self.tool_context.screen_width = width
         self.tool_context.screen_height = height
 
+    def _scroll_canvas(self, columns: int, rows: int):
+        """Ask the application to scroll the canvas by whole tiles."""
+        if self.on_scroll_canvas:
+            self.on_scroll_canvas(columns, rows)
+
+    def _drag_to(self, event: pygame.event.Event):
+        """Move the canvas with the mouse while the middle button holds it.
+
+        The view follows the hand: dragging up shows what is further down.
+        """
+        drag_from = self._drag_from
+        if drag_from is None or not event.buttons[MIDDLE_BUTTON - 1]:
+            # let go somewhere its MOUSEBUTTONUP did not reach us
+            self._drag_from = None
+            return
+        dx = drag_from[0] - event.pos[0]
+        dy = drag_from[1] - event.pos[1]
+        self._drag_from = event.pos
+        if self.on_pan_canvas and (dx or dy):
+            self.on_pan_canvas(dx, dy)
+
+    def repeat_held_scrolls(self, now: int):
+        """Scroll again for each arrow key held long enough, as a held key repeats.
+
+        Called once a frame with ``pygame.time.get_ticks()``. Pygame's own key repeat
+        is left off, since it would repeat every key, tool hotkeys among them.
+        """
+        for key, due in list(self._held_scroll_keys.items()):
+            if now >= due:
+                self._scroll_canvas(*ARROW_SCROLL[key])
+                self._held_scroll_keys[key] = now + SCROLL_REPEAT_INTERVAL_MS
+
     def handle_events(self, events: list[pygame.event.Event]) -> bool:
         """
         Handle all pygame events.
@@ -132,6 +190,15 @@ class EventHandler:
                 if self.on_quit is None or self.on_quit():
                     return False
                 continue
+
+            if event.type == pygame.WINDOWFOCUSLOST:
+                # a key let go in another window never sends its KEYUP here
+                self._held_scroll_keys.clear()
+                self._drag_from = None
+
+            if event.type == pygame.MOUSEBUTTONUP and event.button == MIDDLE_BUTTON:
+                # wherever it is let go, over the canvas or not, the drag ends
+                self._drag_from = None
 
             if event.type == pygame.KEYDOWN:
                 # Let active tool handle key events first (for tool-specific shortcuts)
@@ -150,6 +217,9 @@ class EventHandler:
                     self._handle_global_keys(event)
 
             elif event.type == pygame.KEYUP:
+                # A released arrow stops scrolling, whoever had it
+                self._held_scroll_keys.pop(event.key, None)
+
                 # Let active tool handle key up
                 tool = self.tool_manager.get_active_tool()
                 if tool:
@@ -187,18 +257,29 @@ class EventHandler:
 
                 # Handle scrolling
                 if event.button == 4:  # Scroll up
-                    self.state.canvas_offset_y = max(0, self.state.canvas_offset_y - 20)
+                    self._scroll_canvas(0, -1)
                     continue
                 elif event.button == 5:  # Scroll down
-                    self.state.canvas_offset_y += 20
+                    self._scroll_canvas(0, 1)
                     continue
 
                 tool = self._canvas_tool()
+                tool_handled = False
                 if tool:
                     result = tool.handle_mouse_down(
                         event.pos, event.button, modifiers, self.tool_context
                     )
                     self._process_tool_result(result)
+                    tool_handled = result.is_handled
+
+                # A middle click no tool took on the hole starts dragging it
+                if (
+                    event.button == MIDDLE_BUTTON
+                    and not tool_handled
+                    and self.hole_data.terrain
+                    and self.tool_context.view_state.canvas_rect.collidepoint(event.pos)
+                ):
+                    self._drag_from = event.pos
 
             elif event.type == pygame.MOUSEBUTTONUP and not picker_handled:
                 tool = self._canvas_tool()
@@ -209,6 +290,8 @@ class EventHandler:
                     self._process_tool_result(result)
 
             elif event.type == pygame.MOUSEMOTION:
+                if self._drag_from is not None:
+                    self._drag_to(event)
                 tool = self._canvas_tool()
                 if tool:
                     result = tool.handle_mouse_motion(event.pos, self.tool_context)
@@ -306,14 +389,11 @@ class EventHandler:
                 return False  # Let tool handle it
             return False  # Not handled
 
-        elif event.key == pygame.K_LEFT:
-            self.state.canvas_offset_x = max(0, self.state.canvas_offset_x - 20)
-        elif event.key == pygame.K_RIGHT:
-            self.state.canvas_offset_x += 20
-        elif event.key == pygame.K_UP:
-            self.state.canvas_offset_y = max(0, self.state.canvas_offset_y - 20)
-        elif event.key == pygame.K_DOWN:
-            self.state.canvas_offset_y += 20
+        elif event.key in ARROW_SCROLL:
+            self._scroll_canvas(*ARROW_SCROLL[event.key])
+            self._held_scroll_keys[event.key] = (
+                pygame.time.get_ticks() + SCROLL_REPEAT_DELAY_MS
+            )
 
         elif event.key in FLAG_KEYS:
             # F1-F4: show that flag position, as the toolbar's F1-F4 buttons do
